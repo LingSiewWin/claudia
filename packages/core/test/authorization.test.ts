@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   type AuthorizationFields,
+  type AuthorizationRecord,
   encodeAuthorization,
   fieldsFromRecord,
   signAuthorization,
   verifyAuthorizationRecord,
 } from '../src/authorization';
-import { bytesToHex, utf8ToBytes } from '../src/bytes';
+import { bytesToHex } from '../src/bytes';
 import { publicKeyFromSecret } from '../src/ed25519';
 import { buildAddress } from './helpers/address-builder';
 
@@ -37,7 +38,7 @@ const be = (value: bigint, bytes: number) => value.toString(16).padStart(bytes *
 describe('encodeAuthorization', () => {
   it('matches bytes assembled independently from spec 02', () => {
     const expected = [
-      bytesToHex(utf8ToBytes('AGENT_AUTHORIZATION_V1')),
+      '4147454e545f415554484f52495a4154494f4e5f5631',
       '00',
       'aa'.repeat(28),
       'bb'.repeat(28),
@@ -100,5 +101,36 @@ describe('signAuthorization / verifyAuthorizationRecord', () => {
   it('fails for a different engine key', () => {
     const other = bytesToHex(publicKeyFromSecret(new Uint8Array(32).fill(9)));
     expect(verifyAuthorizationRecord(signAuthorization(base, engineSk), other)).toBe(false);
+  });
+
+  describe('rejects non-canonical records', () => {
+    const rec = signAuthorization({ ...base, requiresPrincipal: true }, engineSk);
+    const withFields = (patch: Record<string, unknown>) =>
+      ({ ...rec, fields: { ...rec.fields, ...patch } }) as unknown as AuthorizationRecord;
+    it('requires_principal non-boolean or missing', () => {
+      expect(verifyAuthorizationRecord(rec, enginePk)).toBe(true);
+      expect(verifyAuthorizationRecord(withFields({ requires_principal: 1 }), enginePk)).toBe(false);
+      expect(verifyAuthorizationRecord(withFields({ requires_principal: 'no' }), enginePk)).toBe(false);
+      const { requires_principal: _omit, ...rest } = rec.fields;
+      expect(verifyAuthorizationRecord({ ...rec, fields: rest } as unknown as AuthorizationRecord, enginePk)).toBe(false);
+    });
+    it.each([
+      ['amount hex', { amount: '0x1f5e66e00' }],
+      ['valid_until string', { valid_until: '1800000000000' }],
+      ['uppercase vault_hash', { vault_hash: 'AA'.repeat(28) }],
+      ['uppercase recipient', { recipient: rec.fields.recipient.toUpperCase() }],
+    ])('%s', (_l, patch) => {
+      expect(verifyAuthorizationRecord(withFields(patch), enginePk)).toBe(false);
+    });
+    it('verification_ref of zeros instead of null', () => {
+      const r = signAuthorization(base, engineSk);
+      const forged = { ...r, fields: { ...r.fields, verification_ref: '00'.repeat(32) } };
+      expect(verifyAuthorizationRecord(forged, enginePk)).toBe(false);
+      expect(() => encodeAuthorization({ ...base, verificationRef: '00'.repeat(32) })).toThrow();
+    });
+    it('wrong schema', () => {
+      const bad = { ...rec, schema: 'authorization/v9' } as unknown as AuthorizationRecord;
+      expect(verifyAuthorizationRecord(bad, enginePk)).toBe(false);
+    });
   });
 });

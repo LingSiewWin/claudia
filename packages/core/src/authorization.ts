@@ -1,6 +1,7 @@
 import { type Credential, parseShelleyAddress } from './address';
 import { bytesToHex, concatBytes, hexOfLength, uintBE, utf8ToBytes } from './bytes';
 import { publicKeyFromSecret, signBytes, verifyBytes } from './ed25519';
+import { canonicalJson } from './canonical';
 import { blake2b256 } from './hash';
 
 export const AUTHORIZATION_DOMAIN = 'AGENT_AUTHORIZATION_V1';
@@ -69,6 +70,10 @@ export function encodeAuthorization(f: AuthorizationFields): Uint8Array {
   if (!Number.isInteger(f.actionType) || f.actionType < 1 || f.actionType > 0xff) {
     throw new RangeError('actionType: must be a u8 >= 1');
   }
+  if (typeof f.requiresPrincipal !== 'boolean') throw new TypeError('requiresPrincipal: must be boolean');
+  if (typeof f.verificationRef === 'string' && /^0{64}$/.test(f.verificationRef)) {
+    throw new TypeError('verificationRef: use null, not 32 zero bytes');
+  }
   if (!/^(?:[0-9a-fA-F]{2}){0,32}$/.test(f.assetName)) throw new TypeError('assetName: 0..32 bytes of hex');
   const assetName = hexOfLength(f.assetName, f.assetName.length / 2, 'assetName');
   const recipient = parseShelleyAddress(f.recipient);
@@ -113,7 +118,7 @@ function toRecordFields(f: AuthorizationFields): AuthorizationRecordFields {
     asset_policy: f.assetPolicy.toLowerCase(),
     asset_name: f.assetName.toLowerCase(),
     amount: f.amount.toString(),
-    recipient: f.recipient,
+    recipient: f.recipient.toLowerCase(),
     nonce: f.nonce.toString(),
     valid_until: Number(f.validUntil),
     requires_principal: f.requiresPrincipal,
@@ -159,6 +164,8 @@ export function signAuthorization(f: AuthorizationFields, engineSecretKey: Uint8
 
 export function verifyAuthorizationRecord(r: AuthorizationRecord, expectedEnginePublicKeyHex: string): boolean {
   try {
+    if (r.schema !== 'authorization/v0.1') return false;
+    if (canonicalJson(toRecordFields(fieldsFromRecord(r))) !== canonicalJson(r.fields)) return false;
     if (r.engine_public_key.toLowerCase() !== expectedEnginePublicKeyHex.toLowerCase()) return false;
     const message = encodeAuthorization(fieldsFromRecord(r));
     if (bytesToHex(message) !== r.message_hex.toLowerCase()) return false;
