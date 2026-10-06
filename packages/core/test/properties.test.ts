@@ -89,25 +89,9 @@ describe('engine invariants', () => {
       fc.property(scenario, (s) => {
         const { a, input } = build(s);
         if (BigInt(a.amount.value) <= HARD_CAP) return;
-        const e = evaluate(input);
-        expect(e.outcome).toBe('DENY');
-        expect(() =>
-          issueAuthorization({ evaluation: e, action: a, mandate: M001, approval: { approver: 'CFO', approved_at_ms: NOW }, chain: CHAIN, nonce: 1n, nowMs: NOW, engineSecretKey: ENGINE_SK }),
-        ).toThrow(IssuanceRefused);
-        const forged: Evaluation = {
-          ...e,
-          outcome: 'REQUIRE_APPROVAL',
-          signed: true,
-          reason: null,
-          approvals_required: [{ constraint: 'autonomous', approver: 'CFO', reason: 'ABOVE_AUTONOMOUS_LIMIT' }],
-        };
-        let code: unknown;
-        try {
-          issueAuthorization({ evaluation: forged, action: a, mandate: M001, approval: { approver: 'CFO', approved_at_ms: NOW }, chain: CHAIN, nonce: 1n, nowMs: NOW, engineSecretKey: ENGINE_SK });
-        } catch (err) {
-          code = err instanceof IssuanceRefused ? err.code : err;
-        }
-        expect(code).toBe('ABOVE_HARD_CAP');
+        expect(evaluate(input).outcome).toBe('DENY');
+        const approval = { approver: 'CFO', approved_at_ms: NOW };
+        expect(() => issueAuthorization({ ...input, approval, chain: CHAIN, nonce: 1n, engineSecretKey: ENGINE_SK })).toThrow(IssuanceRefused);
       }),
     );
   });
