@@ -7,6 +7,7 @@ import {
   TEST_USDM_UNIT,
   checkQuote,
   confirmedState,
+  confirmedTxHashes,
   createMpsClient,
   masumiPaymentEvent,
   paymentRequest,
@@ -59,6 +60,12 @@ describe('checkQuote', () => {
     ['other agent', (q) => ({ ...q, agentIdentifier: `${SOURCE.policyId}ff` })],
     ['mainnet source', (q) => ({ ...q, PaymentSource: { ...q.PaymentSource, network: 'Mainnet' } })],
     ['node error', (q) => ({ ...q, NextAction: { requestedAction: 'WaitingForExternalAction', errorType: 'NetworkError' } })],
+    ['other policy', (q) => ({ ...q, PaymentSource: { ...q.PaymentSource, policyId: 'c'.repeat(56) } })],
+    ['no policy', (q) => ({ ...q, PaymentSource: { ...q.PaymentSource, policyId: null } })],
+    ['other contract', (q) => ({ ...q, PaymentSource: { ...q.PaymentSource, smartContractAddress: 'addr_test1wzother' } })],
+    ['other source type', (q) => ({ ...q, PaymentSource: { ...q.PaymentSource, paymentSourceType: 'Web3CardanoV1' } })],
+    ['other seller address', (q) => ({ ...q, SmartContractWallet: { walletVkey: SOURCE.sellerVkey, walletAddress: 'addr_test1qother' } })],
+    ['no pay-by time', (q) => ({ ...q, payByTime: null })],
   ])('rejects %s', (_label, tamper) => {
     expect(() => checkQuote(tamper(quoteFor(request)), SOURCE, request)).toThrow(QuoteError);
   });
@@ -110,6 +117,16 @@ describe('payment state checks', () => {
     expect(withdrawnBy({ ...p, onChainState: 'RefundWithdrawn' }, 'aa'.repeat(32))).toBe(false);
   });
 
+  it('confirmedTxHashes lists only confirmed transactions that have a hash', () => {
+    const p = {
+      ...base,
+      CurrentTransaction: tx('ResultSubmitted', 'Pending', 'ee'.repeat(32)),
+      TransactionHistory: [tx('FundsLocked', 'Confirmed', 'aa'.repeat(32)), tx('ResultSubmitted', 'Confirmed', 'bb'.repeat(32)), { txHash: null, status: 'Confirmed' }],
+    };
+    expect(confirmedTxHashes(p)).toEqual(['aa'.repeat(32), 'bb'.repeat(32)]);
+    expect(confirmedTxHashes(base)).toEqual([]);
+  });
+
   it('resultRecorded reads either result field', () => {
     expect(resultRecorded({ ...base, resultHash: 'ab' }, 'ab')).toBe(true);
     expect(resultRecorded({ ...base, NextAction: { requestedAction: 'SubmitResultRequested', errorType: null, resultHash: 'ab' } }, 'ab')).toBe(true);
@@ -152,7 +169,42 @@ describe('createMpsClient', () => {
 
   it('throws MpsError with the HTTP status on failure', async () => {
     const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: reply(400, { status: 'error', error: { message: 'bad' } }) });
-    await expect(mps.createPayment(request)).rejects.toMatchObject({ name: 'Error', status: 400 });
+    await expect(mps.createPayment(request)).rejects.toMatchObject({ name: 'Error', status: 400, transient: false });
     await expect(mps.createPayment(request)).rejects.toBeInstanceOf(MpsError);
   });
+
+  it('treats an error envelope on HTTP 200 as a failure', async () => {
+    const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: reply(200, { status: 'error', error: { message: 'not found' } }) });
+    await expect(mps.resolvePayment('bid-1')).rejects.toBeInstanceOf(MpsError);
+    await expect(mps.resolvePayment('bid-1')).rejects.toMatchObject({ status: 200, transient: false });
+  });
+
+  it('reports a 5xx as a transient MpsError', async () => {
+    const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: reply(503, { status: 'error', error: { message: 'unavailable' } }) });
+    await expect(mps.submitResult('bid-1', 'ab'.repeat(32))).rejects.toBeInstanceOf(MpsError);
+    await expect(mps.submitResult('bid-1', 'ab'.repeat(32))).rejects.toMatchObject({ status: 503, transient: true });
+  });
+
+  it('keeps the service error text, capped at 300 chars and without the token', async () => {
+    const token = 'tok-9f3a1c55e0d2';
+    const said = `Submit result time must be in the future (min. 15 minutes) ${token} `;
+    const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token, fetchImpl: reply(400, { status: 'error', error: { message: said.repeat(20) } }) });
+    const e = await mps.createPayment(request).then(() => null, (err: unknown) => err);
+    expect(e).toBeInstanceOf(MpsError);
+    const { message } = e as MpsError;
+    expect(message).toMatch(/^payment service \/payment HTTP 400: Submit result time must be in the future \(min\. 15 minutes\) /);
+    expect(message).not.toContain(token);
+    expect(message.length).toBeLessThanOrEqual('payment service /payment HTTP 400: '.length + 300);
+    expect(message.length).toBeGreaterThan('payment service /payment HTTP 400: '.length + 250);
+  });
+
+  it('works without any error text from the service', async () => {
+    const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: (async () => new Response('<html>bad gateway</html>', { status: 502 })) as typeof fetch });
+    await expect(mps.createPayment(request)).rejects.toThrow(/^payment service \/payment HTTP 502$/);
+  });
+});
+
+describe('MpsError.transient', () => {
+  it.each([408, 429, 500, 502, 503, 504, 599])('%i may succeed on retry', (status) => expect(new MpsError('x', status).transient).toBe(true));
+  it.each([200, 400, 401, 403, 404, 409, 422])('%i is final', (status) => expect(new MpsError('x', status).transient).toBe(false));
 });

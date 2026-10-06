@@ -73,11 +73,11 @@ describe('result hash input', () => {
 });
 
 describe('identifierFromPurchaser', () => {
-  it.each(['aabbccddeeff00', 'aabbccddeeff001', 'AABBCCDDEEFF0011', 'a'.repeat(15), 'a'.repeat(25), 'a'.repeat(26)])('accepts %s', (id) => {
+  it.each(['aabbccddeeff00', 'AABBCCDDEEFF0011', 'a'.repeat(26)])('accepts %s', (id) => {
     expect(isPurchaserId(id)).toBe(true);
     expect(mip004ResultHashRaw('x', id)).toBe(sha(`${id};x`));
   });
-  it.each(['', 'aabbccddeeff0', 'a'.repeat(27), 'a'.repeat(28), 'zzbbccddeeff0011', 'resume-job-123'])('rejects %s', (id) => {
+  it.each(['', 'aabbccddeeff0', 'aabbccddeeff001', 'a'.repeat(15), 'a'.repeat(25), 'a'.repeat(27), 'a'.repeat(28), 'zzbbccddeeff0011', 'resume-job-123'])('rejects %s', (id) => {
     expect(isPurchaserId(id)).toBe(false);
     expect(() => mip004ResultHashRaw('x', id)).toThrow(TypeError);
     expect(() => mip004ResultHashEscaped('x', id)).toThrow(TypeError);

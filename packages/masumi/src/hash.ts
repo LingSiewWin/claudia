@@ -1,7 +1,8 @@
 import { canonicalJson, sha256Hex } from '@authority/core';
 
-// identifierFromPurchaser: 14-26 hex chars. The payment service schema checks length only, so odd lengths are valid.
-const PURCHASER_ID = /^[0-9a-fA-F]{14,26}$/;
+// identifierFromPurchaser: 14-26 hex chars of whole bytes. The payment service (validateHexString) and Sokosumi Core
+// both reject odd lengths.
+const PURCHASER_ID = /^(?:[0-9a-fA-F]{2}){7,13}$/;
 
 export function isPurchaserId(id: string): boolean {
   return typeof id === 'string' && PURCHASER_ID.test(id);

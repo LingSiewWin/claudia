@@ -138,6 +138,12 @@ export function confirmedState(p: Payment, state: string): boolean {
   return p.onChainState === state && transactions(p).some((t) => t.status === 'Confirmed' && t.newOnChainState === state);
 }
 
+// Hashes of this payment's confirmed transactions (lock, result submission, ...): the only txs whose escrow
+// outputs a collection of this payment can spend.
+export function confirmedTxHashes(p: Payment): string[] {
+  return transactions(p).flatMap((t) => (t.status === 'Confirmed' && t.txHash !== null ? [t.txHash] : []));
+}
+
 export function withdrawnBy(p: Payment, txHash: string): boolean {
   return (
     p.onChainState === 'Withdrawn' &&
@@ -154,6 +160,11 @@ export class MpsError extends Error {
   constructor(message: string, status: number) {
     super(message);
     this.status = status;
+  }
+
+  // 408, 429 and 5xx may succeed on retry. Any other status is the payment service's final answer.
+  get transient(): boolean {
+    return this.status === 408 || this.status === 429 || this.status >= 500;
   }
 }
 
@@ -174,8 +185,13 @@ export function createMpsClient(opts: { baseUrl: string; token: string; fetchImp
       headers: { token: opts.token, 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const json = (await res.json().catch(() => null)) as { status?: unknown; data?: unknown } | null;
-    if (!res.ok || json?.status !== 'success') throw new MpsError(`payment service ${path} HTTP ${res.status}`, res.status);
+    const json = (await res.json().catch(() => null)) as { status?: unknown; data?: unknown; error?: { message?: unknown } | null } | null;
+    if (!res.ok || json?.status !== 'success') {
+      // Keep the service's own reason (e.g. a deadline rule) for diagnosis: capped, with the token cut out if echoed.
+      const said = json?.error?.message;
+      const reason = typeof said === 'string' ? (opts.token ? said.replaceAll(opts.token, '[token]') : said).slice(0, 300) : '';
+      throw new MpsError(`payment service ${path} HTTP ${res.status}${reason ? `: ${reason}` : ''}`, res.status);
+    }
     return PaymentSchema.parse(json.data);
   };
   return {
