@@ -179,7 +179,7 @@ export async function markPaidOutOfBand(stripe: Stripe, invoiceId: string, carda
   }
   if (recorded && recorded !== cardanoTxHash) throw new Error(`invoice ${invoiceId} already records settlement ${recorded}`);
   if (invoice.status !== 'open') throw new Error(`invoice ${invoiceId} is ${invoice.status}, not open`);
-  // ponytail: read-then-write, assumes one executor queue; add an idempotency key per tx hash if executors run concurrently.
+  // Read-then-write, assumes one executor queue; add an idempotency key per tx hash if executors run concurrently.
   await stripe.invoices.update(invoiceId, { metadata: { cardano_tx_hash: cardanoTxHash } });
   return stripe.invoices.pay(invoiceId, { paid_out_of_band: true });
 }

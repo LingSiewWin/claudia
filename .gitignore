@@ -24,8 +24,17 @@ skills-lock.json
 # CRE onboarding scaffold
 cre/
 
+# CRE compile temp file
+workflows/*/.cre_build_tmp.js
+
 # Local agent execution workspace
 .superpowers/
 
 # Browser automation artifacts
 .playwright-mcp/
+.vitest/
+
+# Foundry build output
+contracts/sepolia/out/
+contracts/sepolia/cache/
+contracts/sepolia/broadcast/
