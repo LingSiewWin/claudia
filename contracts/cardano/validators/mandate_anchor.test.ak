@@ -148,6 +148,15 @@ test m4_short_mandate_hash() {
   )
 }
 
+test m4_long_mandate_hash() {
+  !mint_with(
+    AnchorDatum {
+      ..mandate,
+      mandate_hash: bytearray.push(mandate.mandate_hash, 0),
+    },
+  )
+}
+
 test m4_short_engine_key() {
   !mint_with(
     AnchorDatum {
