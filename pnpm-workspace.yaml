@@ -5,7 +5,11 @@ packages:
   - "scripts"
 allowBuilds:
   esbuild: false
+  chacha-native: false
 packageExtensions:
   "@chainlink/cre-sdk":
     dependencies:
       typescript: 5.9.3
+  "@connectrpc/connect":
+    dependencies:
+      "@bufbuild/protobuf": "1.10.1"

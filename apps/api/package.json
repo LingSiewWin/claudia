@@ -1,0 +1,36 @@
+{
+  "name": "@authority/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env --import tsx src/main.ts",
+    "seed": "node --env-file-if-exists=../../.env --import tsx scripts/seed.ts",
+    "stage": "node --env-file-if-exists=../../.env --import tsx scripts/stage-run.ts",
+    "check-once": "node --env-file-if-exists=../../.env --import tsx scripts/check-once.ts",
+    "cre-relay": "node --env-file-if-exists=../../.env --import tsx scripts/cre-relay.ts",
+    "verify-log": "node --env-file-if-exists=../../.env --import tsx scripts/verify-log.ts",
+    "test": "vitest run",
+    "test:pg": "PG_INTEGRATION=1 vitest run test/postgres.integration.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@authority/chainlink": "workspace:*",
+    "@authority/core": "workspace:*",
+    "@authority/db": "workspace:*",
+    "@authority/stripe": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "stripe": "23.0.0",
+    "tsx": "4.23.15",
+    "viem": "2.57.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "1.10.1",
+    "@electric-sql/pglite": "0.5.8",
+    "@meshsdk/core": "1.9.1",
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
