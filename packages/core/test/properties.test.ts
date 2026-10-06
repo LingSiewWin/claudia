@@ -9,7 +9,7 @@ import { ATTACKER_ADDR, AWS_ADDR, CHAIN, ENGINE_SK, M001, NOW, action, propose, 
 const HARD_CAP = 50_000_000n;
 const RANK: Record<Evaluation['outcome'], number> = { ALLOW: 0, REQUIRE_APPROVAL: 1, DENY: 2, NEEDS_VERIFICATION: -1 };
 
-const scenario = fc.record({
+const broad = fc.record({
   amountCents: fc.integer({ min: 1, max: 20_000 }),
   balance: fc.integer({ min: 0, max: 300 }),
   spent: fc.integer({ min: 0, max: 80 }),
@@ -23,7 +23,31 @@ const scenario = fc.record({
   anchorVersion: fc.constantFrom(3, 3, 3, 2),
   rationale: fc.string({ maxLength: 200 }),
 });
-type Scenario = typeof scenario extends fc.Arbitrary<infer T> ? T : never;
+type Scenario = typeof broad extends fc.Arbitrary<infer T> ? T : never;
+
+// Constructed so the action is usually authorizable: only the anchor check (or a signature gap) stands in the way.
+const nearly: fc.Arbitrary<Scenario> = fc
+  .integer({ min: 0, max: 49 })
+  .chain((spent) =>
+    fc.integer({ min: 1, max: Math.min(5000, (50 - spent) * 100) }).chain((amountCents) =>
+      fc.record({
+        amountCents: fc.constant(amountCents),
+        balance: fc.integer({ min: 101 + Math.floor(amountCents / 100), max: 300 }),
+        spent: fc.constant(spent),
+        purpose: fc.constant('invoice_payment'),
+        type: fc.constant<ActionType>('pay_invoice'),
+        counterparty: fc.constantFrom('aws', 'stripe'),
+        recipient: fc.constant(AWS_ADDR),
+        verification: fc.constant<'verified' | 'mismatch' | 'none'>('verified'),
+        signature: fc.constantFrom<'valid' | 'invalid' | 'absent'>('valid', 'absent'),
+        anchorStatus: fc.constantFrom<'active' | 'revoked'>('active', 'active', 'active', 'revoked'),
+        anchorVersion: fc.constantFrom(3, 3, 3, 2),
+        rationale: fc.string({ maxLength: 200 }),
+      }),
+    ),
+  );
+
+const scenario = fc.oneof(broad, nearly);
 
 function build(s: Scenario, mandate: Mandate = M001) {
   const a = action({
@@ -69,6 +93,20 @@ describe('engine invariants', () => {
         expect(() =>
           issueAuthorization({ evaluation: e, action: a, mandate: M001, approval: { approver: 'CFO', approved_at_ms: NOW }, chain: CHAIN, nonce: 1n, nowMs: NOW, engineSecretKey: ENGINE_SK }),
         ).toThrow(IssuanceRefused);
+        const forged: Evaluation = {
+          ...e,
+          outcome: 'REQUIRE_APPROVAL',
+          signed: true,
+          reason: null,
+          approvals_required: [{ constraint: 'autonomous', approver: 'CFO', reason: 'ABOVE_AUTONOMOUS_LIMIT' }],
+        };
+        let code: unknown;
+        try {
+          issueAuthorization({ evaluation: forged, action: a, mandate: M001, approval: { approver: 'CFO', approved_at_ms: NOW }, chain: CHAIN, nonce: 1n, nowMs: NOW, engineSecretKey: ENGINE_SK });
+        } catch (err) {
+          code = err instanceof IssuanceRefused ? err.code : err;
+        }
+        expect(code).toBe('ABOVE_HARD_CAP');
       }),
     );
   });
@@ -85,10 +123,13 @@ describe('engine invariants', () => {
   });
 
   it('revoked or version-mismatched mandate never yields ALLOW or REQUIRE_APPROVAL', () => {
+    const stale = fc.oneof(
+      fc.record({ anchorStatus: fc.constant<'active' | 'revoked'>('revoked'), anchorVersion: fc.constantFrom(3, 2) }),
+      fc.record({ anchorStatus: fc.constant<'active' | 'revoked'>('active'), anchorVersion: fc.constant(2) }),
+    );
     fc.assert(
-      fc.property(scenario, (s) => {
-        if (s.anchorStatus === 'active' && s.anchorVersion === 3) return;
-        expect(evaluate(build(s).input).outcome).toBe('DENY');
+      fc.property(nearly, stale, (n, anchor) => {
+        expect(evaluate(build({ ...n, ...anchor }).input).outcome).toBe('DENY');
       }),
     );
   });
@@ -108,18 +149,22 @@ describe('engine invariants', () => {
         const e = evaluate(build(s).input);
         if (e.outcome !== 'DENY') return;
         expect(e.reason).not.toBeNull();
-        expect(e.checks.filter((c) => c.result === 'fail')).toHaveLength(1);
+        const failed = e.checks.filter((c) => c.result === 'fail');
+        expect(failed).toHaveLength(1);
+        expect(e.reason).toBe(failed[0]?.reason);
       }),
     );
   });
 
   it('removing a constraint never makes the outcome stricter', () => {
     fc.assert(
-      fc.property(scenario, fc.integer({ min: 0, max: M001.constraints.length - 1 }), (s, drop) => {
+      fc.property(nearly, fc.integer({ min: 0, max: M001.constraints.length - 1 }), (s, drop) => {
         const withReport = { ...s, verification: s.verification === 'none' ? 'verified' : s.verification };
         const full = evaluate(build(withReport).input);
         const reduced: Mandate = { ...M001, constraints: M001.constraints.filter((_, i) => i !== drop) };
         const sub = evaluate(build(withReport, reduced).input);
+        expect(full.outcome).not.toBe('NEEDS_VERIFICATION');
+        expect(sub.outcome).not.toBe('NEEDS_VERIFICATION');
         expect(RANK[sub.outcome]).toBeLessThanOrEqual(RANK[full.outcome]);
       }),
     );
