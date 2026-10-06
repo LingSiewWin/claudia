@@ -1,3 +1,4 @@
+import { blake2b256, bytesToHex, hexToBytes } from '@authority/core';
 import { describe, expect, it } from 'vitest';
 import { TEST_USDM_UNIT } from '../src/mps';
 import { CollectionError, sellerNetUnits, verifyCollection, type TxUtxos } from '../src/settlement';
@@ -14,13 +15,36 @@ const VKEY_NFT = '67ab0c92c4ac1610895a1c965ee50aba41a8f1513b15240723b3bd0b10d7fb
 const coins = (lovelace: string, usdm?: string) => [{ unit: 'lovelace', quantity: lovelace }, ...(usdm ? [{ unit: U, quantity: usdm }] : [])];
 const nft = (lovelace: string) => [{ unit: 'lovelace', quantity: lovelace }, { unit: VKEY_NFT, quantity: '1' }];
 
+// Inline datum of the reference escrow output e03dd2f3...#0, the payment contract's 19-field Constr 0. Field 10 is the
+// purchase inputHash (INPUT_HASH); field 4 holds the buyer's COSE key, itself a 32-byte bytes item (BUYER_KEY).
+const INPUT_HASH = '41d4e66c2760c8aeb4b7b417553899167ea45409ee7ec44b1fae6f59d80a3770';
+const BUYER_KEY = '18b36a4a09d20f1c27c1f3650b1eb49b6d2b31ffb9a6f9fd2b5735a6f1f6c6c4';
+const DATUM = [
+  'd8799fd8799fd8799f581c95dee1f5cdb6789084d35ee776e7f3cb12c28aec5be7d61d07920ea3ffd8799fd8799fd8799f581c7a7e97a4',
+  '1b4c8e11e810a8d514d6214ca0131db7627b4acffbd0b8f5ffffffffd87a80d8799fd8799f581cdb2fecd63be71b9a2a6bb8ac25453adf',
+  '4606be5d3361e1a3f63a723bffd8799fd8799fd8799f581c0ba653cd326a74bc7b832198a5ad5f20a6be44db6cbcb37356218046ffffff',
+  'ffd87a80582aa401010327200621582018b36a4a09d20f1c27c1f3650b1eb49b6d2b31ffb9a6f9fd2b5735a6f1f6c6c45f5840845869a3',
+  '012704582018b36a4a09d20f1c27c1f3650b1eb49b6d2b31ffb9a6f9fd2b5735a6f1f6c6c46761646472657373583900db2fecd63be71b',
+  '9a2a6bb8ac584025453adf4606be5d3361e1a3f63a723b0ba653cd326a74bc7b832198a5ad5f20a6be44db6cbcb37356218046a1666861',
+  '73686564f458206d2e445949faf15f025840e7ac93d8f9b53fba8afa9053ff2f630f7a19e26f1e565e5840679db162b82951f760a099b9',
+  '2c2c8e5defd3821548ce80fe14c2bf377c9d575820a7437614aaa05819e16283615ade335ee64ec85c0cb8e2620bfc892983d2bf6f03ff',
+  '582055a3836c0b11b5bf1a15c033d299f3461b8451616d5736fbca67390ec5b041be4a57125e6c5a24c5aba1ee583c67ab0c92c4ac1610',
+  '895a1c965ee50aba41a8f1513b15240723b3bd0b10d7fb0f14970d4779d0bb4fdda68aa0e72fdc3ab5a0fc11d130376dcd0000001a0044',
+  '32de582041d4e66c2760c8aeb4b7b417553899167ea45409ee7ec44b1fae6f59d80a37705820b3ce2f88b138c260700b2f06939e62318a',
+  '5840fe20baf4ac18553f67ab1b85c01b000001a10c9afe951b000001a10c9f92751b000001a10cae38751b000001a10cbcde751b000001',
+  'a10c9e37d000d87a80ff',
+].join('');
+// The same escrow datum for another purchase: only field 10 differs.
+const datumFor = (inputHash: string) => DATUM.replace(`5820${INPUT_HASH}`, `5820${inputHash}`);
+const OTHER_INPUT_HASH = 'be'.repeat(32);
+
 // The reference seller collection 64a9b1a0... on preprod, transcribed from chain data. It spends the escrow output
 // that the seller's submit-result tx e03dd2f3... recreated (the buyer's lock was f0882896...), and pays the seller 1 tUSDM.
 const collection: TxUtxos = {
   hash: HASH,
   inputs: [
     { address: SELLER, tx_hash: SUBMIT_TX, amount: nft('4255598'), collateral: false, reference: false },
-    { address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000'), collateral: false, reference: false },
+    { address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000'), collateral: false, reference: false, inline_datum: DATUM },
     { address: SELLER, tx_hash: COLLATERAL_TX, amount: coins('5000000'), collateral: true, reference: false },
   ],
   outputs: [
@@ -30,6 +54,13 @@ const collection: TxUtxos = {
     { address: SELLER, amount: coins('2000000'), collateral: true },
   ],
 };
+
+describe('reference escrow datum', () => {
+  it('is the on-chain datum (blake2b-256 equals the datum hash Blockfrost and Koios report)', () => {
+    expect(bytesToHex(blake2b256(hexToBytes(DATUM)))).toBe('6ebd2d83e6e13a7f79f091c272d48939125152bccbd0368dc8cc27ccdd16e41b');
+    expect(DATUM.split(`5820${INPUT_HASH}`)).toHaveLength(2);
+  });
+});
 
 describe('sellerNetUnits', () => {
   it('measures the escrowed tUSDM reaching the seller', () => {
@@ -62,6 +93,7 @@ describe('verifyCollection', () => {
     escrowAddress: ESCROW,
     unit: U,
     minUnits: 1_000_000n,
+    inputHash: INPUT_HASH,
     paymentTxHashes: [LOCK_TX, SUBMIT_TX],
     blockfrostKey: 'k',
     ...(fetchImpl ? { fetchImpl } : {}),
@@ -94,9 +126,9 @@ describe('verifyCollection', () => {
     const batch: TxUtxos = {
       hash: HASH,
       inputs: [
-        { address: ESCROW, tx_hash: OTHER_TX, amount: coins('2000000', '1000000') },
-        { address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000') },
-        { address: ESCROW, tx_hash: '22'.repeat(32), amount: coins('2000000', '2000000') },
+        { address: ESCROW, tx_hash: OTHER_TX, amount: coins('2000000', '1000000'), inline_datum: datumFor('c1'.repeat(32)) },
+        { address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000'), inline_datum: DATUM },
+        { address: ESCROW, tx_hash: '22'.repeat(32), amount: coins('2000000', '2000000'), inline_datum: datumFor('c2'.repeat(32)) },
         { address: SELLER, tx_hash: COLLATERAL_TX, amount: coins('5000000'), collateral: true },
       ],
       outputs: [{ address: SELLER, amount: coins('8000000', '4000000') }],
@@ -128,12 +160,12 @@ describe('verifyCollection', () => {
     ],
     [
       "another payment's escrow output",
-      { hash: HASH, inputs: [{ address: ESCROW, tx_hash: OTHER_TX, amount: coins('4503950', '1000000') }], outputs: [{ address: SELLER, amount: coins('1500000', '1000000') }] },
-      /this payment/,
+      { hash: HASH, inputs: [{ address: ESCROW, tx_hash: OTHER_TX, amount: coins('4503950', '1000000'), inline_datum: DATUM }], outputs: [{ address: SELLER, amount: coins('1500000', '1000000') }] },
+      /created by this payment's transactions/,
     ],
     [
       'less than the price to the seller',
-      { hash: HASH, inputs: [{ address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000') }], outputs: [{ address: SELLER, amount: coins('1500000', '999999') }, { address: 'addr_test1qbuyer', amount: coins('2000000', '1') }] },
+      { hash: HASH, inputs: [{ address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000'), inline_datum: DATUM }], outputs: [{ address: SELLER, amount: coins('1500000', '999999') }, { address: 'addr_test1qbuyer', amount: coins('2000000', '1') }] },
       /does not pay/,
     ],
   ])('rejects %s with a CollectionError', async (_label, utxos, message) => {
@@ -151,7 +183,61 @@ describe('verifyCollection', () => {
   it('rejects the reference tx when its escrow output is not one of the payment transactions', async () => {
     const e = await failure(verifyCollection({ ...args(blockfrost(TX_INFO, collection)), paymentTxHashes: [LOCK_TX] }));
     expect(e).toBeInstanceOf(CollectionError);
-    expect(e).toHaveProperty('message', expect.stringMatching(/this payment/));
+    expect(e).toHaveProperty('message', expect.stringMatching(/created by this payment's transactions/));
+  });
+
+  // The payment service batches result submissions: one submit tx recreates the escrow of purchases A and B.
+  describe('escrow outputs from a batched result submission', () => {
+    const escrowA = { address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000'), inline_datum: DATUM };
+    const escrowB = { address: ESCROW, tx_hash: SUBMIT_TX, amount: coins('4503950', '1000000'), inline_datum: datumFor(OTHER_INPUT_HASH) };
+    const collect = (...escrows: TxUtxos['inputs']): TxUtxos => ({
+      hash: HASH,
+      inputs: escrows,
+      outputs: [{ address: SELLER, amount: coins('2000000', String(1_000_000 * escrows.length)) }],
+    });
+
+    it("rejects a collection of only B's escrow as proof for A", async () => {
+      const e = await failure(verifyCollection(args(blockfrost(TX_INFO, collect(escrowB)))));
+      expect(e).toBeInstanceOf(CollectionError);
+      expect(e).toHaveProperty('message', expect.stringMatching(/inputHash/));
+    });
+
+    it("accepts A's own escrow, alone or collected together with B's", async () => {
+      await expect(verifyCollection(args(blockfrost(TX_INFO, collect(escrowA))))).resolves.toMatchObject({ netUnits: '1000000' });
+      await expect(verifyCollection(args(blockfrost(TX_INFO, collect(escrowB, escrowA))))).resolves.toMatchObject({ netUnits: '2000000' });
+      await expect(verifyCollection({ ...args(blockfrost(TX_INFO, collect(escrowA, escrowB))), inputHash: OTHER_INPUT_HASH })).resolves.toMatchObject({ netUnits: '2000000' });
+    });
+
+    it("checks field 10 exactly: A's inputHash in B's buyer key field does not count", async () => {
+      const lookalike = datumFor(OTHER_INPUT_HASH).replaceAll(`5820${BUYER_KEY}`, `5820${INPUT_HASH}`);
+      expect(lookalike.includes(`5820${INPUT_HASH}`)).toBe(true);
+      const e = await failure(verifyCollection(args(blockfrost(TX_INFO, collect({ ...escrowB, inline_datum: lookalike })))));
+      expect(e).toBeInstanceOf(CollectionError);
+      expect(e).toHaveProperty('message', expect.stringMatching(/inputHash/));
+    });
+
+    it('reads the fields of a definite-length Constr 0 encoding too', async () => {
+      const definite = `d87993${DATUM.slice(6, -2)}`;
+      await expect(verifyCollection(args(blockfrost(TX_INFO, collect({ ...escrowA, inline_datum: definite }))))).resolves.toMatchObject({ netUnits: '1000000' });
+    });
+
+    it.each<[string, string | null]>([
+      ['no inline datum', null],
+      ['a truncated datum', DATUM.slice(0, -2)],
+      ['trailing bytes', `${DATUM}00`],
+      ['Constr 1 instead of Constr 0', `d87a${DATUM.slice(4)}`],
+      ['18 fields', `${DATUM.slice(0, -8)}ff`],
+      ['field 10 as chunked bytes', DATUM.replace(`5820${INPUT_HASH}`, `5f5820${INPUT_HASH}ff`)],
+      ['not hex', 'zz'],
+    ])('rejects an escrow input with %s', async (_label, inline_datum) => {
+      const e = await failure(verifyCollection(args(blockfrost(TX_INFO, collect({ ...escrowA, inline_datum })))));
+      expect(e).toBeInstanceOf(CollectionError);
+      expect(e).toHaveProperty('message', expect.stringMatching(/inputHash/));
+    });
+  });
+
+  it('refuses a malformed inputHash argument', async () => {
+    await expect(verifyCollection({ ...args(blockfrost(TX_INFO, collection)), inputHash: INPUT_HASH.toUpperCase() })).rejects.toThrow(TypeError);
   });
 
   it('rejects a tx that failed script validation', async () => {

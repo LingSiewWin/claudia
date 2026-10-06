@@ -82,6 +82,7 @@ describe('identifierFromPurchaser', () => {
     expect(() => mip004ResultHashRaw('x', id)).toThrow(TypeError);
     expect(() => mip004ResultHashEscaped('x', id)).toThrow(TypeError);
     expect(() => mip004InputHash({}, id)).toThrow(TypeError);
+    expect(() => mip004InputHash({}, id)).toThrow('identifierFromPurchaser must be even length, 14-26 hex characters');
   });
   it('rejects a non-string identifier', () => {
     expect(isPurchaserId(['aabbccddeeff00'] as unknown as string)).toBe(false);

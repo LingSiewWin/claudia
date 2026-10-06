@@ -169,20 +169,20 @@ describe('createMpsClient', () => {
 
   it('throws MpsError with the HTTP status on failure', async () => {
     const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: reply(400, { status: 'error', error: { message: 'bad' } }) });
-    await expect(mps.createPayment(request)).rejects.toMatchObject({ name: 'Error', status: 400, transient: false });
+    await expect(mps.createPayment(request)).rejects.toMatchObject({ name: 'Error', status: 400, transient: false, uncertain: false });
     await expect(mps.createPayment(request)).rejects.toBeInstanceOf(MpsError);
   });
 
   it('treats an error envelope on HTTP 200 as a failure', async () => {
     const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: reply(200, { status: 'error', error: { message: 'not found' } }) });
     await expect(mps.resolvePayment('bid-1')).rejects.toBeInstanceOf(MpsError);
-    await expect(mps.resolvePayment('bid-1')).rejects.toMatchObject({ status: 200, transient: false });
+    await expect(mps.resolvePayment('bid-1')).rejects.toMatchObject({ status: 200, transient: true, uncertain: true });
   });
 
   it('reports a 5xx as a transient MpsError', async () => {
     const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: reply(503, { status: 'error', error: { message: 'unavailable' } }) });
     await expect(mps.submitResult('bid-1', 'ab'.repeat(32))).rejects.toBeInstanceOf(MpsError);
-    await expect(mps.submitResult('bid-1', 'ab'.repeat(32))).rejects.toMatchObject({ status: 503, transient: true });
+    await expect(mps.submitResult('bid-1', 'ab'.repeat(32))).rejects.toMatchObject({ status: 503, transient: true, uncertain: true });
   });
 
   it('keeps the service error text, capped at 300 chars and without the token', async () => {
@@ -204,7 +204,16 @@ describe('createMpsClient', () => {
   });
 });
 
-describe('MpsError.transient', () => {
-  it.each([408, 429, 500, 502, 503, 504, 599])('%i may succeed on retry', (status) => expect(new MpsError('x', status).transient).toBe(true));
-  it.each([200, 400, 401, 403, 404, 409, 422])('%i is final', (status) => expect(new MpsError('x', status).transient).toBe(false));
+describe('MpsError.transient and uncertain', () => {
+  it.each([200, 204, 408, 429, 500, 502, 503, 504, 599])('%i may succeed on retry', (status) => expect(new MpsError('x', status).transient).toBe(true));
+  it.each([400, 401, 403, 404, 409, 422])('%i is final', (status) => expect(new MpsError('x', status).transient).toBe(false));
+  it.each([200, 204, 500, 502, 503, 504])('%i may have been processed', (status) => expect(new MpsError('x', status).uncertain).toBe(true));
+  it.each([400, 404, 408, 409, 422, 429])('%i was not processed', (status) => expect(new MpsError('x', status).uncertain).toBe(false));
+});
+
+describe('createPayment with an HTTP 200 that is not the success envelope', () => {
+  it('is uncertain: the payment may exist, so it must not be retried blindly', async () => {
+    const mps = createMpsClient({ baseUrl: 'http://x/api/v1', token: 't', fetchImpl: (async () => new Response('not json', { status: 200 })) as typeof fetch });
+    await expect(mps.createPayment(request)).rejects.toMatchObject({ status: 200, uncertain: true });
+  });
 });

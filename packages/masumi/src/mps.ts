@@ -138,8 +138,8 @@ export function confirmedState(p: Payment, state: string): boolean {
   return p.onChainState === state && transactions(p).some((t) => t.status === 'Confirmed' && t.newOnChainState === state);
 }
 
-// Hashes of this payment's confirmed transactions (lock, result submission, ...): the only txs whose escrow
-// outputs a collection of this payment can spend.
+// Hashes of this payment's confirmed transactions (lock, result submission, ...). A collection of this payment spends
+// an escrow output created by one of them, but a batched tx also creates other payments' escrow outputs.
 export function confirmedTxHashes(p: Payment): string[] {
   return transactions(p).flatMap((t) => (t.status === 'Confirmed' && t.txHash !== null ? [t.txHash] : []));
 }
@@ -162,9 +162,15 @@ export class MpsError extends Error {
     this.status = status;
   }
 
-  // 408, 429 and 5xx may succeed on retry. Any other status is the payment service's final answer.
+  // 408, 429, 5xx and a 2xx without the success envelope may succeed on retry. 4xx otherwise is the final answer.
   get transient(): boolean {
-    return this.status === 408 || this.status === 429 || this.status >= 500;
+    return this.status === 408 || this.status === 429 || this.uncertain;
+  }
+
+  // The service may have acted on the request (2xx without the success envelope, or 5xx): a create must not be
+  // retried blindly, because each call mints a new payment.
+  get uncertain(): boolean {
+    return this.status < 300 || this.status >= 500;
   }
 }
 

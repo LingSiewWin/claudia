@@ -9,7 +9,7 @@ export function isPurchaserId(id: string): boolean {
 }
 
 function purchaserId(id: string): string {
-  if (!isPurchaserId(id)) throw new TypeError('identifierFromPurchaser must be 14-26 hex characters');
+  if (!isPurchaserId(id)) throw new TypeError('identifierFromPurchaser must be even length, 14-26 hex characters');
   return id;
 }
 
