@@ -39,6 +39,8 @@ export interface RunView {
   lastSeq: number;
   lastAt: string | null;
   ignored: number;
+  /** True once an event arrived with a skipped sequence number. */
+  gap: boolean;
 }
 
 export const emptyRun = (): RunView => ({
@@ -50,6 +52,7 @@ export const emptyRun = (): RunView => ({
   lastSeq: 0,
   lastAt: null,
   ignored: 0,
+  gap: false,
 });
 
 const newCard = (actionId: string, at: string): CardView => ({
@@ -86,6 +89,7 @@ function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
         verification: { report: e.payload.report, reportHash: e.payload.report_hash, sepoliaTx: e.payload.sepolia_tx },
       };
     case 'AuthorizationIssued':
+      BigInt(e.payload.authorization.fields.amount); // throws on a corrupt amount, so applyEvent counts the event as ignored
       return { authorization: e.payload.authorization, compromisedEngine: e.payload.compromised_engine, state: 'AUTHORIZED' };
     case 'ApprovalRequested':
       return {
@@ -148,10 +152,25 @@ export const EVENT_TYPES: readonly EventType[] = [
 /** Pure reducer: one event in, a new view out. Duplicate or out-of-order events (seq <= lastSeq) are ignored. */
 export function applyEvent(view: RunView, e: RunEvent): RunView {
   if (!EVENT_TYPES.includes(e.type)) return view;
-  if (e.seq <= view.lastSeq) return { ...view, ignored: view.ignored + 1 };
-  const next: RunView = { ...view, runId: view.runId ?? e.run_id, lastSeq: e.seq, lastAt: e.created_at };
+  try {
+    return applyKnown(view, e);
+  } catch {
+    return { ...view, ignored: view.ignored + 1 };
+  }
+}
+
+function applyKnown(view: RunView, e: RunEvent): RunView {  if (e.seq <= view.lastSeq) return { ...view, ignored: view.ignored + 1 };
+  const next: RunView = {
+    ...view,
+    runId: view.runId ?? e.run_id,
+    lastSeq: e.seq,
+    lastAt: e.created_at,
+    gap: view.gap || (view.lastSeq > 0 && e.seq > view.lastSeq + 1),
+  };
   switch (e.type) {
     case 'RunStarted':
+      BigInt(e.payload.vault.balance);
+      BigInt(e.payload.vault.spent_today);
       return { ...next, started: e.payload };
     case 'AttackStarted':
       return { ...next, attacks: { ...next.attacks, [e.payload.attack]: 'running' } };
@@ -164,6 +183,7 @@ export function applyEvent(view: RunView, e: RunEvent): RunView {
   if (e.action_id === null) return { ...next, ignored: next.ignored + 1 };
   const index = next.cards.findIndex((c) => c.actionId === e.action_id);
   const card = index >= 0 ? (next.cards[index] as CardView) : newCard(e.action_id, e.created_at);
+  if (e.type === 'ActionProposed' && index >= 0 && card.state !== 'PROPOSED') return { ...next, ignored: next.ignored + 1 };
   const patch = cardPatch(e, card);
   if (patch === null) return { ...next, ignored: next.ignored + 1 };
   const updated = { ...card, ...patch };

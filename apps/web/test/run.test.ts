@@ -1,7 +1,8 @@
+import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '@authority/core';
 import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '../lib/contract';
 import { formatUnits } from '../lib/format';
-import { REPLAY_FAILED, REPLAY_VERIFIED, logIntact, replayDelays, replayPlan } from '../lib/replay';
+import { REPLAY_FAILED, REPLAY_UNANCHORED, REPLAY_VERIFIED, logIntact, replayDelays, replayPlan } from '../lib/replay';
 import { applyEvent, emptyRun, enforcedRow, mayRow, reduceRun, statusLine, treasury, trueRow } from '../lib/run';
 import { recorded, stage } from './load';
 
@@ -126,24 +127,103 @@ describe('REPLAY evidence check', () => {
   });
 });
 
-describe('REPLAY banner', () => {
-  it('is earned by an intact log, which then plays in full', () => {
-    const plan = replayPlan(stage());
-    expect(plan).toMatchObject({ verified: true, banner: REPLAY_VERIFIED });
-    expect(plan.events).toHaveLength(stage().length);
-    expect(plan.delays).toHaveLength(plan.events.length);
+/** Recompute every hash after an edit: a self-consistent forgery, which only an anchor can expose. */
+function rehash(events: RunEvent[]): RunEvent[] {
+  let prev = '00'.repeat(32);
+  return events.map((e) => {
+    const { hash: _h, prev_hash: _p, ...body } = e;
+    const hash = sha256Hex(concatBytes(hexToBytes(prev), utf8ToBytes(canonicalJson(body))));
+    const out = { ...body, hash, prev_hash: prev } as RunEvent;
+    prev = hash;
+    return out;
   });
-  it('reports a failed verification and plays nothing for a tampered log', () => {
+}
+const forged = () => {
+  const edited = stage();
+  const e = edited.find((x) => x.type === 'ActionProposed')!;
+  if (e.type === 'ActionProposed') e.payload.action.amount.value = '84200000';
+  return rehash(edited);
+};
+const anchorOf = (events: RunEvent[]) => ({ seq: events[events.length - 1]!.seq, head: events[events.length - 1]!.hash });
+
+describe('REPLAY banner', () => {
+  it('is VERIFIED only when the log is consistent and matches the on-chain anchor', () => {
+    const events = stage();
+    const plan = replayPlan(events, anchorOf(events));
+    expect(plan).toMatchObject({ verified: true, banner: REPLAY_VERIFIED, anchoredThrough: events.length });
+    expect(plan.events).toHaveLength(events.length);
+    expect(plan.delays).toHaveLength(events.length);
+  });
+  it('plays under a weaker banner when nothing anchors the log', () => {
+    const plan = replayPlan(stage(), null);
+    expect(plan).toMatchObject({ verified: false, banner: REPLAY_UNANCHORED, anchoredThrough: null });
+    expect(plan.events).toHaveLength(stage().length);
+  });
+  it('marks events after the anchor as unanchored', () => {
+    const events = stage();
+    const mid = events[10]!;
+    const plan = replayPlan(events, { seq: mid.seq, head: mid.hash });
+    expect(plan).toMatchObject({ verified: true, anchoredThrough: mid.seq });
+    expect(plan.events).toHaveLength(events.length);
+  });
+  it('fails a forged but self-consistent chain against the anchor and plays nothing', () => {
+    const real = stage();
+    const fake = forged();
+    expect(logIntact(fake)).toBe(true);
+    expect(replayPlan(fake, anchorOf(real))).toEqual({ verified: false, banner: REPLAY_FAILED, events: [], delays: [], anchoredThrough: null });
+  });
+  it('shows the same forged chain as not anchored when there is no anchor', () => {
+    expect(replayPlan(forged(), null).banner).toBe(REPLAY_UNANCHORED);
+  });
+  it('fails a log truncated at the end against the anchor', () => {
+    const real = stage();
+    const plan = replayPlan(real.slice(0, -3), anchorOf(real));
+    expect(plan).toMatchObject({ verified: false, banner: REPLAY_FAILED, events: [] });
+  });
+  it('reports a failed verification and plays nothing for an edited event', () => {
     const edited = stage();
     const e = edited.find((x) => x.type === 'ActionProposed')!;
     if (e.type === 'ActionProposed') e.payload.action.amount.value = '84200000';
-    expect(replayPlan(edited)).toEqual({ verified: false, banner: 'REPLAY — EVIDENCE LOG FAILED VERIFICATION', events: [], delays: [] });
+    expect(replayPlan(edited, anchorOf(stage()))).toMatchObject({ banner: 'REPLAY — EVIDENCE LOG FAILED VERIFICATION', events: [] });
     expect(REPLAY_FAILED).toBe('REPLAY — EVIDENCE LOG FAILED VERIFICATION');
+  });
+  it('never verifies an empty log', () => {
+    expect(logIntact([])).toBe(false);
+    expect(replayPlan([], null).banner).toBe(REPLAY_FAILED);
+  });
+  it('rejects a log whose head prefix was dropped', () => {
+    expect(logIntact(stage().slice(4))).toBe(false);
+    expect(logIntact(stage().slice(4), false)).toBe(true);
   });
   it('rejects a log with a broken link between events', () => {
     const cut = stage();
     cut.splice(3, 1);
     expect(logIntact(cut)).toBe(false);
+  });
+});
+
+describe('run reducer on damaged input', () => {
+  it('counts a corrupt payload as ignored instead of throwing', () => {
+    const events = stage();
+    const before = events.slice(0, 5).reduce(applyEvent, emptyRun());
+    const bad = { ...(events[5] as RunEvent), seq: 99, type: 'AuthorizationIssued', payload: undefined } as unknown as RunEvent;
+    expect(applyEvent(before, bad)).toEqual({ ...before, ignored: before.ignored + 1 });
+    const badAmount = structuredClone(events.find((x) => x.type === 'AuthorizationIssued')!) as RunEvent;
+    if (badAmount.type === 'AuthorizationIssued') badAmount.payload.authorization.fields.amount = '8.42';
+    expect(() => applyEvent(before, { ...badAmount, seq: 99 })).not.toThrow();
+    expect(applyEvent(before, { ...badAmount, seq: 99 }).ignored).toBe(before.ignored + 1);
+  });
+  it('ignores a late proposal for an action already past PROPOSED', () => {
+    const events = stage();
+    const v = reduceRun(events);
+    const proposal = events.find((x) => x.type === 'ActionProposed')!;
+    const late = applyEvent(v, { ...proposal, seq: v.lastSeq + 1 } as RunEvent);
+    expect(late.cards).toEqual(v.cards);
+  });
+  it('flags a skipped sequence number', () => {
+    const events = stage();
+    expect(reduceRun(events).gap).toBe(false);
+    expect(reduceRun(events.filter((e) => e.seq !== 4)).gap).toBe(true);
   });
 });
 
