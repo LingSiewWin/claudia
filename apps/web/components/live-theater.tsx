@@ -7,6 +7,7 @@ import { clock, money } from '../lib/format';
 import { useEventStream, useLoad, useNow, useReplay } from '../lib/hooks';
 import { type RunView, treasury, units } from '../lib/run';
 import { ActionCard } from './action-card';
+import { AttackLab } from './attack-lab';
 import { BoundaryRail } from './boundary-rail';
 import { type Mode, ModeBanner } from './mode-banner';
 
@@ -131,7 +132,9 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
         </section>
 
         <aside aria-label="Attack Lab" className="min-w-0">
-          {mode === 'live' ? null : (
+          {mode === 'live' ? (
+            <AttackLab />
+          ) : (
             <p className="text-sm text-muted">The Attack Lab runs real attempts, so it is available in LIVE EXECUTION only.</p>
           )}
         </aside>
