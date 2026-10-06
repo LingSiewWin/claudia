@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { EthReceipt, KoiosTx } from '../lib/chain';
-import type { ApprovalView, MandateView, ReceiptBundle, RunEvent, RunSummary } from '../lib/contract';
+import type { ApprovalView, LogAnchorRef, MandateView, ReceiptBundle, RunEvent, RunSummary } from '../lib/contract';
 
 export interface Recorded {
   registry: string;
@@ -10,6 +10,7 @@ export interface Recorded {
   approvals: ApprovalView[];
   bundles: Record<string, ReceiptBundle>;
   koios: Record<string, KoiosTx>;
+  anchors: Record<string, LogAnchorRef>;
   sepolia: Record<string, EthReceipt>;
 }
 

@@ -49,9 +49,21 @@ test('LIVE renders the stage run from the event stream only, business objects fi
   await expect(aws.getByTestId('row-true')).toContainText('Invoice confirmed by Chainlink CRE');
   await expect(aws.getByTestId('row-true')).not.toContainText(/verified/i);
   await expect(aws.getByTestId('row-enforced')).toContainText('SETTLED');
-  await expect(aws.getByTestId('progress')).toContainText('Authorization signature checked in this browser');
-  await expect(aws.getByTestId('progress')).toContainText('Settled in block');
-  await expect(aws.getByTestId('progress').locator('li').first()).toContainText('✓');
+  // Only the check this browser ran gets the check mark; what the server reported says so.
+  const progress = aws.getByTestId('progress');
+  await expect(progress).toContainText('Settled in block');
+  const browser = progress.locator('li[data-source=browser]');
+  await expect(browser).toHaveCount(1);
+  await expect(browser).toContainText('Authorization signature');
+  await expect(browser).toContainText('✓');
+  await expect(browser).toContainText('checked in your browser');
+  const server = progress.locator('li[data-source=server]');
+  await expect(server).toHaveCount(4);
+  for (let i = 0; i < 4; i++) {
+    await expect(server.nth(i)).toContainText('●');
+    await expect(server.nth(i)).toContainText('reported by server');
+    await expect(server.nth(i)).not.toContainText('✓');
+  }
 
   const injected = cards.nth(5);
   await expect(injected.getByTestId('status')).toHaveText('Stopped by the invoice check');

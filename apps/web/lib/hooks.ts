@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { eventsUrl, runLog } from './api';
 import { koiosTx } from './chain';
 import { config } from './config';
-import type { RunEvent, RunSummary } from './contract';
-import { readAnchor, replayPlan, unanchoredActions } from './replay';
+import type { RunEvent } from './contract';
+import { type ReplayVerdict, readAnchor, replayPlan, unanchoredActions } from './replay';
 import { type RunView, applyEvent, emptyRun, reduceRun } from './run';
 
 export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting';
@@ -39,9 +39,11 @@ export function useEventStream(runId: string | null): { view: RunView; status: S
 
 export interface ReplayState {
   view: RunView;
-  run: RunSummary | null;
+  /** From the hashed RunStarted event, never from the run summary. */
+  recordedAt: string | null;
   done: boolean;
   /** The browser's own verdict on the stored log (lib/replay.ts); null while loading. */
+  verdict: ReplayVerdict | null;
   banner: string | null;
   /** Actions with evidence after the on-chain anchor. */
   unanchored: ReadonlySet<string>;
@@ -51,15 +53,17 @@ export interface ReplayState {
 
 const ANCHOR_TIMEOUT_MS = 8_000;
 const NONE: ReadonlySet<string> = new Set();
+const TX_HASH = /^[0-9a-f]{64}$/;
 
 /**
- * REPLAY: one request for the stored log, one chain read for its on-chain log head, the hash check in this browser,
- * then local playback at stage speed. No other network.
+ * REPLAY: one request for the stored log, chain reads for its on-chain log head (closing anchor, else the latest
+ * settlement), the hash check in this browser, then local playback at stage speed. No other network.
  */
 export function useReplay(runId: string | null): ReplayState {
   const [view, setView] = useState<RunView>(emptyRun);
-  const [run, setRun] = useState<RunSummary | null>(null);
+  const [recordedAt, setRecordedAt] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [verdict, setVerdict] = useState<ReplayVerdict | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [unanchored, setUnanchored] = useState<ReadonlySet<string>>(NONE);
   const [error, setError] = useState<string | null>(null);
@@ -68,25 +72,32 @@ export function useReplay(runId: string | null): ReplayState {
 
   useEffect(() => {
     setView(emptyRun());
-    setRun(null);
+    setRecordedAt(null);
     setDone(false);
+    setVerdict(null);
     setBanner(null);
     setUnanchored(NONE);
     setError(null);
     eventsRef.current = [];
     if (runId === null) return;
     let cancelled = false;
+    let anchorTimer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
-      const { run: summary, events } = await runLog(runId);
+      const { events, anchor: ref } = await runLog(runId);
       if (cancelled) return;
-      setRun(summary);
+      const closingTx = typeof ref?.tx_hash === 'string' && TX_HASH.test(ref.tx_hash) ? ref.tx_hash : null;
       const anchor = await Promise.race([
-        readAnchor(events, koiosTx),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), ANCHOR_TIMEOUT_MS)),
+        readAnchor(events, koiosTx, closingTx),
+        new Promise<null>((resolve) => {
+          anchorTimer = setTimeout(() => resolve(null), ANCHOR_TIMEOUT_MS);
+        }),
       ]);
+      clearTimeout(anchorTimer);
       if (cancelled) return;
       // Which run opens the evidence chain is the client's own constant, never a field of the server's response.
-      const plan = replayPlan(events, anchor, runId === config.stageRunId);
+      const plan = replayPlan(events, anchor, runId === config.stageRunId, runId);
+      setRecordedAt(plan.recordedAt);
+      setVerdict(plan.verdict);
       setBanner(plan.banner);
       setUnanchored(unanchoredActions(plan.events, plan.anchoredThrough));
       eventsRef.current = plan.events;
@@ -106,6 +117,7 @@ export function useReplay(runId: string | null): ReplayState {
     load().catch((err: unknown) => !cancelled && setError(err instanceof Error ? err.message : String(err)));
     return () => {
       cancelled = true;
+      clearTimeout(anchorTimer);
       if (timer.current) clearTimeout(timer.current);
     };
   }, [runId]);
@@ -115,7 +127,7 @@ export function useReplay(runId: string | null): ReplayState {
     setView(reduceRun(eventsRef.current));
     setDone(true);
   };
-  return { view, run, done, banner, unanchored, error, skip };
+  return { view, recordedAt, done, verdict, banner, unanchored, error, skip };
 }
 
 /** Wall clock that ticks once a second while `active`. */

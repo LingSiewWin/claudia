@@ -152,11 +152,13 @@ function Progress({ card, authValid, now }: { card: CardView; authValid: boolean
   const elapsed = tx.submittedAt ? Math.max(0, Math.round((end - Date.parse(tx.submittedAt)) / 1000)) : null;
   return (
     <ol data-testid="progress" className="mt-4 space-y-1 text-sm">
-      <Step done={authValid === true} failed={authValid === false}>
-        Authorization signature checked in this browser
+      <Step source="browser" done={authValid === true} failed={authValid === false}>
+        Authorization signature
       </Step>
-      <Step done={tx.submittedAt !== null}>Vault script accepted the transaction</Step>
-      <Step done={tx.hash !== null && tx.submittedAt !== null}>
+      <Step source="server" done={tx.submittedAt !== null}>
+        Vault script accepted the transaction
+      </Step>
+      <Step source="server" done={tx.hash !== null && tx.submittedAt !== null}>
         Submitted{' '}
         {tx.hash ? (
           <a className="font-mono text-[13px] underline" href={cardanoTxUrl(tx.hash)} target="_blank" rel="noreferrer">
@@ -164,22 +166,32 @@ function Progress({ card, authValid, now }: { card: CardView; authValid: boolean
           </a>
         ) : null}
       </Step>
-      <Step done={tx.confirmedAt !== null}>
+      <Step source="server" done={tx.confirmedAt !== null}>
         {tx.confirmedAt ? `Settled in block ${tx.block ?? '?'}` : 'Waiting for a block'}
         {elapsed === null ? null : <span className="ml-2 tabular-nums text-muted">{elapsed}s</span>}
       </Step>
-      {card.receipt ? <Step done>Receipt {card.receipt.id} proven</Step> : null}
+      {card.receipt ? (
+        <Step source="server" done>
+          Receipt {card.receipt.id} issued
+        </Step>
+      ) : null}
     </ol>
   );
 }
 
-function Step({ done, failed = false, children }: { done: boolean; failed?: boolean; children: ReactNode }) {
+/**
+ * A check this browser ran itself gets the check mark; a step the server reported gets a plain dot. Each says which.
+ */
+function Step({ source, done, failed = false, children }: { source: 'browser' | 'server'; done: boolean; failed?: boolean; children: ReactNode }) {
+  const browser = source === 'browser';
+  const glyph = failed ? '✕' : !done ? '○' : browser ? '✓' : '●';
   return (
-    <li className={`flex gap-2 ${done ? 'text-fg' : 'text-muted'}`}>
-      <span aria-hidden className={failed ? 'text-forbid' : done ? 'text-permit' : 'text-muted'}>
-        {failed ? '✕' : done ? '✓' : '○'}
+    <li data-source={source} className={`flex flex-wrap items-baseline gap-x-2 ${done ? 'text-fg' : 'text-muted'}`}>
+      <span aria-hidden className={failed ? 'text-forbid' : done && browser ? 'text-permit' : 'text-muted'}>
+        {glyph}
       </span>
       <span>{children}</span>
+      <span className="text-[12px] text-muted">{browser ? 'checked in your browser' : 'reported by server'}</span>
     </li>
   );
 }

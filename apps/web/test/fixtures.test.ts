@@ -18,7 +18,7 @@ import { formatUnits } from '../lib/format';
 import { recorded, stage } from './load';
 
 describe('recorded fixtures', () => {
-  it('form one hash chain across every run (spec 07 event hash)', () => {
+  it('form one hash chain across every run', () => {
     const all = Object.values(recorded.logs)
       .flat()
       .sort((a, b) => a.seq - b.seq);

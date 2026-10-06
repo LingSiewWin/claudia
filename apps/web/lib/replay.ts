@@ -42,54 +42,80 @@ export const REPLAY_UNANCHORED = 'REPLAY — RECORDED RUN · INTEGRITY CHECKED, 
 export const REPLAY_FAILED = 'REPLAY — EVIDENCE LOG FAILED VERIFICATION';
 export const replayVerifiedThrough = (seq: number) => `REPLAY — VERIFIED THROUGH EVENT ${seq} · LATER EVENTS NOT ANCHORED`;
 
-/** The log head committed on-chain in the settlement transaction metadata (log_head), read by the browser itself. */
+/** A log head committed on Cardano (metadata 1694 `log_head`), read by the browser itself. */
 export interface LogAnchor {
   seq: number;
   head: string;
 }
 
+export type ReplayVerdict = 'verified' | 'through' | 'unanchored' | 'failed';
+
 export interface ReplayPlan {
+  verdict: ReplayVerdict;
   verified: boolean;
   banner: string;
   events: RunEvent[];
   delays: number[];
   /** Last seq covered by the on-chain anchor; events after it play but are not proven. Null when unanchored. */
   anchoredThrough: number | null;
+  /** created_at of the hashed RunStarted event; null when nothing plays. */
+  recordedAt: string | null;
 }
 
+/** Events that close a run: the last action's outcome, or an Attack Lab result. */
+const TERMINAL = new Set<RunEvent['type']>(['ReceiptProven', 'ActionDenied', 'CFODeclined', 'TransactionRejected', 'AttackResult']);
+
 /**
- * What REPLAY plays. VERIFIED needs an internally consistent log AND the on-chain anchor matching the event at
- * anchor.seq; an anchor short of the last event says how far it reaches. Consistent but unanchored plays under a
- * weaker banner. Anything inconsistent, or an anchor that disagrees, plays nothing.
+ * What REPLAY plays, for the run the browser asked for. The log must be internally consistent, start with RunStarted,
+ * and belong to `runId` in every event; otherwise nothing plays. VERIFIED needs the on-chain anchor to match the event
+ * at anchor.seq, and to be the last event of a run that ended; a shorter anchor says how far it reaches. Consistent but
+ * unanchored plays under a weaker banner. An anchor that disagrees plays nothing.
  */
-export function replayPlan(events: RunEvent[], anchor: LogAnchor | null = null, startsChain = true): ReplayPlan {
-  const failed = { verified: false, banner: REPLAY_FAILED, events: [], delays: [], anchoredThrough: null };
-  if (!logIntact(events, startsChain)) return failed;
-  const play = { events, delays: replayDelays(events) };
-  if (!anchor) return { verified: false, banner: REPLAY_UNANCHORED, ...play, anchoredThrough: null };
+export function replayPlan(events: RunEvent[], anchor: LogAnchor | null = null, startsChain = true, runId = events[0]?.run_id): ReplayPlan {
+  const failed: ReplayPlan = { verdict: 'failed', verified: false, banner: REPLAY_FAILED, events: [], delays: [], anchoredThrough: null, recordedAt: null };
+  const first = events[0];
+  if (!logIntact(events, startsChain) || first?.type !== 'RunStarted' || events.some((e) => e.run_id !== runId)) return failed;
+  const play = { events, delays: replayDelays(events), recordedAt: first.created_at };
+  if (!anchor) return { verdict: 'unanchored', verified: false, banner: REPLAY_UNANCHORED, ...play, anchoredThrough: null };
   if (events.find((e) => e.seq === anchor.seq)?.hash !== anchor.head) return failed;
-  const whole = anchor.seq === events[events.length - 1]?.seq;
-  return { verified: true, banner: whole ? REPLAY_VERIFIED : replayVerifiedThrough(anchor.seq), ...play, anchoredThrough: anchor.seq };
+  const last = events[events.length - 1] as RunEvent;
+  const whole = anchor.seq === last.seq && TERMINAL.has(last.type);
+  return whole
+    ? { verdict: 'verified', verified: true, banner: REPLAY_VERIFIED, ...play, anchoredThrough: anchor.seq }
+    : { verdict: 'through', verified: true, banner: replayVerifiedThrough(anchor.seq), ...play, anchoredThrough: anchor.seq };
 }
 
-/**
- * The log head the run's latest settlement committed on Cardano (metadata label 1694, `log_head`), from chain data the
- * browser reads itself. `{ seq, hash }` names its event; a bare hash is the head at that settlement's
- * TransactionConfirmed event. A chain that does not answer, or metadata without a head, is no anchor, never a pass.
- */
-export async function readAnchor(events: RunEvent[], read: (txHash: string) => Promise<KoiosTx | null>): Promise<LogAnchor | null> {
-  const settled = events.findLast((e) => e.type === 'TransactionConfirmed');
-  if (settled?.type !== 'TransactionConfirmed') return null;
+type ReadTx = (txHash: string) => Promise<KoiosTx | null>;
+
+/** metadata 1694 `log_head` in its only valid form, `{ seq, hash }`. A bare hash, or no answer, is no head. */
+async function committedHead(read: ReadTx, txHash: string): Promise<LogAnchor | null> {
   let head: unknown;
   try {
-    head = ((await read(settled.payload.tx_hash))?.metadata?.['1694'] as { log_head?: unknown } | undefined)?.log_head;
+    head = ((await read(txHash))?.metadata?.['1694'] as { log_head?: unknown } | undefined)?.log_head;
   } catch {
     return null;
   }
-  if (typeof head === 'string') return { seq: settled.seq, head };
   const named = head as { seq?: unknown; hash?: unknown } | null | undefined;
-  if (typeof named?.seq === 'number' && Number.isInteger(named.seq) && typeof named.hash === 'string') return { seq: named.seq, head: named.hash };
-  return null;
+  return typeof named?.seq === 'number' && Number.isInteger(named.seq) && typeof named.hash === 'string' ? { seq: named.seq, head: named.hash } : null;
+}
+
+/**
+ * The on-chain anchor for a run, from chain data the browser reads itself. First the run's closing anchor
+ * (`closingTx`, a pointer from the API: only the head read from chain counts). Failing that, the latest settlement
+ * named in the log, whose head must be an event from before that transaction was submitted (a transaction cannot
+ * commit a head that names itself). No answer or no valid head is no anchor, never a pass.
+ */
+export async function readAnchor(events: RunEvent[], read: ReadTx, closingTx: string | null = null): Promise<LogAnchor | null> {
+  if (closingTx) {
+    const closing = await committedHead(read, closingTx);
+    if (closing) return closing;
+  }
+  const settled = events.findLast((e) => e.type === 'TransactionConfirmed');
+  if (settled?.type !== 'TransactionConfirmed') return null;
+  const tx = settled.payload.tx_hash;
+  const submitted = events.find((e) => e.type === 'TransactionSubmitted' && e.payload.tx_hash === tx);
+  const head = await committedHead(read, tx);
+  return head && submitted && head.seq < submitted.seq ? head : null;
 }
 
 /** Actions with any event after the anchored head: their outcome is not covered by the on-chain anchor. */

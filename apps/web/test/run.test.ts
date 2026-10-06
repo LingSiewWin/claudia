@@ -157,40 +157,51 @@ const forged = () => {
   return rehash(edited);
 };
 const anchorOf = (events: RunEvent[]) => ({ seq: events[events.length - 1]!.seq, head: events[events.length - 1]!.hash });
+const STAGE = 'run-stage-0001';
+const indexOf = (events: RunEvent[], type: RunEvent['type']) => events.findIndex((e) => e.type === type);
 
 describe('REPLAY banner', () => {
-  it('is VERIFIED only when the log is consistent and matches the on-chain anchor', () => {
+  it('is VERIFIED only when the anchor covers the last event of a finished run', () => {
     const events = stage();
     const plan = replayPlan(events, anchorOf(events));
-    expect(plan).toMatchObject({ verified: true, banner: REPLAY_VERIFIED, anchoredThrough: events.length });
+    expect(plan).toMatchObject({ verdict: 'verified', verified: true, banner: REPLAY_VERIFIED, anchoredThrough: events[events.length - 1]!.seq });
     expect(plan.events).toHaveLength(events.length);
     expect(plan.delays).toHaveLength(events.length);
   });
   it('plays under a weaker banner when nothing anchors the log', () => {
     const plan = replayPlan(stage(), null);
-    expect(plan).toMatchObject({ verified: false, banner: REPLAY_UNANCHORED, anchoredThrough: null });
+    expect(plan).toMatchObject({ verdict: 'unanchored', verified: false, banner: REPLAY_UNANCHORED, anchoredThrough: null });
     expect(plan.events).toHaveLength(stage().length);
   });
-  it('marks events after the anchor as unanchored', () => {
+  it('says how far an anchor short of the last event reaches', () => {
     const events = stage();
     const mid = events[10]!;
     const plan = replayPlan(events, { seq: mid.seq, head: mid.hash });
-    expect(plan).toMatchObject({ verified: true, anchoredThrough: mid.seq });
-    expect(plan.events).toHaveLength(events.length);
-  });
-  it('never shows the full VERIFIED banner over an unanchored tail', () => {
-    const events = stage();
-    const mid = events[10]!;
-    const plan = replayPlan(events, { seq: mid.seq, head: mid.hash });
+    expect(plan).toMatchObject({ verdict: 'through', verified: true, anchoredThrough: mid.seq });
     expect(plan.banner).toBe('REPLAY — VERIFIED THROUGH EVENT 11 · LATER EVENTS NOT ANCHORED');
     expect(plan.banner).toBe(replayVerifiedThrough(11));
-    expect(replayPlan(events.slice(0, 11), { seq: mid.seq, head: mid.hash }).banner).toBe(REPLAY_VERIFIED);
+    expect(plan.events).toHaveLength(events.length);
+  });
+  it('never shows the full banner for a log that stops before the run ended', () => {
+    const events = stage();
+    const open = events.slice(0, indexOf(events, 'AuthorizationIssued') + 1);
+    expect(replayPlan(open, anchorOf(open))).toMatchObject({ verdict: 'through', banner: replayVerifiedThrough(open.length) });
+    const ended = events.slice(0, indexOf(events, 'ReceiptProven') + 1);
+    expect(replayPlan(ended, anchorOf(ended)).banner).toBe(REPLAY_VERIFIED);
   });
   it('fails a forged but self-consistent chain against the anchor and plays nothing', () => {
     const real = stage();
     const fake = forged();
     expect(logIntact(fake)).toBe(true);
-    expect(replayPlan(fake, anchorOf(real))).toEqual({ verified: false, banner: REPLAY_FAILED, events: [], delays: [], anchoredThrough: null });
+    expect(replayPlan(fake, anchorOf(real))).toEqual({
+      verdict: 'failed',
+      verified: false,
+      banner: REPLAY_FAILED,
+      events: [],
+      delays: [],
+      anchoredThrough: null,
+      recordedAt: null,
+    });
   });
   it('shows the same forged chain as not anchored when there is no anchor', () => {
     expect(replayPlan(forged(), null).banner).toBe(REPLAY_UNANCHORED);
@@ -220,48 +231,140 @@ describe('REPLAY banner', () => {
     cut.splice(3, 1);
     expect(logIntact(cut)).toBe(false);
   });
+  it('fails a log served for a different run than the one requested', () => {
+    const events = stage();
+    expect(replayPlan(events, anchorOf(events), true, STAGE).verdict).toBe('verified');
+    expect(replayPlan(events, anchorOf(events), true, 'run-lab-replay')).toMatchObject({ verdict: 'failed', events: [] });
+    const mixed = stage();
+    mixed[5] = { ...mixed[5]!, run_id: 'run-lab-replay' };
+    const relinked = rehash(mixed);
+    expect(logIntact(relinked)).toBe(true);
+    expect(replayPlan(relinked, null, true, STAGE)).toMatchObject({ verdict: 'failed', events: [] });
+  });
+  it('dates the run from its hashed RunStarted event', () => {
+    const events = stage();
+    expect(events[0]!.type).toBe('RunStarted');
+    expect(replayPlan(events, null).recordedAt).toBe(events[0]!.created_at);
+    expect(replayPlan(forged(), anchorOf(events)).recordedAt).toBeNull();
+    expect(replayPlan(recorded.logs['run-lab-replay']!, null, false).recordedAt).toBe(recorded.logs['run-lab-replay']![0]!.created_at);
+  });
 });
 
 const koios = async (txHash: string): Promise<KoiosTx | null> => structuredClone(recorded.koios[txHash] ?? null);
-const withHead = (logHead: unknown) => async (txHash: string): Promise<KoiosTx | null> => {
-  const tx = structuredClone(recorded.koios[txHash]!);
-  tx.metadata = { '1694': { ...(tx.metadata?.['1694'] as object), log_head: logHead } };
-  return tx;
-};
+/** Chain data where one transaction's metadata 1694 carries a different log_head. */
+const withHead =
+  (target: string, logHead: unknown) =>
+  async (txHash: string): Promise<KoiosTx | null> => {
+    const tx = structuredClone(recorded.koios[txHash] ?? null);
+    if (tx && txHash === target) tx.metadata = { '1694': { ...(tx.metadata?.['1694'] as object), log_head: logHead } };
+    return tx;
+  };
+const closingTx = (runId = STAGE) => recorded.anchors[runId]!.tx_hash;
+/** The events of one settlement: TransactionBuilt, TransactionSubmitted, TransactionConfirmed. */
+function settlement(events: RunEvent[], which: 'first' | 'last') {
+  const confirmed = (which === 'first' ? events.find : events.findLast).call(events, (e) => e.type === 'TransactionConfirmed');
+  if (confirmed?.type !== 'TransactionConfirmed') throw new Error('no settlement');
+  const tx = confirmed.payload.tx_hash;
+  const of = (type: RunEvent['type']) => events.find((e) => e.type === type && 'tx_hash' in e.payload && e.payload.tx_hash === tx)!;
+  const built = of('TransactionBuilt');
+  if (built.type !== 'TransactionBuilt') throw new Error('no build');
+  return { tx, built, submitted: of('TransactionSubmitted'), confirmed };
+}
 
 describe('REPLAY anchor read from Cardano', () => {
-  it('pairs the latest settlement log head with that settlement event', async () => {
+  it('reads the settlement head committed before the transaction was submitted', async () => {
     const events = stage();
+    const { tx, built, submitted } = settlement(events, 'last');
+    const head = (recorded.koios[tx]!.metadata!['1694'] as { log_head: { seq: number; hash: string } }).log_head;
+    expect(head).toEqual(built.payload.log_head);
+    expect(head.seq).toBe(built.seq - 1);
+    expect(head.seq).toBeLessThan(submitted.seq);
+    expect(head.hash).toBe(events.find((e) => e.seq === head.seq)!.hash);
     const anchor = await readAnchor(events, koios);
-    expect(anchor).toEqual({ seq: 30, head: events[29]!.hash });
-    const plan = replayPlan(events, anchor);
-    expect(plan).toMatchObject({ verified: true, banner: replayVerifiedThrough(30), anchoredThrough: 30 });
-    expect(replayPlan(events.slice(0, 30), anchor).banner).toBe(REPLAY_VERIFIED);
+    expect(anchor).toEqual({ seq: head.seq, head: head.hash });
+    expect(replayPlan(events, anchor)).toMatchObject({ verdict: 'through', banner: replayVerifiedThrough(head.seq), anchoredThrough: head.seq });
   });
-  it('accepts a log head that names its own sequence number', async () => {
+  it('reads the closing anchor that covers the whole run', async () => {
     const events = stage();
     const last = events[events.length - 1]!;
-    const anchor = await readAnchor(events, withHead({ seq: last.seq, hash: last.hash }));
-    expect(anchor).toEqual({ seq: 60, head: last.hash });
-    expect(replayPlan(events, anchor).banner).toBe(REPLAY_VERIFIED);
+    expect(recorded.anchors[STAGE]).toMatchObject({ seq: last.seq, hash: last.hash });
+    const anchor = await readAnchor(events, koios, closingTx());
+    expect(anchor).toEqual({ seq: last.seq, head: last.hash });
+    expect(replayPlan(events, anchor, true, STAGE)).toMatchObject({ verdict: 'verified', banner: REPLAY_VERIFIED });
+  });
+  it('treats a bare hash as no anchor', async () => {
+    const events = stage();
+    const { tx, built } = settlement(events, 'last');
+    expect(await readAnchor(events, withHead(tx, built.payload.log_head.hash))).toBeNull();
+    const fallback = await readAnchor(events, withHead(closingTx(), events[events.length - 1]!.hash), closingTx());
+    expect(fallback).toEqual({ seq: built.payload.log_head.seq, head: built.payload.log_head.hash });
+  });
+  it('ignores a settlement head that claims an event at or after its own submission', async () => {
+    const events = stage();
+    const { tx, submitted, confirmed } = settlement(events, 'last');
+    expect(await readAnchor(events, withHead(tx, { seq: submitted.seq, hash: submitted.hash }))).toBeNull();
+    expect(await readAnchor(events, withHead(tx, { seq: confirmed.seq, hash: confirmed.hash }))).toBeNull();
+  });
+  it('falls back to the latest settlement when the closing anchor cannot be read', async () => {
+    const events = stage();
+    const { built } = settlement(events, 'last');
+    const expected = { seq: built.payload.log_head.seq, head: built.payload.log_head.hash };
+    const down = (h: string) => (h === closingTx() ? Promise.reject(new Error('relay down')) : koios(h));
+    expect(await readAnchor(events, down, closingTx())).toEqual(expected);
+    expect(await readAnchor(events, (h) => (h === closingTx() ? Promise.resolve(null) : koios(h)), closingTx())).toEqual(expected);
   });
   it('reads no anchor when the run never settled, the chain does not answer, or the metadata has no head', async () => {
     const unsettled = stage().filter((e) => e.type !== 'TransactionConfirmed');
     expect(await readAnchor(unsettled, koios)).toBeNull();
-    expect(await readAnchor(stage(), async () => null)).toBeNull();
-    expect(await readAnchor(stage(), () => Promise.reject(new Error('relay down')))).toBeNull();
-    for (const head of [undefined, null, 42, { seq: '30', hash: 'ab' }, { seq: 30 }]) {
-      expect(await readAnchor(stage(), withHead(head))).toBeNull();
+    expect(await readAnchor(stage(), async () => null, closingTx())).toBeNull();
+    expect(await readAnchor(stage(), () => Promise.reject(new Error('relay down')), closingTx())).toBeNull();
+    const { tx } = settlement(stage(), 'last');
+    for (const head of [undefined, null, 42, 'ab', { seq: '30', hash: 'ab' }, { seq: 30 }, { seq: 1.5, hash: 'ab' }]) {
+      expect(await readAnchor(stage(), withHead(tx, head))).toBeNull();
     }
   });
   it('fails the replay when the on-chain head disagrees with the stored log', async () => {
-    const anchor = await readAnchor(stage(), withHead('ff'.repeat(32)));
-    expect(replayPlan(stage(), anchor).banner).toBe(REPLAY_FAILED);
+    const events = stage();
+    const { tx, built } = settlement(events, 'last');
+    const anchor = await readAnchor(events, withHead(tx, { seq: built.payload.log_head.seq, hash: 'ff'.repeat(32) }));
+    expect(replayPlan(events, anchor).banner).toBe(REPLAY_FAILED);
+  });
+  it('gives a server that truncates the log after a settlement no full banner', async () => {
+    const events = stage();
+    const cut = events.slice(0, indexOf(events, 'ReceiptProven') + 1);
+    // Closing pointer kept: the anchored head is not in the shortened log.
+    expect(replayPlan(cut, await readAnchor(cut, koios, closingTx()), true, STAGE).verdict).toBe('failed');
+    // Closing pointer dropped: only the settlement's pre-submit head is anchored.
+    const { built } = settlement(cut, 'first');
+    expect(replayPlan(cut, await readAnchor(cut, koios), true, STAGE)).toMatchObject({
+      verdict: 'through',
+      banner: replayVerifiedThrough(built.payload.log_head.seq),
+    });
+    // Cut exactly at that head: anchored to the last event, but the run had not ended.
+    const atHead = events.filter((e) => e.seq <= built.payload.log_head.seq);
+    const plan = replayPlan(atHead, await readAnchor(cut, koios), true, STAGE);
+    expect(plan.verdict).toBe('through');
+    expect(plan.banner).not.toBe(REPLAY_VERIFIED);
+  });
+  it('keeps a recorded run without a closing anchor, verified only through its settlement', async () => {
+    const lab = recorded.logs['run-lab-replay']!;
+    expect(recorded.anchors['run-lab-replay']).toBeUndefined();
+    const { built } = settlement(lab, 'last');
+    const plan = replayPlan(lab, await readAnchor(lab, koios), false, 'run-lab-replay');
+    expect(plan).toMatchObject({ verdict: 'through', banner: replayVerifiedThrough(built.payload.log_head.seq) });
+    for (const r of recorded.runs.filter((x) => x.run_id !== 'run-lab-replay')) {
+      const log = recorded.logs[r.run_id]!;
+      const closed = replayPlan(log, await readAnchor(log, koios, closingTx(r.run_id)), r.run_id === STAGE, r.run_id);
+      expect(closed.verdict, r.run_id).toBe('verified');
+    }
   });
   it('lists the actions whose evidence runs past the anchor', () => {
-    expect([...unanchoredActions(stage(), 30)]).toEqual(['A-0002', 'A-0003', 'A-0004', 'A-0005', 'A-0006', 'A-0007']);
-    expect([...unanchoredActions(stage(), 60)]).toEqual([]);
-    expect([...unanchoredActions(stage(), null)]).toEqual([]);
+    const events = stage();
+    const { built } = settlement(events, 'last');
+    const through = built.payload.log_head.seq;
+    expect([...unanchoredActions(events, through)]).toEqual(['A-0002', 'A-0003', 'A-0004', 'A-0005', 'A-0006', 'A-0007']);
+    expect([...unanchoredActions(events, events[events.length - 1]!.seq)]).toEqual([]);
+    expect([...unanchoredActions(events, null)]).toEqual([]);
   });
 });
 

@@ -3,6 +3,7 @@ import type {
   ApprovalView,
   AttackId,
   DeclineSignature,
+  LogAnchorRef,
   MandateView,
   ReceiptBundle,
   ReceiptSummary,
@@ -36,7 +37,8 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 const id = encodeURIComponent;
 
 export const listRuns = (kind: RunKind | 'all') => call<{ runs: RunSummary[] }>(`/v1/runs?kind=${kind}`);
-export const runLog = (runId: string) => call<{ run: RunSummary; events: RunEvent[] }>(`/v1/runs/${id(runId)}/log`);
+export const runLog = (runId: string) =>
+  call<{ run: RunSummary; events: RunEvent[]; anchor?: LogAnchorRef | null }>(`/v1/runs/${id(runId)}/log`);
 export const startRun = (mandateId: string) => call<{ run_id: string }>('/v1/runs', { mandate_id: mandateId });
 export const eventsUrl = (runId: string) => `${config.apiBase}/v1/runs/${id(runId)}/events`;
 export const startAttack = (attack: AttackId) => call<{ run_id: string }>('/v1/lab/attacks', { attack });

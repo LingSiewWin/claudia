@@ -9,8 +9,9 @@ const BANNER = {
 };
 
 interface StoredLog {
-  run: { kind: string };
+  run: { kind: string; started_at: string };
   events: Array<{ type: string; payload: { action?: { amount: { value: string } } } }>;
+  anchor: unknown;
 }
 
 /** Serve the real stored log with one change, as a tampering or misbehaving server would. */
@@ -45,13 +46,40 @@ test('REPLAY loads only the stored log and the on-chain anchor, and still plays 
   await expect(page.locator('[data-testid=action-card][data-state=PROVEN]')).toHaveCount(2);
   await expect(page.locator('[data-testid=action-card][data-state=DENIED]')).toHaveCount(5);
   await page.screenshot({ path: 'test-results/replay-final.png', fullPage: true });
-  expect(seen).toEqual([`GET ${API}/v1/runs`, `GET ${API}/v1/runs/run-stage-0001/log`, `POST ${API}/koios/tx_info BLOCKED`]);
+  // The closing anchor first, then the latest settlement: both chain reads are blocked here.
+  expect(seen).toEqual([
+    `GET ${API}/v1/runs`,
+    `GET ${API}/v1/runs/run-stage-0001/log`,
+    `POST ${API}/koios/tx_info BLOCKED`,
+    `POST ${API}/koios/tx_info BLOCKED`,
+  ]);
 });
 
-test('REPLAY anchored at the latest settlement marks every later action as not anchored', async ({ page }) => {
+test('REPLAY of a finished run with a closing anchor is a verified historical run, dated by its own evidence', async ({ page }) => {
+  // The run summary is a server claim; the date must come from the hashed RunStarted event.
+  await serveLog(page, (log) => {
+    log.run.started_at = '2020-01-01T00:00:00.000Z';
+  });
   await page.goto('/live?mode=replay&run=run-stage-0001');
   const banner = page.getByTestId('mode-banner');
-  await expect(banner).toContainText(BANNER.through(30));
+  await expect(banner).toContainText(BANNER.verified);
+  await expect(banner).toContainText('All evidence is from a real execution.');
+  await expect(banner).toContainText('Recorded execution 2026-10-07 03:00:00 UTC.');
+  await expect(banner).not.toContainText('2020-01-01');
+  await page.getByRole('button', { name: 'Skip to the end' }).click();
+  await expect(page.getByTestId('action-card')).toHaveCount(7);
+  await expect(page.locator('[data-testid=action-card][data-state=PROVEN]')).toHaveCount(2);
+  await expect(page.getByTestId('not-anchored')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/replay-verified.png', fullPage: true });
+});
+
+test('REPLAY without the closing anchor is verified only through the head its settlement committed', async ({ page }) => {
+  await serveLog(page, (log) => {
+    log.anchor = null;
+  });
+  await page.goto('/live?mode=replay&run=run-stage-0001');
+  const banner = page.getByTestId('mode-banner');
+  await expect(banner).toContainText(BANNER.through(27));
   await expect(banner).not.toContainText(BANNER.verified);
   await page.getByRole('button', { name: 'Skip to the end' }).click();
   const cards = page.getByTestId('action-card');
@@ -65,19 +93,26 @@ test('REPLAY anchored at the latest settlement marks every later action as not a
   await page.screenshot({ path: 'test-results/replay-verified-through.png', fullPage: true });
 });
 
-test('REPLAY is a verified historical run only when the on-chain log head covers the last event', async ({ page }) => {
-  // The log as stored up to the second settlement, whose transaction committed exactly that head.
+test('REPLAY never gives the full banner to a log a server cut short after a settlement', async ({ page }) => {
+  // Cut after the first receipt, closing anchor still named: its committed head is not in the log.
   await serveLog(page, (log) => {
-    log.events = log.events.slice(0, 30);
+    log.events = log.events.slice(0, 13);
   });
   await page.goto('/live?mode=replay&run=run-stage-0001');
   const banner = page.getByTestId('mode-banner');
-  await expect(banner).toContainText(BANNER.verified);
-  await expect(banner).toContainText('All evidence is from a real execution.');
-  await page.getByRole('button', { name: 'Skip to the end' }).click();
-  await expect(page.getByTestId('action-card')).toHaveCount(2);
-  await expect(page.getByTestId('not-anchored')).toHaveCount(0);
-  await page.screenshot({ path: 'test-results/replay-verified.png', fullPage: true });
+  await expect(banner).toContainText(BANNER.failed);
+  await page.waitForTimeout(1_000);
+  await expect(page.getByTestId('action-card')).toHaveCount(0);
+
+  // Same cut with the closing anchor dropped: only the settlement's pre-submit head is anchored.
+  await page.unrouteAll();
+  await serveLog(page, (log) => {
+    log.events = log.events.slice(0, 13);
+    log.anchor = null;
+  });
+  await page.goto('/live?mode=replay&run=run-stage-0001');
+  await expect(banner).toContainText(BANNER.through(9));
+  await expect(banner).not.toContainText(BANNER.verified);
 });
 
 test('REPLAY plays nothing when one stored event was edited', async ({ page }) => {
@@ -95,6 +130,18 @@ test('REPLAY plays nothing when one stored event was edited', async ({ page }) =
   await page.screenshot({ path: 'test-results/replay-failed.png', fullPage: true });
 });
 
+test('REPLAY plays nothing when the server answers with another run', async ({ page }) => {
+  // An authentic, anchored log, but not the run the page asked for.
+  await page.route(/\/v1\/runs\/run-lab-recipient_swap\/log$/, async (route) => {
+    const response = await route.fetch({ url: `${API}/v1/runs/run-stage-0001/log` });
+    await route.fulfill({ response });
+  });
+  await page.goto('/live?mode=replay&run=run-lab-recipient_swap');
+  await expect(page.getByTestId('mode-banner')).toContainText(BANNER.failed);
+  await page.waitForTimeout(1_000);
+  await expect(page.getByTestId('action-card')).toHaveCount(0);
+});
+
 test('REPLAY takes the chain-start rule from the run identity, never from the server', async ({ page }) => {
   // The stage run starts the evidence chain. A server that relabels it and drops its first events must not pass.
   await serveLog(page, (log) => {
@@ -106,10 +153,10 @@ test('REPLAY takes the chain-start rule from the run identity, never from the se
   await page.waitForTimeout(1_000);
   await expect(page.getByTestId('action-card')).toHaveCount(0);
 
-  // An Attack Lab run starts mid-chain: it plays, unanchored, without the genesis rule.
+  // An Attack Lab run starts mid-chain: it plays without the genesis rule, anchored by its closing transaction.
   await page.unrouteAll();
   await page.goto('/live?mode=replay&run=run-lab-recipient_swap');
-  await expect(page.getByTestId('mode-banner')).toContainText(BANNER.unanchored);
+  await expect(page.getByTestId('mode-banner')).toContainText(BANNER.verified);
   await expect(page.getByTestId('action-card').first()).toBeVisible();
 });
 

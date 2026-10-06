@@ -229,7 +229,7 @@ export function trueRow(c: CardView): Row {
       ? { value: 'Invoice confirmed by Chainlink CRE', tone: 'pass', reason: null }
       : { value: 'MISMATCH', tone: 'fail', reason: r.reason };
   }
-  if (c.verifying) return { value: 'Verifying…', tone: 'pending', reason: null };
+  if (c.verifying) return { value: 'Checking with Chainlink CRE…', tone: 'pending', reason: null };
   if (mayRow(c).tone === 'fail' || c.compromisedEngine) return { value: 'Not reached', tone: 'skipped', reason: null };
   return { value: '—', tone: 'pending', reason: null };
 }

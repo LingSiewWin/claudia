@@ -84,7 +84,8 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
           <div className="mt-5">
             <ModeBanner
               mode={mode}
-              recordedAt={mode === 'replay' ? (replay.run?.started_at ?? null) : null}
+              recordedAt={mode === 'replay' ? replay.recordedAt : null}
+              verdict={mode === 'replay' ? replay.verdict : null}
               banner={mode === 'replay' ? replay.banner : null}
             />
           </div>
@@ -163,6 +164,7 @@ function fromRun(view: RunView): Authority | null {
 function fromMandate(m: MandateView): Authority {
   const { limits, vault } = m;
   for (const v of [limits.autonomous_limit, limits.hard_cap, limits.daily_cap]) units(v);
+  if (!Number.isInteger(limits.decimals) || limits.decimals < 0) throw new Error('Bad decimals');
   return {
     principal: m.mandate.principal.name,
     delegate: m.mandate.delegate.id,

@@ -100,7 +100,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     (c) => {
       const run = (data.runs as RunSummary[]).find((r) => r.run_id === arg(c));
       if (!run) throw new HttpError(404, 'run not found');
-      ok(c, { run, events: data.logs[run.run_id] });
+      ok(c, { run, events: data.logs[run.run_id], anchor: own(data.anchors, run.run_id) ?? null });
     },
   ],
   ['GET', /^\/v1\/runs\/([^/]+)\/events$/, (c) => stream(c.req, c.res, arg(c))],

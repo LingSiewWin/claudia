@@ -32,6 +32,8 @@ import type {
   EventType,
   Layer,
   Limits,
+  LogAnchorRef,
+  LogHead,
   MandateView,
   Payloads,
   Receipt,
@@ -184,6 +186,7 @@ const out = {
   receipts: [] as ReceiptSummary[],
   bundles: {} as Record<string, ReceiptBundle>,
   koios: {} as Record<string, KoiosTx>,
+  anchors: {} as Record<string, LogAnchorRef>,
   sepolia: {} as Record<string, EthReceipt>,
 };
 
@@ -371,20 +374,47 @@ function authorize(
   return authorization;
 }
 
-function settle(run: Run, actionId: string, rec: AuthorizationRecord, v: Vault): { tx: string; block: number } {
+/** The last event already in the log: what a transaction built now can commit (it cannot name itself). */
+const headOf = (run: Run): LogHead => {
+  const last = run.events[run.events.length - 1] as RunEvent;
+  return { seq: last.seq, hash: last.hash };
+};
+
+/** Koios tx_info for a transaction that only carries metadata label 1694. */
+const metadataTx = (tx: string, height: number, metadata: Record<string, unknown>): KoiosTx => ({
+  tx_hash: tx,
+  block_height: height,
+  reference_inputs: [],
+  outputs: [],
+  plutus_contracts: [],
+  metadata: { '1694': metadata },
+});
+
+function settle(run: Run, actionId: string, rec: AuthorizationRecord, v: Vault): { tx: string; block: number; head: LogHead } {
   const tx = txid(`${run.id}:${actionId}`);
-  run.emit('TransactionBuilt', actionId, { tx_hash: tx, tx_body_cbor: fakeBody(tx) }, 400);
+  const head = headOf(run);
+  run.emit('TransactionBuilt', actionId, { tx_hash: tx, tx_body_cbor: fakeBody(tx), log_head: head }, 400);
   run.emit('TransactionSubmitted', actionId, { tx_hash: tx }, 900);
   block += 1;
   run.emit('TransactionConfirmed', actionId, { tx_hash: tx, block_height: block }, 21_000);
+  out.koios[tx] = metadataTx(tx, block, { log_head: head });
   v.balance -= BigInt(rec.fields.amount);
   v.spent += BigInt(rec.fields.amount);
-  return { tx, block };
+  return { tx, block, head };
+}
+
+/** Closing anchor: one transaction per finished run whose metadata 1694 commits the head at the run's last event. */
+function close(run: Run) {
+  const tx = txid(`close:${run.id}`);
+  const head = headOf(run);
+  block += 1;
+  out.koios[tx] = metadataTx(tx, block, { log_head: head });
+  out.anchors[run.id] = { tx_hash: tx, ...head };
 }
 
 function reject(run: Run, actionId: string, invariant: string): string {
   const tx = txid(`${run.id}:${actionId}:attempt`);
-  run.emit('TransactionBuilt', actionId, { tx_hash: tx, tx_body_cbor: fakeBody(tx) }, 400);
+  run.emit('TransactionBuilt', actionId, { tx_hash: tx, tx_body_cbor: fakeBody(tx), log_head: headOf(run) }, 400);
   run.emit(
     'TransactionRejected',
     actionId,
@@ -394,7 +424,7 @@ function reject(run: Run, actionId: string, invariant: string): string {
   return tx;
 }
 
-function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRecord, settled: { tx: string; block: number }, n: number) {
+function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRecord, settled: { tx: string; block: number; head: LogHead }, n: number) {
   const last = run.events[run.events.length - 1] as RunEvent;
   const receipt: Receipt = {
     schema: 'receipt/v0.1',
@@ -481,7 +511,7 @@ function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRec
         },
       },
     ],
-    metadata: { '1694': { auth: rec.digest_hex, action: k.actionHash, mandate: `${m.id}@${m.version}`, log_head: last.hash } },
+    metadata: { '1694': { auth: rec.digest_hex, action: k.actionHash, mandate: `${m.id}@${m.version}`, log_head: settled.head } },
   };
   run.emit('ReceiptProven', k.action.id, { receipt_id, receipt_hash }, 500);
 }
@@ -503,7 +533,7 @@ function mandateView(s: Setup, m: Mandate, v: Vault, status: 'active' | 'revoked
   };
 }
 
-// ---- stage run (spec 10 section 3, scaled amounts) -----------------------------------------------
+// ---- stage run (scaled amounts) -----------------------------------------------
 {
   const m = buildMandate(M001);
   const v: Vault = { balance: BigInt(u(M001.start)), spent: 0n, nonce: 0n };
@@ -556,6 +586,7 @@ function mandateView(s: Setup, m: Mandate, v: Vault, status: 'active' | 'revoked
     const settled = settle(run, k.action.id, rec, v);
     prove(run, M001, m, k, rec, settled, ++n);
   }
+  close(run);
   out.logs[run.id] = run.events;
   out.mandates['M-001'] = mandateView(M001, m, v);
   // keep only the approval that is still pending in a fresh inbox (case 2, before the CFO acted)
@@ -660,6 +691,8 @@ for (const attack of LAB_ATTACKS) {
       break;
     }
   }
+  // run-lab-replay keeps no closing anchor: it is verified only through its own settlement's head.
+  if (attack !== 'replay') close(run);
   out.logs[run.id] = run.events;
   labVault = v;
 }

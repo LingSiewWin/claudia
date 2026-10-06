@@ -57,7 +57,8 @@ export interface Payloads {
   CFOApproved: { approval_id: string; cfo_key_hash: string };
   CFODeclined: { approval_id: string };
   ActionDenied: { reason: ReasonCode; layer: Layer };
-  TransactionBuilt: { tx_hash: string; tx_body_cbor: string };
+  /** log_head: the last event already in the log when the tx was built; the tx commits it in metadata 1694. */
+  TransactionBuilt: { tx_hash: string; tx_body_cbor: string; log_head: LogHead };
   TransactionSubmitted: { tx_hash: string };
   TransactionConfirmed: { tx_hash: string; block_height: number };
   TransactionRejected: { tx_hash: string | null; invariant: string; error: string; tx_body_cbor: string | null };
@@ -82,6 +83,20 @@ interface Envelope {
   prev_hash: string;
 }
 export type RunEvent = { [K in EventType]: Envelope & { type: K; payload: Payloads[K] } }[EventType];
+
+/** An evidence-log head as committed on Cardano in metadata label 1694 (`log_head`). */
+export interface LogHead {
+  seq: number;
+  hash: string;
+}
+
+/**
+ * The run's closing anchor as the API reports it on GET /v1/runs/{id}/log: a transaction whose metadata 1694 commits
+ * the head at the run's last event. Only `tx_hash` is used, as a pointer; the head itself is read from chain data.
+ */
+export interface LogAnchorRef extends LogHead {
+  tx_hash: string;
+}
 
 export interface RunSummary {
   run_id: string;
