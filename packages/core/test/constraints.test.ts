@@ -21,6 +21,13 @@ describe('checkConstraint', () => {
     expect(checkConstraint(c('action'), bad)).toMatchObject({ violated: true, reason: 'ACTION_NOT_AUTHORIZED' });
   });
 
+  it('asset_eq maps to ASSET_NOT_AUTHORIZED', () => {
+    expect(checkConstraint(c('asset'), ctx(1)).violated).toBe(false);
+    const a = action({ id: 'A-2', amount: 1 });
+    const bad = { ...ctx(1), action: { ...a, amount: { ...a.amount, asset: 'ADA' } } };
+    expect(checkConstraint(c('asset'), bad)).toMatchObject({ violated: true, reason: 'ASSET_NOT_AUTHORIZED', detail: { asset: 'ADA' } });
+  });
+
   it('counterparty_in maps to COUNTERPARTY_NOT_APPROVED', () => {
     const bad = { ...ctx(1), action: action({ id: 'A-2', amount: 1, counterparty: 'globex' }) };
     expect(checkConstraint(c('counterparty'), bad)).toMatchObject({ violated: true, reason: 'COUNTERPARTY_NOT_APPROVED' });
