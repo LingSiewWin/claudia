@@ -11,6 +11,7 @@ export const ENGINE_SK = new Uint8Array(32).fill(1);
 export const AGENT_SK = new Uint8Array(32).fill(2);
 export const ENGINE_PK = bytesToHex(publicKeyFromSecret(ENGINE_SK));
 export const AGENT_PK = bytesToHex(publicKeyFromSecret(AGENT_SK));
+export const ADMIN_PKH = '44'.repeat(28);
 export const CFO_PKH = '55'.repeat(28);
 export const AWS_ADDR = buildAddress(0x60, new Uint8Array(28).fill(0xa1));
 export const GLOBEX_ADDR = buildAddress(0x60, new Uint8Array(28).fill(0xb2));
@@ -25,7 +26,7 @@ export const M001_INPUT = {
   id: 'M-001',
   version: 3,
   status: 'active',
-  principal: { type: 'organization', id: 'acme', name: 'Acme Corp' },
+  principal: { type: 'organization', id: 'acme', name: 'Acme Corp', cardano_key_hash: ADMIN_PKH },
   delegate: { type: 'agent', id: 'cfo-agent-01', public_key: `ed25519:${AGENT_PK}` },
   approvers: [{ role: 'CFO', cardano_key_hash: CFO_PKH }],
   authority_engine: { public_key: `ed25519:${ENGINE_PK}` },
