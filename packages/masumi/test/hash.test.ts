@@ -55,13 +55,37 @@ describe('MIP-004 result hash, raw and escaped', () => {
   });
 });
 
+describe('result hash input', () => {
+  it.each<[string, unknown]>([
+    ['number', 5],
+    ['null', null],
+    ['undefined', undefined],
+    ['object', { decision: 'ALLOW' }],
+    ['array', ['x']],
+    ['lone high surrogate', 'a\uD800b'],
+    ['lone low surrogate', '\uDC00'],
+    ['truncated pair', 'ok \uD83D'],
+  ])('rejects %s', (_label, result) => {
+    expect(() => mip004ResultHashRaw(result as string, ID)).toThrow(TypeError);
+    expect(() => mip004ResultHashEscaped(result as string, ID)).toThrow(TypeError);
+    expect(() => masumiResultHashV0(result as string, ID)).toThrow(TypeError);
+  });
+});
+
 describe('identifierFromPurchaser', () => {
-  it.each(['aabbccddeeff00', 'AABBCCDDEEFF0011', 'a'.repeat(26)])('accepts %s', (id) => expect(isPurchaserId(id)).toBe(true));
-  it.each(['', 'aabbccddeeff0', 'a'.repeat(15), 'a'.repeat(28), 'zzbbccddeeff0011', 'resume-job-123'])('rejects %s', (id) => {
+  it.each(['aabbccddeeff00', 'aabbccddeeff001', 'AABBCCDDEEFF0011', 'a'.repeat(15), 'a'.repeat(25), 'a'.repeat(26)])('accepts %s', (id) => {
+    expect(isPurchaserId(id)).toBe(true);
+    expect(mip004ResultHashRaw('x', id)).toBe(sha(`${id};x`));
+  });
+  it.each(['', 'aabbccddeeff0', 'a'.repeat(27), 'a'.repeat(28), 'zzbbccddeeff0011', 'resume-job-123'])('rejects %s', (id) => {
     expect(isPurchaserId(id)).toBe(false);
-    expect(() => mip004ResultHashRaw('x', id)).toThrow();
-    expect(() => mip004ResultHashEscaped('x', id)).toThrow();
-    expect(() => mip004InputHash({}, id)).toThrow();
+    expect(() => mip004ResultHashRaw('x', id)).toThrow(TypeError);
+    expect(() => mip004ResultHashEscaped('x', id)).toThrow(TypeError);
+    expect(() => mip004InputHash({}, id)).toThrow(TypeError);
+  });
+  it('rejects a non-string identifier', () => {
+    expect(isPurchaserId(['aabbccddeeff00'] as unknown as string)).toBe(false);
+    expect(() => mip004ResultHashRaw('x', 12345678901234 as unknown as string)).toThrow(TypeError);
   });
 });
 

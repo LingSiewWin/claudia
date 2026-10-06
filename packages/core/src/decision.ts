@@ -8,6 +8,7 @@ const ZERO32 = new Uint8Array(32);
 
 function hashPart(hex: string | null, label: string): Uint8Array {
   if (hex === null) return ZERO32;
+  if (typeof hex !== 'string') throw new TypeError(`${label}: expected 32 bytes of lowercase hex or null`);
   if (hex !== hex.toLowerCase()) throw new TypeError(`${label}: expected lowercase hex`);
   return hexOfLength(hex, 32, label);
 }

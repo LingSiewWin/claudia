@@ -34,8 +34,40 @@ describe('decisionHash', () => {
     expect(decisionHash(A, M, null, 'ALLOW')).toBe(sha256OfHex(preimage));
   });
 
+  it('zero-fills a missing mandate hash alone: action || zero mandate || verification ref || "ALLOW"', () => {
+    const V = 'ee'.repeat(32);
+    const preimage = `${'dd'.repeat(32)}${'00'.repeat(32)}${'ee'.repeat(32)}414c4c4f57`;
+    expect(bytesToHex(decisionPreimage(A, null, V, 'ALLOW'))).toBe(preimage);
+    expect(decisionHash(A, null, V, 'ALLOW')).toBe(sha256OfHex(preimage));
+  });
+
   it.each(['allow', 'NEEDS_VERIFICATION', 'ALLOW ', ''])('rejects outcome %j', (outcome) => {
     expect(() => decisionHash(A, M, null, outcome as DecisionOutcome)).toThrow(TypeError);
+  });
+
+  it.each<[string, unknown]>([
+    ['number', 1],
+    ['null', null],
+    ['undefined', undefined],
+    ['array', ['ALLOW']],
+    ['boxed string', Object('ALLOW')],
+  ])('rejects a non-string outcome (%s) with a labelled TypeError', (_label, outcome) => {
+    expect(() => decisionHash(A, M, null, outcome as DecisionOutcome)).toThrow(TypeError);
+    expect(() => decisionHash(A, M, null, outcome as DecisionOutcome)).toThrow(/^outcome: /);
+  });
+
+  it.each<[string, unknown]>([
+    ['number', 1],
+    ['undefined', undefined],
+    ['object', {}],
+    ['array', ['dd'.repeat(32)]],
+    ['bytes', new Uint8Array(32)],
+  ])('rejects a non-string %s hash part with a labelled TypeError', (_label, part) => {
+    const hex = part as string;
+    expect(() => decisionHash(hex, M, null, 'ALLOW')).toThrow(TypeError);
+    expect(() => decisionHash(hex, M, null, 'ALLOW')).toThrow(/^actionHash: /);
+    expect(() => decisionHash(A, hex, null, 'ALLOW')).toThrow(/^mandateHash: /);
+    expect(() => decisionHash(A, M, hex, 'ALLOW')).toThrow(/^verificationRef: /);
   });
 
   it.each([
