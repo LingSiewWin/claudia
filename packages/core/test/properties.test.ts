@@ -25,7 +25,7 @@ const broad = fc.record({
 });
 type Scenario = typeof broad extends fc.Arbitrary<infer T> ? T : never;
 
-// Constructed so the action is usually authorizable: only the anchor check (or a signature gap) stands in the way.
+// Constructed so the action is usually authorizable: only the anchor check stands in the way (an absent signature does not change evaluate(); it only blocks issuance). Globex draws the counterparty approval path.
 const nearly: fc.Arbitrary<Scenario> = fc
   .integer({ min: 0, max: 49 })
   .chain((spent) =>
@@ -36,7 +36,7 @@ const nearly: fc.Arbitrary<Scenario> = fc
         spent: fc.constant(spent),
         purpose: fc.constant('invoice_payment'),
         type: fc.constant<ActionType>('pay_invoice'),
-        counterparty: fc.constantFrom('aws', 'stripe'),
+        counterparty: fc.constantFrom('aws', 'stripe', 'globex'),
         recipient: fc.constant(AWS_ADDR),
         verification: fc.constant<'verified' | 'mismatch' | 'none'>('verified'),
         signature: fc.constantFrom<'valid' | 'invalid' | 'absent'>('valid', 'absent'),
@@ -158,14 +158,15 @@ describe('engine invariants', () => {
 
   it('removing a constraint never makes the outcome stricter', () => {
     fc.assert(
-      fc.property(nearly, fc.integer({ min: 0, max: M001.constraints.length - 1 }), (s, drop) => {
-        const withReport = { ...s, verification: s.verification === 'none' ? 'verified' : s.verification };
-        const full = evaluate(build(withReport).input);
-        const reduced: Mandate = { ...M001, constraints: M001.constraints.filter((_, i) => i !== drop) };
-        const sub = evaluate(build(withReport, reduced).input);
+      fc.property(nearly, (s) => {
+        const full = evaluate(build(s).input);
         expect(full.outcome).not.toBe('NEEDS_VERIFICATION');
-        expect(sub.outcome).not.toBe('NEEDS_VERIFICATION');
-        expect(RANK[sub.outcome]).toBeLessThanOrEqual(RANK[full.outcome]);
+        for (const drop of M001.constraints.keys()) {
+          const reduced: Mandate = { ...M001, constraints: M001.constraints.filter((_, i) => i !== drop) };
+          const sub = evaluate(build(s, reduced).input);
+          expect(sub.outcome).not.toBe('NEEDS_VERIFICATION');
+          expect(RANK[sub.outcome]).toBeLessThanOrEqual(RANK[full.outcome]);
+        }
       }),
     );
   });
