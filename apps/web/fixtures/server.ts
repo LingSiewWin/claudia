@@ -44,7 +44,7 @@ const str = (v: unknown, name: string): string => {
 };
 
 function stream(req: IncomingMessage, res: ServerResponse, runId: string) {
-  const events: RunEvent[] | undefined = data.logs[runId];
+  const events: RunEvent[] | undefined = own(data.logs, runId);
   if (!events) return json(res, 404, { error: 'run not found' });
   const last = Number(req.headers['last-event-id']);
   const after = Number.isInteger(last) && last > 0 ? last : 0;
@@ -62,10 +62,18 @@ function stream(req: IncomingMessage, res: ServerResponse, runId: string) {
 
 type Ctx = { req: IncomingMessage; res: ServerResponse; url: URL; m: string[] };
 type Handler = (c: Ctx) => unknown | Promise<unknown>;
-const arg = (c: Ctx, i = 1) => decodeURIComponent(c.m[i] ?? '');
+const arg = (c: Ctx, i = 1) => {
+  try {
+    return decodeURIComponent(c.m[i] ?? '');
+  } catch {
+    throw new HttpError(400, 'malformed percent-escape in path');
+  }
+};
+// Own-property lookup: a path segment or body value such as "__proto__" must never resolve to Object.prototype.
+const own = (table: Record<string, any>, key: string): any => (Object.hasOwn(table, key) ? table[key] : undefined);
 const ok = (c: Ctx, body: unknown) => json(c.res, 200, body);
 const getMandate = (c: Ctx) => {
-  const view = data.mandates[arg(c)];
+  const view = own(data.mandates, arg(c));
   if (!view) throw new HttpError(404, 'mandate not found');
   return view;
 };
@@ -101,7 +109,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     /^\/v1\/lab\/attacks$/,
     async (c) => {
       const attack = str((await readBody(c.req)).attack, 'attack');
-      if (!data.logs[`run-lab-${attack}`]) throw new HttpError(404, 'unknown attack');
+      if (!own(data.logs, `run-lab-${attack}`)) throw new HttpError(404, 'unknown attack');
       ok(c, { run_id: `run-lab-${attack}` });
     },
   ],
@@ -135,7 +143,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     'POST',
     /^\/v1\/approvals\/([^/]+)\/approve$/,
     (c) => {
-      const prepared = data.approve[arg(c)];
+      const prepared = own(data.approve, arg(c));
       if (!prepared) throw new HttpError(404, 'approval not found');
       ok(c, prepared);
     },
@@ -155,7 +163,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     /^\/v1\/executions$/,
     async (c) => {
       const id = str((await readBody(c.req)).approval_id, 'approval_id');
-      ok(c, { run_id: 'run-stage-0001', tx_hash: data.approve[id]?.tx_hash ?? 'e'.repeat(64) });
+      ok(c, { run_id: 'run-stage-0001', tx_hash: own(data.approve, id)?.tx_hash ?? 'e'.repeat(64) });
     },
   ],
   [
@@ -164,7 +172,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     (c) => {
       const mandate = c.url.searchParams.get('mandate_id');
       const receipts = (data.receipts as Array<{ receipt_id: string }>).filter(
-        (r) => !mandate || data.bundles[r.receipt_id]?.receipt.mandate.id === mandate,
+        (r) => !mandate || own(data.bundles, r.receipt_id)?.receipt.mandate.id === mandate,
       );
       ok(c, { receipts });
     },
@@ -173,7 +181,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     'GET',
     /^\/v1\/receipts\/([^/]+)$/,
     (c) => {
-      const bundle = data.bundles[arg(c)];
+      const bundle = own(data.bundles, arg(c));
       if (!bundle) throw new HttpError(404, 'receipt not found');
       ok(c, bundle);
     },
@@ -184,7 +192,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     async (c) => {
       const hashes = (await readBody(c.req))._tx_hashes;
       if (!Array.isArray(hashes) || !hashes.every((h) => typeof h === 'string')) throw new HttpError(400, '_tx_hashes must be a string array');
-      ok(c, hashes.flatMap((h: string) => (data.koios[h] ? [data.koios[h]] : [])));
+      ok(c, hashes.flatMap((h: string) => (own(data.koios, h) ? [own(data.koios, h)] : [])));
     },
   ],
   [
@@ -193,7 +201,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     async (c) => {
       const body = await readBody(c.req);
       const params = Array.isArray(body.params) ? body.params : [];
-      ok(c, { jsonrpc: '2.0', id: body.id ?? 1, result: data.sepolia[String(params[0] ?? '')] ?? null });
+      ok(c, { jsonrpc: '2.0', id: body.id ?? 1, result: own(data.sepolia, String(params[0] ?? '')) ?? null });
     },
   ],
 ];

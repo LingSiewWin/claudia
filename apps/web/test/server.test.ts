@@ -33,6 +33,25 @@ describe('fixture server survives bad input', () => {
   it('koios {} -> 400', async () => {
     expect((await post('/koios/tx_info', '{}')).status).toBe(400);
   });
+  it.each(['__proto__', 'constructor', 'toString'])('prototype key %s is not a mandate, run, approval or receipt', async (k) => {
+    expect((await get(`/v1/mandates/${k}`)).status).toBe(404);
+    expect((await post(`/v1/mandates/${k}/revoke`, '{}')).status).toBe(404);
+    expect((await post(`/v1/mandates/${k}/submit`, '{"tx_hash":"a"}')).status).toBe(404);
+    expect((await get(`/v1/runs/${k}/log`)).status).toBe(404);
+    expect((await get(`/v1/runs/${k}/events`)).status).toBe(404);
+    expect((await post(`/v1/approvals/${k}/approve`, '{}')).status).toBe(404);
+    expect((await get(`/v1/receipts/${k}`)).status).toBe(404);
+    expect((await post('/v1/lab/attacks', JSON.stringify({ attack: k }))).status).toBe(404);
+  });
+  it('prototype keys in a koios or sepolia body find nothing', async () => {
+    expect(await (await post('/koios/tx_info', '{"_tx_hashes":["__proto__","constructor"]}')).json()).toEqual([]);
+    const r = (await (await post('/sepolia', '{"params":["__proto__"]}')).json()) as { result: unknown };
+    expect(r.result).toBeNull();
+  });
+  it('malformed percent escape -> 400', async () => {
+    expect((await get('/v1/mandates/%E0%A4%A')).status).toBe(400);
+    expect((await post('/v1/mandates/%zz/revoke', '{}')).status).toBe(400);
+  });
   it('is still alive afterwards', async () => {
     expect((await get('/v1/runs')).status).toBe(200);
   });
