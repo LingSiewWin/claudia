@@ -1,9 +1,37 @@
-import { canonicalJson } from '@authority/core';
+import { canonicalJson, verifyAuthorizationRecord } from '@authority/core';
 import { decisionHash } from '@authority/masumi';
 import * as z from 'zod';
 import type { AuthorityRequest } from './input';
 
 const Hex32 = z.string().regex(/^[0-9a-f]{64}$/);
+const Hex28 = z.string().regex(/^[0-9a-f]{56}$/);
+const U64Text = z.string().regex(/^[1-9][0-9]{0,19}$/);
+
+// The engine's signed record, exactly as the core issues it: no field missing, none added.
+const AuthorizationRecordSchema = z.strictObject({
+  schema: z.literal('authorization/v0.1'),
+  message_hex: z.string().regex(/^(?:[0-9a-f]{2}){1,512}$/),
+  digest_hex: Hex32,
+  signature_hex: z.string().regex(/^[0-9a-f]{128}$/),
+  engine_public_key: Hex32,
+  fields: z.strictObject({
+    chain_tag: z.union([z.literal(0), z.literal(1)]),
+    vault_hash: Hex28,
+    mandate_ref: Hex28,
+    mandate_hash: Hex32,
+    mandate_version: z.number().int(),
+    action_hash: Hex32,
+    action_type: z.number().int(),
+    asset_policy: Hex28,
+    asset_name: z.string().regex(/^(?:[0-9a-f]{2}){0,32}$/),
+    amount: U64Text,
+    recipient: z.string().min(1).max(200),
+    nonce: U64Text,
+    valid_until: z.number().int().positive(),
+    requires_principal: z.boolean(),
+    verification_ref: Hex32.nullable(),
+  }),
+});
 
 // The slice of POST /v1/authority/check (Authority API) this worker depends on.
 export const AuthorityResponseSchema = z.object({
@@ -21,13 +49,7 @@ export const AuthorityResponseSchema = z.object({
     .object({ report_hash: Hex32, sepolia_tx: z.string(), facts: z.record(z.string(), z.unknown()) })
     .nullable()
     .optional(),
-  authorization: z
-    .looseObject({
-      schema: z.literal('authorization/v0.1'),
-      fields: z.looseObject({ requires_principal: z.boolean() }),
-    })
-    .nullable()
-    .optional(),
+  authorization: AuthorizationRecordSchema.nullable().optional(),
   receipt_id: z.string().min(1),
   receipt_hash: Hex32,
   events_url: z.string(),
@@ -50,27 +72,54 @@ export class AuthorityError extends Error {
   }
 }
 
-// Retry-After is either delta-seconds or an HTTP date.
-function retryAfterMs(header: string | null, nowMs = Date.now()): number | null {
+const HTTP_DATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+// Retry-After is either delta-seconds or an HTTP date. A wait never points past the caller's deadline.
+function retryAfterMs(header: string | null, deadlineMs: number | undefined, nowMs = Date.now()): number | null {
   if (header === null) return null;
   const v = header.trim();
-  if (/^\d+$/.test(v)) return Number(v) * 1000;
-  const at = Date.parse(v);
-  return Number.isNaN(at) ? null : Math.max(0, at - nowMs);
+  let wait: number;
+  if (/^\d{1,12}$/.test(v)) wait = Number(v) * 1000;
+  else if (HTTP_DATE.test(v) && !Number.isNaN(Date.parse(v))) wait = Math.max(0, Date.parse(v) - nowMs);
+  else return null;
+  return deadlineMs === undefined ? wait : Math.min(wait, Math.max(0, deadlineMs - nowMs));
 }
 
 // The API answered, but with something that must never be sold as a result.
 export class AuthorityContractError extends Error {}
 
 export interface AuthorityClient {
-  check(request: AuthorityRequest, idempotencyKey: string): Promise<AuthorityResponse>;
+  // deadlineMs: when the result must be delivered; Retry-After hints are clamped to it.
+  check(request: AuthorityRequest, idempotencyKey: string, opts?: { deadlineMs?: number }): Promise<AuthorityResponse>;
 }
 
-export function createAuthorityClient(opts: { baseUrl: string; apiKey: string; fetchImpl?: typeof fetch }): AuthorityClient {
+const signedByAgent = (r: AuthorityRequest) => 'proposal' in r && typeof r.proposal.agent_signature === 'string';
+
+// An authorization is sold only if it is the engine's own signature over this evaluation of this request.
+function verifyResponse(res: AuthorityResponse, request: AuthorityRequest, enginePublicKey: string): void {
+  if (!signedByAgent(request)) {
+    if (res.evaluation.signed) throw new AuthorityContractError('signed evaluation returned for a request without an agent signature');
+    if (res.authorization) throw new AuthorityContractError('authorization returned for a request without an agent signature');
+  }
+  assertSellable(res);
+  if (res.authorization && !verifyAuthorizationRecord(res.authorization, enginePublicKey)) {
+    throw new AuthorityContractError('authorization does not verify against the pinned engine key');
+  }
+}
+
+export function createAuthorityClient(opts: {
+  baseUrl: string;
+  apiKey: string;
+  // The mandate's authority_engine.public_key (bare hex or "ed25519:<hex>").
+  enginePublicKey: string;
+  fetchImpl?: typeof fetch;
+}): AuthorityClient {
+  const enginePublicKey = opts.enginePublicKey.replace(/^ed25519:/, '');
+  if (!/^[0-9a-f]{64}$/.test(enginePublicKey)) throw new TypeError('enginePublicKey: expected 32 bytes of lowercase hex');
   const url = `${opts.baseUrl.replace(/\/+$/, '')}/v1/authority/check`;
   const send = opts.fetchImpl ?? fetch;
   return {
-    async check(request, idempotencyKey) {
+    async check(request, idempotencyKey, checkOpts) {
       const res = await send(url, {
         method: 'POST',
         redirect: 'error',
@@ -84,13 +133,28 @@ export function createAuthorityClient(opts: { baseUrl: string; apiKey: string; f
         body: JSON.stringify({ ...request, execute: false }),
       });
       if (!res.ok) {
-        throw new AuthorityError(`authority check HTTP ${res.status}`, res.status, retryAfterMs(res.headers.get('retry-after')));
+        const wait = retryAfterMs(res.headers.get('retry-after'), checkOpts?.deadlineMs);
+        throw new AuthorityError(`authority check HTTP ${res.status}`, res.status, wait);
       }
       const parsed = AuthorityResponseSchema.safeParse(await res.json().catch(() => null));
       if (!parsed.success) throw new AuthorityContractError('authority check response does not match the contract');
+      verifyResponse(parsed.data, request, enginePublicKey);
       return parsed.data;
     },
   };
+}
+
+function assertSellable(res: AuthorityResponse): void {
+  const e = res.evaluation;
+  const authorization = res.authorization ?? null;
+  if (authorization === null) return;
+  if (!e.signed) throw new AuthorityContractError('authorization returned for an unsigned proposal');
+  if (e.outcome === 'DENY') throw new AuthorityContractError('authorization returned for a DENY');
+  if (e.outcome === 'REQUIRE_APPROVAL' && authorization.fields.requires_principal !== true) {
+    throw new AuthorityContractError('REQUIRE_APPROVAL authorization must require the principal signature');
+  }
+  if (authorization.fields.action_hash !== e.action_hash) throw new AuthorityContractError('authorization is for another action');
+  if (authorization.fields.mandate_hash !== e.mandate_hash) throw new AuthorityContractError('authorization is under another mandate');
 }
 
 export interface AuthorityOutput {
@@ -100,15 +164,9 @@ export interface AuthorityOutput {
 
 // The sold result. resultText (RFC 8785 JSON) is the exact string that is hashed, submitted and delivered.
 export function buildOutput(res: AuthorityResponse, publicWebUrl: string): AuthorityOutput {
+  assertSellable(res);
   const e = res.evaluation;
   const authorization = res.authorization ?? null;
-  if (authorization !== null) {
-    if (!e.signed) throw new AuthorityContractError('authorization returned for an unsigned proposal');
-    if (e.outcome === 'DENY') throw new AuthorityContractError('authorization returned for a DENY');
-    if (e.outcome === 'REQUIRE_APPROVAL' && authorization.fields.requires_principal !== true) {
-      throw new AuthorityContractError('REQUIRE_APPROVAL authorization must require the principal signature');
-    }
-  }
   const v = res.verification ?? null;
   const output: Record<string, unknown> = {
     decision: e.outcome,
