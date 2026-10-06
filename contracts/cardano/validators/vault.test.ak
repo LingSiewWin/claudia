@@ -14,11 +14,11 @@ use authority/fixtures.{
 }
 use authority/message
 use authority/testkit.{
-  ReleaseCase, anchor_input, anchor_ref, attacker, aws, cfo, chain_tag,
-  deposit_tx, edit_output, fee_input, intruder, key_address, lower, mandate,
-  recipient_ix, release_case, release_tx, start_balance, today, upper, usdm_name,
-  usdm_policy, vault_address, vault_hash, vault_ix, vault_mint_tx, vault_output,
-  vault_seed, vault_utxo, withdraw_tx,
+  ReleaseCase, anchor_input, anchor_ref, approver, attacker, aws, cfo, chain_tag,
+  deposit_tx, edit_output, fee_input, fee_payer, intruder, key_address, lower,
+  mandate, recipient_ix, release_case, release_tx, start_balance, today, upper,
+  usdm_name, usdm_policy, vault_address, vault_hash, vault_ix, vault_mint_tx,
+  vault_output, vault_seed, vault_utxo, withdraw_to_tx, withdraw_tx,
 }
 use authority/types.{
   AnchorDatum, Authorization, Deposit, PrincipalWithdraw, Release, Revoked,
@@ -86,9 +86,12 @@ test release_settles_within_autonomous_limit() {
   settles(release_case(release_base))
 }
 
-test release_settles_above_autonomous_limit_with_cfo() {
+test release_settles_above_autonomous_limit_with_approver() {
   settles(
-    ReleaseCase { ..release_case(release_above_autonomous), signers: [cfo] },
+    ReleaseCase {
+      ..release_case(release_above_autonomous),
+      signers: [approver],
+    },
   )
 }
 
@@ -501,7 +504,7 @@ fn hard_cap_case(s: Signed) -> ReleaseCase {
     ..release_case(s),
     anchor: AnchorDatum { ..mandate, daily_cap: 100_000_000 },
     balance: 200_000_000,
-    signers: [cfo],
+    signers: [approver],
   }
 }
 
@@ -515,39 +518,60 @@ test r10_above_hard_cap() {
   )
 }
 
-// ## R11: CFO co-signature
+// ## R11: payment approver co-signature
 
-test r11_at_autonomous_limit_without_cfo() {
+test r11_at_autonomous_limit_without_approver() {
   settles(release_case(release_at_autonomous))
 }
 
-test r11_above_limit_without_cfo() {
+test r11_above_limit_without_approver() {
   !settles(release_case(release_above_autonomous))
 }
 
-test r11_above_limit_unflagged_without_cfo() {
+test r11_above_limit_unflagged_without_approver() {
   genuine(release_above_autonomous_unflagged) && !settles(
     release_case(release_above_autonomous_unflagged),
   )
 }
 
 /// Above the autonomous limit the engine must have flagged the authorization:
-/// a principal signature does not rescue an inconsistent authorization.
-test r11_above_limit_unflagged_with_cfo() {
+/// an approver signature does not rescue an inconsistent authorization.
+test r11_above_limit_unflagged_with_approver() {
   genuine(release_above_autonomous_unflagged) && !settles(
     ReleaseCase {
       ..release_case(release_above_autonomous_unflagged),
-      signers: [cfo],
+      signers: [approver],
     },
   )
 }
 
-test r11_flagged_small_without_cfo() {
+test r11_flagged_small_without_approver() {
   !settles(release_case(release_flagged_small))
 }
 
-test r11_flagged_small_with_cfo() {
-  settles(ReleaseCase { ..release_case(release_flagged_small), signers: [cfo] })
+test r11_flagged_small_with_approver() {
+  settles(
+    ReleaseCase { ..release_case(release_flagged_small), signers: [approver] },
+  )
+}
+
+/// The admin key is not the payment approver: it cannot co-sign a release.
+test r11_above_limit_with_principal_only() {
+  genuine(release_above_autonomous) && !settles(
+    ReleaseCase { ..release_case(release_above_autonomous), signers: [cfo] },
+  )
+}
+
+test r11_flagged_small_with_principal_only() {
+  genuine(release_flagged_small) && !settles(
+    ReleaseCase { ..release_case(release_flagged_small), signers: [cfo] },
+  )
+}
+
+test r11_at_hard_cap_with_principal_only() {
+  genuine(release_at_hard_cap) && !settles(
+    ReleaseCase { ..hard_cap_case(release_at_hard_cap), signers: [cfo] },
+  )
 }
 
 test r11_wrong_cosigner() {
@@ -1230,6 +1254,20 @@ test w1_intruder_signs() {
   !spend(testkit.fresh, PrincipalWithdraw, withdraw_tx([intruder]))
 }
 
+test w1_approver_alone() {
+  !spend(testkit.fresh, PrincipalWithdraw, withdraw_tx([approver]))
+}
+
+/// A compromised executor gets the approver's signature on a body it chose:
+/// that signature cannot move the vault to the attacker.
+test w1_approver_cosign_cannot_drain_to_attacker() {
+  !spend(
+    testkit.fresh,
+    PrincipalWithdraw,
+    withdraw_to_tx(attacker, [approver, fee_payer]),
+  )
+}
+
 test w1_cfo_recovers_datumless_utxo() {
   let tx = withdraw_tx([cfo])
   vault.vault.spend(
@@ -1338,6 +1376,10 @@ test v2_burn_rejected() fail {
 
 test v3_without_principal() {
   !mint_vault(Transaction { ..vault_mint_tx(), extra_signatories: [intruder] })
+}
+
+test v3_approver_alone() {
+  !mint_vault(Transaction { ..vault_mint_tx(), extra_signatories: [approver] })
 }
 
 test v3_without_anchor() fail {

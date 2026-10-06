@@ -1,7 +1,8 @@
 use aiken/primitive/bytearray
 use authority/testkit.{
   anchor_input, anchor_mint_tx, anchor_ref, anchor_seed, anchor_spend_tx,
-  anchor_utxo, attacker, cfo, fee_input, intruder, key_address, mandate,
+  anchor_utxo, approver, attacker, cfo, fee_input, intruder, key_address,
+  mandate,
 }
 use authority/types.{
   Active, AnchorDatum, AnchorRedeemer, Revoke, Revoked, Update,
@@ -175,6 +176,25 @@ test m4_short_principal() {
   )
 }
 
+test m4_short_approver() {
+  !mint_with(
+    AnchorDatum {
+      ..mandate,
+      approver_pkh: #"a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+    },
+  )
+}
+
+test m4_long_approver() {
+  !mint_with(
+    AnchorDatum { ..mandate, approver_pkh: bytearray.push(approver, 0) },
+  )
+}
+
+test m4_approver_is_principal() {
+  !mint_with(AnchorDatum { ..mandate, approver_pkh: cfo })
+}
+
 test m4_short_asset_policy() {
   !mint_with(
     AnchorDatum {
@@ -247,6 +267,12 @@ test m5_not_signed_by_principal() {
   )
 }
 
+test m5_signed_by_approver_only() {
+  !mint(
+    Transaction { ..anchor_mint_tx(mandate), extra_signatories: [approver] },
+  )
+}
+
 // ## U1: Update
 
 test update_by_principal() {
@@ -269,6 +295,68 @@ test update_without_principal() {
     Transaction {
       ..anchor_spend_tx(mandate, bumped),
       extra_signatories: [intruder],
+    },
+  )
+}
+
+test update_signed_by_approver_only() {
+  !spend(
+    mandate,
+    Update { new: bumped },
+    Transaction {
+      ..anchor_spend_tx(mandate, bumped),
+      extra_signatories: [approver],
+    },
+  )
+}
+
+/// A compromised executor gets the approver's signature on a body it chose:
+/// it cannot rotate the engine key and lift every limit.
+test update_approver_cannot_take_over_engine() {
+  let takeover = AnchorDatum {
+    ..mandate,
+    version: 4,
+    engine_vkey: #"0101010101010101010101010101010101010101010101010101010101010101",
+    hard_cap: 9_000_000_000_000,
+    daily_cap: 9_000_000_000_000,
+    treasury_minimum: 0,
+  }
+  !spend(
+    mandate,
+    Update { new: takeover },
+    Transaction {
+      ..anchor_spend_tx(mandate, takeover),
+      extra_signatories: [approver],
+    },
+  )
+}
+
+test update_rotates_approver() {
+  let rotated = AnchorDatum { ..bumped, approver_pkh: new_principal }
+  spend(mandate, Update { new: rotated }, anchor_spend_tx(mandate, rotated))
+}
+
+test update_approver_to_principal() {
+  let merged = AnchorDatum { ..bumped, approver_pkh: cfo }
+  !spend(mandate, Update { new: merged }, anchor_spend_tx(mandate, merged))
+}
+
+test update_short_approver() {
+  let short = AnchorDatum {
+    ..bumped,
+    approver_pkh: #"a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  }
+  !spend(mandate, Update { new: short }, anchor_spend_tx(mandate, short))
+}
+
+test update_hands_over_to_approver_key() {
+  let merged = AnchorDatum { ..bumped, principal_pkh: approver }
+  !spend(
+    mandate,
+    Update { new: merged },
+    Transaction {
+      ..anchor_spend_tx(mandate, merged),
+      extra_signatories: [cfo, approver],
     },
   )
 }
@@ -410,6 +498,17 @@ test revoke_without_principal() {
     Transaction {
       ..anchor_spend_tx(mandate, revoked),
       extra_signatories: [intruder],
+    },
+  )
+}
+
+test revoke_signed_by_approver_only() {
+  !spend(
+    mandate,
+    Revoke,
+    Transaction {
+      ..anchor_spend_tx(mandate, revoked),
+      extra_signatories: [approver],
     },
   )
 }

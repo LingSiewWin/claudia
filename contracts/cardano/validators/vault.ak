@@ -192,9 +192,10 @@ fn release(
   }
   let r10 = auth.amount <= a.hard_cap
   // Above the autonomous limit the engine must have flagged it, and every
-  // flagged authorization needs the principal's co-signature.
+  // flagged authorization needs the payment approver's co-signature (the
+  // message field keeps its `requires_principal` name).
   let r11 = if auth.requires_principal == 1 {
-    list.has(self.extra_signatories, a.principal_pkh)
+    list.has(self.extra_signatories, a.approver_pkh)
   } else {
     auth.amount <= a.autonomous_limit
   }

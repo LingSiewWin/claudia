@@ -28,8 +28,13 @@ pub const usdm_policy: ByteArray =
 
 pub const usdm_name: ByteArray = #"0014df10745553444d"
 
+/// The principal admin key (mandate admin, W1, V3, Update, Revoke).
 pub const cfo: ByteArray =
   #"c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+
+/// The payment approver key: it only co-signs flagged releases (R11).
+pub const approver: ByteArray =
+  #"a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
 
 pub const intruder: ByteArray =
   #"99999999999999999999999999999999999999999999999999999999"
@@ -80,6 +85,7 @@ pub const mandate: AnchorDatum =
     status: Active,
     engine_vkey: fixtures.engine_vkey,
     principal_pkh: cfo,
+    approver_pkh: approver,
     asset_policy: usdm_policy,
     asset_name: usdm_name,
     autonomous_limit: 10_000_000,
@@ -269,11 +275,16 @@ pub fn deposit_tx() -> Transaction {
 
 /// The principal empties the vault to their own wallet.
 pub fn withdraw_tx(signers: List<ByteArray>) -> Transaction {
+  withdraw_to_tx(cfo, signers)
+}
+
+/// The whole vault leaves to `pkh`'s wallet.
+pub fn withdraw_to_tx(pkh: ByteArray, signers: List<ByteArray>) -> Transaction {
   Transaction {
     ..transaction.placeholder,
     inputs: [vault_input(fresh, start_balance), fee_input()],
     reference_inputs: [anchor_input(mandate)],
-    outputs: [wallet_output(cfo, vault_value(start_balance))],
+    outputs: [wallet_output(pkh, vault_value(start_balance))],
     extra_signatories: signers,
   }
 }

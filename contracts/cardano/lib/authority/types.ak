@@ -12,6 +12,7 @@ pub type AnchorDatum {
   status: AnchorStatus,
   engine_vkey: ByteArray,
   principal_pkh: ByteArray,
+  approver_pkh: ByteArray,
   asset_policy: ByteArray,
   asset_name: ByteArray,
   autonomous_limit: Int,

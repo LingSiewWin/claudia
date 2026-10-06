@@ -7,7 +7,8 @@ use cardano/transaction.{InlineDatum, Input}
 
 /// M4: limits are ordered and every key, hash and name has its exact length.
 /// The version fits the authorization message's u32 `mandate_version`: a
-/// larger one could never be signed for, and versions only go up.
+/// larger one could never be signed for, and versions only go up. The payment
+/// approver is never the admin key, so its signature can only satisfy R11.
 pub fn valid_datum(d: AnchorDatum) -> Bool {
   and {
     d.version >= 1,
@@ -19,6 +20,8 @@ pub fn valid_datum(d: AnchorDatum) -> Bool {
     bytearray.length(d.mandate_hash) == 32,
     bytearray.length(d.engine_vkey) == 32,
     bytearray.length(d.principal_pkh) == 28,
+    bytearray.length(d.approver_pkh) == 28,
+    d.approver_pkh != d.principal_pkh,
     bytearray.length(d.asset_policy) == 28,
     bytearray.length(d.asset_name) <= 32,
   }
