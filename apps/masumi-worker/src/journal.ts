@@ -1,8 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  closeSync,
+  constants,
+  fsyncSync,
+  linkSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const KEY = /^[A-Za-z0-9_-]{1,128}$/;
+const LEASE_SETTLE_MS = 25;
+
+type Lease = { owner: string; renewedAt: number; generation: string };
 
 const readJson = <T>(path: string): T | null => {
   try {
@@ -13,15 +28,79 @@ const readJson = <T>(path: string): T | null => {
   }
 };
 
+const fsyncPath = (path: string): void => {
+  const fd = openSync(path, constants.O_RDONLY);
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+};
+
+const writeDurable = (tmp: string, value: unknown): void => {
+  const fd = openSync(tmp, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+  try {
+    writeSync(fd, JSON.stringify(value));
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  fsyncPath(dirname(tmp));
+};
+
 const writeJson = (path: string, value: unknown): void => {
   const tmp = `${path}.${randomUUID()}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value), { mode: 0o600 });
-  renameSync(tmp, path); // atomic replace
+  writeDurable(tmp, value);
+  renameSync(tmp, path);
+  fsyncPath(dirname(path));
+};
+
+const writeExclusive = (path: string, value: unknown): boolean => {
+  const tmp = `${path}.${randomUUID()}.tmp`;
+  writeDurable(tmp, value);
+  try {
+    linkSync(tmp, path);
+    fsyncPath(dirname(path));
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  } finally {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* leftover tmp is ignored by keys() */
+    }
+  }
+};
+
+const settle = (): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LEASE_SETTLE_MS);
+};
+
+const parseLease = (raw: unknown): Lease | 'malformed' => {
+  if (raw === null || typeof raw !== 'object') return 'malformed';
+  const rec = raw as Record<string, unknown>;
+  if (typeof rec.owner !== 'string' || rec.owner.length === 0) return 'malformed';
+  if (typeof rec.renewedAt !== 'number' || !Number.isFinite(rec.renewedAt)) return 'malformed';
+  if (rec.generation !== undefined && (typeof rec.generation !== 'string' || rec.generation.length === 0)) {
+    return 'malformed';
+  }
+  return {
+    owner: rec.owner,
+    renewedAt: rec.renewedAt,
+    generation: typeof rec.generation === 'string' ? rec.generation : '',
+  };
+};
+
+const readLease = (path: string): Lease | 'malformed' | null => {
+  const raw = readJson<unknown>(path);
+  return raw === null ? null : parseLease(raw);
 };
 
 // One JSON file per purchase. Stages are written before each external call, so a restart resumes
-// from the last durable stage. ponytail: no fsync; a crash can lose the last write, which the
-// stage recovery rules treat like an uncertain call.
+// from the last durable stage. The temp file and its directory are fsynced before rename, and the
+// directory is fsynced after, so a host crash cannot lose a stage written before an external call.
 export class Journal<T extends object> {
   readonly dir: string;
   constructor(dir: string) {
@@ -41,7 +120,7 @@ export class Journal<T extends object> {
   }
   private path(key: string): string {
     if (!KEY.test(key)) throw new Error(`unsafe journal key: ${key}`);
-    return join(this.dir, `${key}.json`);
+    return join(this.dir, `${key.toLowerCase()}.json`);
   }
 }
 
@@ -52,8 +131,22 @@ export const LEASE_TTL_MS = 60_000;
 export function tryAcquireLease(dir: string, owner: string, nowMs: number): boolean {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, 'lease.json');
-  const current = readJson<{ owner: string; renewedAt: number }>(path);
+  const current = readLease(path);
+  if (current === 'malformed') return false;
   if (current && current.owner !== owner && nowMs - current.renewedAt < LEASE_TTL_MS) return false;
-  writeJson(path, { owner, renewedAt: nowMs });
-  return readJson<{ owner: string }>(path)?.owner === owner;
+  const generation = !current || current.owner !== owner ? randomUUID() : current.generation || randomUUID();
+  const next = { owner, renewedAt: nowMs, generation };
+  if (!current) {
+    if (!writeExclusive(path, next)) return false;
+    return holdGeneration(dir) === generation;
+  }
+  writeJson(path, next);
+  if (current.owner !== owner) settle();
+  return holdGeneration(dir) === generation;
+}
+
+export function holdGeneration(dir: string): string | null {
+  const current = readLease(join(dir, 'lease.json'));
+  if (current === null || current === 'malformed' || current.generation.length === 0) return null;
+  return current.generation;
 }
