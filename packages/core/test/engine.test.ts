@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { REPORT_MAX_AGE_MS, evaluate } from '../src/engine';
 import { canonicalHash } from '../src/hash';
 import type { Mandate } from '../src/schemas';
-import { M001, NOW, action, propose, state, verified } from './fixtures';
+import { ATTACKER_ADDR, AWS_ADDR, M001, NOW, action, propose, state, verified } from './fixtures';
 
 const run = (a = action({ id: 'A-1', amount: 8.42 }), opts: { s?: ReturnType<typeof state>; v?: ReturnType<typeof verified> | null; m?: Mandate; sig?: string | null; now?: number } = {}) =>
   evaluate({
@@ -49,6 +49,19 @@ describe('evaluate: mandate validity', () => {
 
   it('throws when nowMs is not a safe integer', () => {
     expect(() => run(action({ id: 'A-1', amount: 1 }), { now: Number.NaN })).toThrow(TypeError);
+  });
+});
+
+describe('evaluate: state validation', () => {
+  // 45 already spent + 9 is over the 50 cap; a malformed state must not reset or widen it.
+  it.each([
+    ['spent_today empty', state(135, 45, { spent_today: '' })],
+    ['spent_today negative', state(135, 45, { spent_today: '-41000000' })],
+    ['spent_today -1', state(135, 45, { spent_today: '-1' })],
+    ['vault_balance hex', state(135, 0, { vault_balance: '0x8000000' })],
+    ['last_nonce hex', state(135, 0, { last_nonce: '0x1' })],
+  ])('%s throws instead of evaluating', (_label, s) => {
+    expect(() => run(action({ id: 'A-1', amount: 9 }), { s })).toThrow();
   });
 });
 
@@ -100,6 +113,16 @@ describe('evaluate: algorithm', () => {
     const v = verified(a);
     const report = { ...v.report, facts: { ...v.report.facts, amount_match: false } };
     expect(run(a, { v: { ...v, report, report_hash: canonicalHash(report) } })).toMatchObject({ outcome: 'DENY', reason: 'AMOUNT_MISMATCH' });
+  });
+
+  it('a VERIFIED report naming a different recipient than the action denies with RECIPIENT_MISMATCH', () => {
+    const a = action({ id: 'A-1', amount: 8.42, recipient: ATTACKER_ADDR });
+    expect(run(a).outcome).toBe('ALLOW');
+    const v = verified(a);
+    const report = { ...v.report, verified_recipient: AWS_ADDR };
+    const e = run(a, { v: { ...v, report, report_hash: canonicalHash(report) } });
+    expect(e).toMatchObject({ outcome: 'DENY', reason: 'RECIPIENT_MISMATCH' });
+    expect(e.checks.filter((c) => c.result === 'fail').map((c) => [c.id, c.reason])).toEqual([['invoice_facts', 'RECIPIENT_MISMATCH']]);
   });
 });
 

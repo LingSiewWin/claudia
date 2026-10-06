@@ -1,0 +1,24 @@
+{
+  "name": "@authority/stripe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/invoices.ts",
+    "./vendor": "./src/vendor.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:integration": "STRIPE_INTEGRATION=1 vitest run test/stripe.integration.test.ts --silent=false --reporter=verbose",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@authority/core": "workspace:*",
+    "stripe": "23.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

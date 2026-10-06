@@ -1,24 +1,21 @@
 import { parseShelleyAddress } from './address';
 import { ACTION_TYPE_CODE, type AuthorizationRecord, signAuthorization } from './authorization';
-import type { Evaluation } from './engine';
+import { type EvaluateInput, evaluate } from './engine';
 import { canonicalHash } from './hash';
-import { enforcementLimits, mandateHash } from './mandate';
-import type { ActionIR, Mandate } from './schemas';
+import { enforcementLimits } from './mandate';
+import { ActionIRSchema } from './schemas';
 
 export const AUTHORIZATION_TTL_MS = 600_000;
-export const EVALUATION_MAX_AGE_MS = 60_000;
+export const APPROVAL_MAX_AGE_MS = 60_000;
+const U64 = 1n << 64n;
 
 export type IssuanceRefusal =
   | 'UNSIGNED_PROPOSAL'
   | 'NOT_AUTHORIZABLE'
   | 'APPROVAL_MISSING'
-  | 'STALE_EVALUATION'
-  | 'ACTION_MISMATCH'
-  | 'MANDATE_MISMATCH'
   | 'ABOVE_HARD_CAP'
   | 'ASSET_MISMATCH'
   | 'UNSUPPORTED_ACTION_TYPE'
-  | 'MANDATE_EXPIRED'
   | 'RECIPIENT_UNENCODABLE'
   | 'INVALID_NONCE';
 
@@ -37,14 +34,25 @@ export interface ChainBinding {
   assetSymbol: string;
 }
 
-export interface IssueInput {
-  evaluation: Evaluation;
-  action: ActionIR;
-  mandate: Mandate;
-  approval: { approver: string; approved_at_ms: number } | null;
+export interface Approval {
+  approver: string;
+  action_hash: string;
+  approved_at_ms: number;
+}
+
+/*
+ * issueAuthorization({ mandate, proposal, state, verification, nowMs, approval, chain, nonce, engineSecretKey })
+ *
+ * The only public signing path. It takes evaluate()'s inputs, never an Evaluation: it runs evaluate() itself
+ * at nowMs, so report freshness is measured at signing time, and signs only what that evaluation allows.
+ * ALLOW signs with requires_principal = 0. REQUIRE_APPROVAL needs a fresh approval from the mandate's approver
+ * for this exact action_hash and signs with requires_principal = 1. nonce must exceed state.last_nonce and fit
+ * in u64. Everything else throws IssuanceRefused.
+ */
+export interface IssueInput extends EvaluateInput {
+  approval: Approval | null;
   chain: ChainBinding;
   nonce: bigint;
-  nowMs: number;
   engineSecretKey: Uint8Array;
 }
 
@@ -52,21 +60,23 @@ function refuse(code: IssuanceRefusal): never {
   throw new IssuanceRefused(code);
 }
 
-// Fails closed: NaN, non-integer, future, or older than EVALUATION_MAX_AGE_MS is not fresh.
+// Fails closed: NaN, non-integer, future, or older than APPROVAL_MAX_AGE_MS is not fresh.
 function fresh(atMs: number, nowMs: number): boolean {
   const age = nowMs - atMs;
-  return Number.isSafeInteger(atMs) && age >= 0 && age <= EVALUATION_MAX_AGE_MS;
+  return Number.isSafeInteger(atMs) && age >= 0 && age <= APPROVAL_MAX_AGE_MS;
 }
 
 export function issueAuthorization(input: IssueInput): AuthorizationRecord {
-  const { evaluation: e, action, mandate, chain, nowMs } = input;
-  if (!Number.isSafeInteger(nowMs)) throw new TypeError('issueAuthorization: nowMs must be a safe integer');
+  const { mandate, chain, nowMs } = input;
+  // Parse once and evaluate that copy, so the signed bytes come from exactly the action that was evaluated.
+  const parsed = ActionIRSchema.safeParse(input.proposal.action);
+  if (!parsed.success) refuse('NOT_AUTHORIZABLE');
+  const action = parsed.data;
+  const proposal = { action, agent_signature: input.proposal.agent_signature };
+  const e = evaluate({ mandate, proposal, state: input.state, verification: input.verification, nowMs });
   if (!e.signed) refuse('UNSIGNED_PROPOSAL');
-  const actionHash = canonicalHash(action);
-  if (e.action_hash !== actionHash) refuse('ACTION_MISMATCH');
-  if (e.mandate_hash !== mandateHash(mandate) || e.mandate_version !== mandate.version) refuse('MANDATE_MISMATCH');
-  if (!fresh(e.evaluated_at_ms, nowMs)) refuse('STALE_EVALUATION');
 
+  const actionHash = canonicalHash(action);
   const amount = BigInt(action.amount.value);
   const { autonomous, hardCap } = enforcementLimits(mandate);
   let requiresPrincipal = false;
@@ -74,7 +84,7 @@ export function issueAuthorization(input: IssueInput): AuthorizationRecord {
     const approval = input.approval;
     if (
       approval === null ||
-      e.approvals_required.length === 0 ||
+      approval.action_hash !== actionHash ||
       !fresh(approval.approved_at_ms, nowMs) ||
       !e.approvals_required.every((a) => a.approver === approval.approver)
     ) {
@@ -82,26 +92,22 @@ export function issueAuthorization(input: IssueInput): AuthorizationRecord {
     }
     requiresPrincipal = true;
   } else if (e.outcome !== 'ALLOW' || autonomous === null || amount > autonomous) {
-    // An ALLOW above the autonomous limit cannot come from evaluate(); refuse rather than sign without the principal flag.
+    // An ALLOW without or above an autonomous limit only comes from a mandate that skipped parseMandate.
     refuse('NOT_AUTHORIZABLE');
   }
 
+  // Defense in depth: the vault re-checks these too.
   if (hardCap === null || amount > hardCap) refuse('ABOVE_HARD_CAP');
   if (action.amount.asset !== mandate.asset.symbol || chain.assetSymbol !== mandate.asset.symbol) refuse('ASSET_MISMATCH');
   if (action.type !== 'pay_invoice') refuse('UNSUPPORTED_ACTION_TYPE');
-  if (input.nonce < 1n) refuse('INVALID_NONCE');
+  // The vault accepts only nonce > last_nonce, encoded as u64.
+  if (input.nonce <= BigInt(input.state.last_nonce) || input.nonce >= U64) refuse('INVALID_NONCE');
+  if (parseShelleyAddress(action.recipient.address).network !== chain.chainTag) refuse('RECIPIENT_UNENCODABLE');
 
-  try {
-    if (parseShelleyAddress(action.recipient.address).network !== chain.chainTag) refuse('RECIPIENT_UNENCODABLE');
-  } catch (error) {
-    if (error instanceof IssuanceRefused) throw error;
-    refuse('RECIPIENT_UNENCODABLE');
-  }
-
+  // evaluate() denies unless nowMs < expires_at, so validUntil > nowMs.
   const expiresAt = BigInt(Date.parse(mandate.validity.expires_at));
   const ttlEnd = BigInt(nowMs) + BigInt(AUTHORIZATION_TTL_MS);
   const validUntil = ttlEnd < expiresAt ? ttlEnd : expiresAt;
-  if (validUntil <= BigInt(nowMs)) refuse('MANDATE_EXPIRED');
 
   return signAuthorization(
     {

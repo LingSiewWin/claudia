@@ -19,6 +19,7 @@ describe('ActionIRSchema', () => {
     ['amount >= 2^64', { ...good, amount: { value: (1n << 64n).toString(), asset: 'USDM' } }],
     ['unknown action type', { ...good, type: 'withdraw_all' }],
     ['pointer or garbage address', { ...good, recipient: { chain: 'cardano', address: 'addr_test1xyz' } }],
+    ['uppercase address', { ...good, recipient: { chain: 'cardano', address: AWS_ADDR.toUpperCase() } }],
     ['non-cardano chain', { ...good, recipient: { chain: 'solana', address: AWS_ADDR } }],
     ['datetime with offset', { ...good, created_at: '2026-10-07T03:00:00+08:00' }],
     ['rationale too long', { ...good, rationale: 'x'.repeat(2001) }],

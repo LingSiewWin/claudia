@@ -6,6 +6,7 @@ export interface ConstraintContext {
   state: State;
   dayIndex: number;
   verification: VerifiedReport | null;
+  mandateAsset: string;
 }
 
 export type Detail = Record<string, string | number | boolean | null>;
@@ -17,6 +18,9 @@ export interface ConstraintOutcome {
 }
 
 type Facts = VerificationReport['facts'];
+
+// Fiat currency a verified invoice must be in for each mandate asset. An asset missing here never verifies.
+const ASSET_FIAT = new Map([['USDM', 'usd']]);
 
 const FACT_REASONS = [
   ['exists', 'INVOICE_NOT_FOUND'],
@@ -75,10 +79,25 @@ export function checkConstraint(c: Constraint, ctx: ConstraintContext): Constrai
     case 'verified_facts': {
       const v = ctx.verification;
       if (v === null) throw new Error('verified_facts checked without a verification report');
-      const detail: Detail = { report_hash: v.report_hash, invoice_id: v.report.invoice_id, result: v.report.result };
+      const detail: Detail = {
+        report_hash: v.report_hash,
+        invoice_id: v.report.invoice_id,
+        result: v.report.result,
+        verified_recipient: v.report.verified_recipient,
+        verified_amount: v.report.verified_amount,
+        verified_currency: v.report.verified_currency,
+      };
       if (v.report.result !== 'VERIFIED') return fail(v.report.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
       const broken = FACT_REASONS.find(([fact]) => !v.report.facts[fact]);
-      return broken ? fail(broken[1], detail) : pass(detail);
+      if (broken) return fail(broken[1], detail);
+      // The facts are computed from the trigger request, so compare the verified values with the action itself.
+      if (v.report.verified_recipient !== action.recipient.address) return fail('RECIPIENT_MISMATCH', detail);
+      if (v.report.verified_amount !== action.amount.value) return fail('AMOUNT_MISMATCH', detail);
+      const fiat = ASSET_FIAT.get(ctx.mandateAsset);
+      if (fiat === undefined || v.report.verified_currency !== fiat) return fail('CURRENCY_MISMATCH', detail);
+      // An invoice payment without an invoice reference can never pass verification.
+      if (!action.reference || v.report.invoice_id !== action.reference.invoice_id) return fail('INVOICE_NOT_FOUND', detail);
+      return pass(detail);
     }
   }
 }
