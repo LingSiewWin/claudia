@@ -217,6 +217,7 @@ fn release(
   // The digest datum ties the payment to this one authorization, so a
   // single output cannot satisfy two releases in the same transaction.
   let r16 = and {
+    // Backstop: R13 already allows only one output at the vault credential.
     recipient.payment_credential != Script(own_hash),
     list.any(
       self.outputs,
@@ -224,6 +225,7 @@ fn release(
         and {
           o.address == recipient,
           o.datum == InlineDatum(digest),
+          o.reference_script == None,
           assets.quantity_of(o.value, a.asset_policy, a.asset_name) >= auth.amount,
         }
       },

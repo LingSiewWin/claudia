@@ -10,7 +10,7 @@ use authority/fixtures.{
   release_flagged_small, release_mainnet, release_old_version,
   release_other_asset_name, release_other_asset_policy, release_other_key,
   release_other_mandate_hash, release_other_mandate_ref, release_other_vault,
-  release_proposal_signature, release_to_vault,
+  release_proposal_signature, release_to_vault, release_version_cap,
 }
 use authority/message
 use authority/testkit.{
@@ -27,7 +27,7 @@ use authority/types.{
 use cardano/address
 use cardano/assets
 use cardano/transaction.{
-  DatumHash, InlineDatum, Input, NoDatum, Output, Transaction,
+  DatumHash, InlineDatum, Input, NoDatum, Output, OutputReference, Transaction,
 }
 use vault
 
@@ -232,10 +232,19 @@ test r3_revoked_anchor() {
   !settles(c)
 }
 
-test r3_revoked_at_version_cap() {
-  !settles(
+test r3_active_at_version_cap() {
+  settles(
     ReleaseCase {
-      ..release_case(release_base),
+      ..release_case(release_version_cap),
+      anchor: AnchorDatum { ..mandate, version: 4_294_967_295 },
+    },
+  )
+}
+
+test r3_revoked_at_version_cap() {
+  genuine(release_version_cap) && !settles(
+    ReleaseCase {
+      ..release_case(release_version_cap),
       anchor: AnchorDatum { ..mandate, status: Revoked, version: 4_294_967_295 },
     },
   )
@@ -935,14 +944,118 @@ test r16_recipient_script_instead_of_key() {
   )
 }
 
-test r16_recipient_is_the_vault() {
-  // The amount leaves the vault but the only "recipient" output is the vault.
-  let c = release_case(release_to_vault)
-  let tx = release_tx(c)
-  genuine(release_to_vault) && !release(
+test r16_recipient_is_the_vault() fail {
+  // R13 blocks paying the vault itself: a second vault output halts `expect [out]`.
+  let c = ReleaseCase {
+    ..release_case(release_to_vault),
+    pay_to: vault_address(),
+  }
+  release(c, release_tx(c))
+}
+
+test r16_recipient_reference_script() {
+  let c = release_case(release_base)
+  !release(
     c,
-    Transaction { ..tx, outputs: list.drop(tx.outputs, 1) },
+    release_tx(c)
+      |> edit_output(
+          recipient_ix,
+          fn(o) { Output { ..o, reference_script: Some(attacker) } },
+        ),
   )
+}
+
+// ## R16 across vaults: one payment output cannot settle two releases
+
+/// Stands in for a second vault script: the validator takes its own hash from
+/// the spent input, so the same code runs as vault B at this address.
+const other_vault_hash: ByteArray =
+  #"abababababababababababababababababababababababababababab"
+
+const other_vault_utxo: OutputReference =
+  OutputReference {
+    transaction_id: #"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    output_index: 0,
+  }
+
+fn other_vault_output(d: VaultDatum, balance: Int) -> Output {
+  Output {
+    address: address.from_script(other_vault_hash),
+    value: assets.from_lovelace(5_000_000)
+      |> assets.add(usdm_policy, usdm_name, balance)
+      |> assets.add(other_vault_hash, vault_token_name, 1),
+    datum: InlineDatum(d),
+    reference_script: None,
+  }
+}
+
+/// Vault A (release_base) and vault B (release_other_vault) each release 8.42
+/// USDM to the same vendor in one transaction. With `own_payment`, B gets its
+/// own digest-tagged output; without it, only A's payment exists.
+fn two_vault_tx(own_payment: Bool) -> Transaction {
+  let tx = release_tx(release_case(release_base))
+  let b_next = VaultDatum {
+    last_nonce: 1,
+    day_index: today,
+    spent_today: 8_420_000,
+  }
+  let b_payment = Output {
+    address: key_address(aws),
+    value: assets.merge(
+      assets.from_lovelace(2_000_000),
+      testkit.usdm(8_420_000),
+    ),
+    datum: InlineDatum(message.digest(release_other_vault.auth)),
+    reference_script: None,
+  }
+  let extra = if own_payment {
+    [b_payment]
+  } else {
+    []
+  }
+  Transaction {
+    ..tx,
+    inputs: [
+      Input {
+        output_reference: other_vault_utxo,
+        output: other_vault_output(testkit.fresh, start_balance),
+      },
+      ..tx.inputs
+    ],
+    outputs: list.concat(
+      tx.outputs,
+      [other_vault_output(b_next, start_balance - 8_420_000), ..extra],
+    ),
+  }
+}
+
+fn release_vault_b(tx: Transaction) -> Bool {
+  let raw: Data = testkit.fresh
+  vault.vault.spend(
+    anchor_ref,
+    chain_tag,
+    vault_seed,
+    Some(raw),
+    Release {
+      auth: release_other_vault.auth,
+      signature: release_other_vault.signature,
+    },
+    other_vault_utxo,
+    tx,
+  )
+}
+
+test r16_two_vaults_share_one_payment() {
+  // The vendor output settles vault A, so vault B cannot also claim it.
+  let tx = two_vault_tx(False)
+  genuine(release_other_vault) && release(release_case(release_base), tx) && !release_vault_b(
+    tx,
+  )
+}
+
+test r16_two_vaults_each_pay_their_own_output() {
+  let tx = two_vault_tx(True)
+  release(release_case(release_base), tx) && release_vault_b(tx)
 }
 
 // ## Deposit
@@ -1004,6 +1117,35 @@ test deposit_adds_junk_token() {
       |> edit_output(
           0,
           with_value(_, fn(v) { assets.add(v, attacker, "junk", 1) }),
+        ),
+  )
+}
+
+test deposit_changes_stake_credential() {
+  !spend(
+    testkit.fresh,
+    Deposit,
+    deposit_tx()
+      |> edit_output(
+          0,
+          fn(o) {
+            Output {
+              ..o,
+              address: address.with_delegation_key(vault_address(), attacker),
+            }
+          },
+        ),
+  )
+}
+
+test deposit_attaches_reference_script() {
+  !spend(
+    testkit.fresh,
+    Deposit,
+    deposit_tx()
+      |> edit_output(
+          0,
+          fn(o) { Output { ..o, reference_script: Some(attacker) } },
         ),
   )
 }
@@ -1125,6 +1267,16 @@ test v2_preloaded_datum() {
           start_balance,
         ),
       ],
+    },
+  )
+}
+
+test v2_burn_keeping_vault_output() {
+  let tx = vault_mint_tx()
+  !mint_vault(
+    Transaction {
+      ..tx,
+      mint: assets.from_asset(vault_hash, vault_token_name, -1),
     },
   )
 }
