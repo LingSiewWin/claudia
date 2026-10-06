@@ -1,4 +1,5 @@
 import {
+  blake2b256,
   bytesToHex,
   canonicalHash,
   canonicalJson,
@@ -90,6 +91,16 @@ describe('recorded fixtures', () => {
     ].map((k) => k.replace('ed25519:', ''));
     expect(keys.length).toBeGreaterThan(10);
     for (const k of keys) expect(test.has(k), k).toBe(true);
+  });
+
+  it('name the TEST-derived key hash as the approver everywhere', () => {
+    const cfo = bytesToHex(blake2b256(publicKeyFromSecret(new Uint8Array(32).fill(7))).slice(0, 28));
+    for (const v of Object.values(recorded.mandates)) expect(v.mandate.approvers.map((a) => a.cardano_key_hash)).toEqual([cfo]);
+    for (const b of Object.values(recorded.bundles)) {
+      expect(b.mandate.approvers.map((a) => a.cardano_key_hash)).toEqual([cfo]);
+      if (b.receipt.approval.required) expect(b.receipt.approval.cfo_key_hash).toBe(cfo);
+    }
+    for (const e of Object.values(recorded.logs).flat()) if (e.type === 'CFOApproved') expect(e.payload.cfo_key_hash).toBe(cfo);
   });
 
   it('include a revoked mandate', () => {

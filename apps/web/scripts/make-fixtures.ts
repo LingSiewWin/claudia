@@ -9,6 +9,7 @@ import {
   type Mandate,
   type ReasonCode,
   type VerificationReport,
+  blake2b256,
   bytesToHex,
   canonicalHash,
   canonicalJson,
@@ -44,7 +45,6 @@ import { parseUnits } from '../lib/format';
 
 const DAY_MS = 86_400_000;
 const T0 = Date.parse('2026-10-07T03:00:00.000Z');
-const CFO_PKH = '7311160397fe202bc29b6d499bf819a07e69638fd907bcd68871de3b';
 const ASSET = { policy: '16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde', name: '0014df10745553444d' };
 const REGISTRY = `0x${'5e'.repeat(20)}`;
 const ADDR = {
@@ -120,6 +120,8 @@ const MREV: Setup = {
 };
 
 const pk = (sk: Uint8Array) => bytesToHex(publicKeyFromSecret(sk));
+// Fixture approver: a key hash derived from a fixed TEST seed (28 bytes of blake2b-256 over the public key), not any real wallet.
+const CFO_TEST = bytesToHex(blake2b256(publicKeyFromSecret(new Uint8Array(32).fill(7))).slice(0, 28));
 
 function buildMandate(s: Setup, version = s.version): Mandate {
   const l = s.limits;
@@ -130,7 +132,7 @@ function buildMandate(s: Setup, version = s.version): Mandate {
     status: 'active',
     principal: { type: 'organization', id: 'acme', name: 'Acme Corp' },
     delegate: { type: 'agent', id: 'cfo-agent-01', public_key: `ed25519:${pk(s.agentSk)}` },
-    approvers: [{ role: 'CFO', cardano_key_hash: CFO_PKH }],
+    approvers: [{ role: 'CFO', cardano_key_hash: CFO_TEST }],
     authority_engine: { public_key: `ed25519:${pk(s.engineSk)}` },
     asset: { symbol: 'USDM', decimals: 6 },
     validity: { starts_at: '2026-10-06T00:00:00Z', expires_at: '2026-11-06T00:00:00Z' },
@@ -326,7 +328,7 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
       run.emit('CFODeclined', action.id, { approval_id }, 8_000);
       return null;
     }
-    run.emit('CFOApproved', action.id, { approval_id, cfo_key_hash: CFO_PKH }, 8_000);
+    run.emit('CFOApproved', action.id, { approval_id, cfo_key_hash: CFO_TEST }, 8_000);
     report = cre(run, action, actionHash, ++round);
     evaluation = evaluateNow();
     if (evaluation.outcome === 'DENY') throw new Error(`fixture ${action.id}: denied after CFO approval (${evaluation.reason}); refusing to authorize`);
@@ -416,7 +418,7 @@ function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRec
       nonce: rec.fields.nonce,
       valid_until: rec.fields.valid_until,
     },
-    approval: { required: k.approved, cfo_key_hash: k.approved ? CFO_PKH : null },
+    approval: { required: k.approved, cfo_key_hash: k.approved ? CFO_TEST : null },
     settlement: { chain: 'cardano-preprod', tx_hash: settled.tx, block: settled.block },
     masumi: null,
     evidence: { first_event_hash: k.firstEventHash, last_event_hash: last.hash },
@@ -440,7 +442,7 @@ function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRec
       { int: m.version },
       { constructor: 0, fields: [] },
       { bytes: pk(s.engineSk) },
-      { bytes: CFO_PKH },
+      { bytes: CFO_TEST },
       { bytes: ASSET.policy },
       { bytes: ASSET.name },
       { int: Number(l.autonomous_limit) },
