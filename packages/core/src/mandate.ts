@@ -95,7 +95,14 @@ export function mandateHash(m: Mandate): string {
 export function anchorProjection(m: Mandate): AnchorProjection {
   const l = enforcementLimits(m);
   const approver = m.approvers.length === 1 ? m.approvers[0] : undefined;
-  if (!approver || approver.cardano_key_hash === m.principal.cardano_key_hash || l.autonomous === null || l.hardCap === null || l.dailyCap === null || l.treasuryMinimum === null) {
+  if (
+    !approver ||
+    approver.cardano_key_hash === m.principal.cardano_key_hash ||
+    l.autonomous === null ||
+    l.hardCap === null ||
+    l.dailyCap === null ||
+    l.treasuryMinimum === null
+  ) {
     throw new MandateError(mandateRuleProblems(m));
   }
   return {

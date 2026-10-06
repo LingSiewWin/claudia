@@ -71,6 +71,11 @@ describe('anchorProjection', () => {
     expect(() => anchorProjection({ ...M001, approvers })).toThrow(/exactly one approver/);
   });
 
+  it('refuses to project a mandate whose approver key is the principal admin key', () => {
+    const principal = { ...M001.principal, cardano_key_hash: CFO_PKH };
+    expect(() => anchorProjection({ ...M001, principal })).toThrow(/approver key must differ from the principal admin key/);
+  });
+
   it('mandateHash is order-independent', () => {
     const reordered = parseMandate(Object.fromEntries(Object.entries(M001_INPUT).reverse()));
     expect(mandateHash(reordered)).toBe(mandateHash(M001));
