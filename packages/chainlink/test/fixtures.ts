@@ -1,4 +1,6 @@
-import type { VerificationReport } from '@authority/core';
+import { canonicalHash, type VerificationReport } from '@authority/core';
+import { type Address, encodeAbiParameters, encodeEventTopics, type Hex, type PublicClient } from 'viem';
+import { REGISTRY_ABI, RESULT_CODE, type StoredFields, toStoredFields } from '../src/codec';
 
 export const FIXTURE: VerificationReport = {
   schema: 'verification/v0.1',
@@ -15,3 +17,28 @@ export const FIXTURE: VerificationReport = {
   reason: null,
   trigger_id: '6f1c2a9e-7b1d-4c52-9a35-2f4f5d0c9b11',
 };
+
+export const REGISTRY: Address = '0xbC0fE56c6F7b42F679A08E0549B14c9dbF69A31B';
+
+// Sepolia as seen by the reader after one registry write of `report`: the receipt carries the
+// InvoiceVerified log and latestReport returns the stored fields. Records every contract read.
+export function fakeChain(
+  report: VerificationReport,
+  opts: { emitter?: Address; status?: 'success' | 'reverted'; storedHash?: Hex; fields?: StoredFields } = {},
+) {
+  const reportHash: Hex = `0x${canonicalHash(report)}`;
+  const log = {
+    address: (opts.emitter ?? REGISTRY).toLowerCase(),
+    topics: encodeEventTopics({ abi: REGISTRY_ABI, eventName: 'InvoiceVerified', args: { actionHash: `0x${report.action_hash}`, reportHash } }),
+    data: encodeAbiParameters([{ type: 'uint8' }], [RESULT_CODE[report.result]]),
+  };
+  const reads: unknown[] = [];
+  const client = {
+    waitForTransactionReceipt: () => Promise.resolve({ status: opts.status ?? 'success', blockNumber: 7n, logs: [log] }),
+    readContract: (args: unknown) => {
+      reads.push(args);
+      return Promise.resolve([opts.storedHash ?? reportHash, { fields: opts.fields ?? toStoredFields(report), blockTime: 1_800_000_000n }]);
+    },
+  } as unknown as PublicClient;
+  return { client, reads };
+}
