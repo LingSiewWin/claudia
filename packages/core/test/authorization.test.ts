@@ -36,7 +36,7 @@ const base: AuthorizationFields = {
 const be = (value: bigint, bytes: number) => value.toString(16).padStart(bytes * 2, '0');
 
 describe('encodeAuthorization', () => {
-  it('matches bytes assembled independently from spec 02', () => {
+  it('matches bytes assembled independently of the encoder', () => {
     const expected = [
       '4147454e545f415554484f52495a4154494f4e5f5631',
       '00',

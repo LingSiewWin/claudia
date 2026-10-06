@@ -21,8 +21,11 @@ node_modules/
 # Local agent tooling
 .claude/skills/
 skills-lock.json
-# CRE onboarding scaffold (hello-world); real workflow decided in Phase 6
+# CRE onboarding scaffold
 cre/
 
 # Local agent execution workspace
 .superpowers/
+
+# Browser automation artifacts
+.playwright-mcp/
