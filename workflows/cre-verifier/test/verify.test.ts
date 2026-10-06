@@ -1,6 +1,13 @@
 import { canonicalJson, VerificationReportSchema } from '@authority/core';
 import { describe, expect, it } from 'vitest';
-import { buildReport, normalizeInvoice, type TriggerRequest, TriggerRequestSchema } from '../src/verify';
+import {
+  buildReport,
+  normalizeInvoice,
+  type TriggerRequest,
+  TriggerRequestSchema,
+  U64,
+  USDM_UNITS_PER_CENT,
+} from '../src/verify';
 
 const PAYOUT = 'addr_test1qpe3z9srjllzq27zndk5nxlcrxs8u6tr3lvs00xk3pcauwend7e3wv3tk360w5k3uz2nkneydscpuwp9t2uwggpsfzgsgehreu';
 const ATTACKER = 'addr_test1vzattackerattackerattackerattackerattackerattackerattackerq';
@@ -65,6 +72,7 @@ describe('buildReport (each fact compared exactly)', () => {
 
   it.each([
     ['customer', { customer: null }, { customer_id: null }, 'CUSTOMER_MISMATCH', 'customer_match'],
+    ['currency', { currency: null }, { requested_currency: null }, 'CURRENCY_MISMATCH', 'currency_match'],
     ['recipient', { payout_address: null }, { requested_recipient: null }, 'RECIPIENT_MISMATCH', 'recipient_match'],
   ] as const)('never matches a null %s against a null request field', (_label, tuple, patch, reason, fact) => {
     const t = { ...normalizeInvoice(200, invoice()), ...tuple };
@@ -75,7 +83,11 @@ describe('buildReport (each fact compared exactly)', () => {
   });
 
   it('reports an amount whose USDM value overflows u64 as unverified, not as a match', () => {
-    const r = report(200, invoice({ amount_due: 2_000_000_000_000_000 }));
+    const cents = 2_000_000_000_000_000;
+    const units = BigInt(cents) * USDM_UNITS_PER_CENT;
+    expect(units >= U64).toBe(true);
+    // The request carries the u64-wrapped value, so only an exact (non-wrapping) comparison rejects it.
+    const r = report(200, invoice({ amount_due: cents }), request({ requested_amount: (units - U64).toString() }));
     expect(r.verified_amount).toBeNull();
     expect(r.facts.amount_match).toBe(false);
     expect(r.result).toBe('MISMATCH');

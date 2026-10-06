@@ -17,25 +17,11 @@ import {
   type Runtime,
   TxStatus,
 } from '@chainlink/cre-sdk';
-import * as z from 'zod';
+import { EVM_PB } from '@chainlink/cre-sdk/pb';
+import { type Config, configSchema, httpTriggerConfig } from './src/config';
 import { buildReport, type InvoiceTuple, normalizeInvoice, TriggerRequestSchema } from './src/verify';
 
 const STRIPE_SECRET_ID = 'STRIPE_INVOICE_READ';
-const RECEIVER_REVERTED = 1; // EVM_PB.ReceiverContractExecutionStatus.REVERTED
-
-const configSchema = z.discriminatedUnion('mode', [
-  z.strictObject({ mode: z.literal('local-simulation') }),
-  z.strictObject({
-    mode: z.literal('sepolia'),
-    chainSelectorName: z.literal('ethereum-testnet-sepolia'),
-    registryAddress: z
-      .string()
-      .regex(/^0x[0-9a-fA-F]{40}$/)
-      .refine((a) => !/^0x0{40}$/.test(a), 'zero address'),
-    gasLimit: z.string().regex(/^[1-9][0-9]{0,8}$/),
-  }),
-]);
-type Config = z.infer<typeof configSchema>;
 
 // Node mode: every node fetches and normalizes independently; consensus compares the
 // canonical JSON string byte for byte (identical aggregation; null is not a CRE value type).
@@ -72,14 +58,14 @@ const onVerifyRequest = (runtime: Runtime<Config>, payload: HTTPPayload): string
     .writeReport(runtime, { receiver: config.registryAddress, report: signed, gasConfig: { gasLimit: config.gasLimit } })
     .result();
   if (reply.txStatus !== TxStatus.SUCCESS) throw new Error(`writeReport: ${reply.errorMessage ?? reply.txStatus}`);
-  if (reply.receiverContractExecutionStatus === RECEIVER_REVERTED) throw new Error('writeReport: registry reverted');
+  if (reply.receiverContractExecutionStatus === EVM_PB.ReceiverContractExecutionStatus.REVERTED) throw new Error('writeReport: registry reverted');
   if (!reply.txHash || reply.txHash.every((b) => b === 0)) throw new Error('writeReport: no transaction hash');
   const txHash = bytesToHex(reply.txHash);
   runtime.log(`InvoiceVerified tx=${txHash} report_hash=${report_hash}`);
   return JSON.stringify({ report_hash, tx_hash: txHash, result: report.result, reason: report.reason });
 };
 
-const initWorkflow = () => [handler(new HTTPCapability().trigger({}), onVerifyRequest)];
+const initWorkflow = (config: Config) => [handler(new HTTPCapability().trigger(httpTriggerConfig(config)), onVerifyRequest)];
 
 export async function main() {
   const runner = await Runner.newRunner<Config>({ configSchema });

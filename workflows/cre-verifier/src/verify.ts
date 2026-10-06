@@ -4,7 +4,7 @@ import { resultFromFacts } from '@authority/chainlink/codec';
 import { canonicalHash, type VerificationReport } from '@authority/core';
 import * as z from 'zod';
 
-const U64 = 1n << 64n;
+export const U64 = 1n << 64n;
 export const PAYOUT_CHAIN = 'cardano-preprod';
 export const USDM_UNITS_PER_CENT = 10_000n;
 const INVOICE_ID = /^in_[A-Za-z0-9]{1,61}$/;
@@ -75,7 +75,7 @@ export function compareFacts(t: InvoiceTuple, req: TriggerRequest): Verification
     status_open: exists && t.status === 'open',
     amount_match:
       exists && t.amount_due !== null && BigInt(t.amount_due) * USDM_UNITS_PER_CENT === BigInt(req.requested_amount),
-    currency_match: exists && t.currency === req.requested_currency,
+    currency_match: exists && t.currency !== null && t.currency === req.requested_currency,
     recipient_match: exists && t.payout_address !== null && t.payout_address === req.requested_recipient,
   };
 }
