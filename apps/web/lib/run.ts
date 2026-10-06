@@ -39,7 +39,7 @@ export interface RunView {
   lastSeq: number;
   lastAt: string | null;
   ignored: number;
-  /** True once an event arrived with a skipped sequence number. */
+  /** True once an event arrived with a skipped sequence number, or the stream began after the run started. */
   gap: boolean;
 }
 
@@ -73,9 +73,16 @@ const newCard = (actionId: string, at: string): CardView => ({
   receipt: null,
 });
 
+/** A base-unit amount, strictly: BigInt() alone also accepts '', ' 8' and '0x10'. Throws, so applyEvent ignores the event. */
+export function units(value: string): bigint {
+  if (!/^-?\d+$/.test(value)) throw new Error('Not a base-unit amount');
+  return BigInt(value);
+}
+
 function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
   switch (e.type) {
     case 'ActionProposed':
+      units(e.payload.action.amount.value);
       return { action: e.payload.action, actionHash: e.payload.action_hash, agentSignature: e.payload.agent_signature, state: 'PROPOSED' };
     case 'AuthorityEvaluationStarted':
       return { state: 'EVALUATING' };
@@ -89,7 +96,7 @@ function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
         verification: { report: e.payload.report, reportHash: e.payload.report_hash, sepoliaTx: e.payload.sepolia_tx },
       };
     case 'AuthorizationIssued':
-      BigInt(e.payload.authorization.fields.amount); // throws on a corrupt amount, so applyEvent counts the event as ignored
+      units(e.payload.authorization.fields.amount);
       return { authorization: e.payload.authorization, compromisedEngine: e.payload.compromised_engine, state: 'AUTHORIZED' };
     case 'ApprovalRequested':
       return {
@@ -159,19 +166,18 @@ export function applyEvent(view: RunView, e: RunEvent): RunView {
   }
 }
 
-function applyKnown(view: RunView, e: RunEvent): RunView {  if (e.seq <= view.lastSeq) return { ...view, ignored: view.ignored + 1 };
-  const next: RunView = {
-    ...view,
-    runId: view.runId ?? e.run_id,
-    lastSeq: e.seq,
-    lastAt: e.created_at,
-    gap: view.gap || (view.lastSeq > 0 && e.seq > view.lastSeq + 1),
-  };
+function applyKnown(view: RunView, e: RunEvent): RunView {
+  if (e.seq <= view.lastSeq) return { ...view, ignored: view.ignored + 1 };
+  // Every run's log opens with RunStarted, so a stream that begins anywhere else has already lost events.
+  const skipped = view.lastSeq === 0 ? e.type !== 'RunStarted' : e.seq > view.lastSeq + 1;
+  const next: RunView = { ...view, runId: view.runId ?? e.run_id, lastSeq: e.seq, lastAt: e.created_at, gap: view.gap || skipped };
   switch (e.type) {
-    case 'RunStarted':
-      BigInt(e.payload.vault.balance);
-      BigInt(e.payload.vault.spent_today);
+    case 'RunStarted': {
+      const { vault, limits } = e.payload;
+      for (const v of [vault.balance, vault.spent_today, limits.autonomous_limit, limits.hard_cap, limits.daily_cap]) units(v);
+      if (!Number.isInteger(limits.decimals) || limits.decimals < 0) throw new Error('Bad decimals');
       return { ...next, started: e.payload };
+    }
     case 'AttackStarted':
       return { ...next, attacks: { ...next.attacks, [e.payload.attack]: 'running' } };
     case 'AttackResult':
@@ -215,12 +221,12 @@ export function mayRow(c: CardView): Row {
   return { value: 'ALLOW', tone: 'pass', reason: null };
 }
 
-/** TRUE? row: Chainlink CRE's attestation of the invoice facts. */
+/** TRUE? row: Chainlink CRE's attestation of the invoice facts. Attributed to CRE: "Verified" is reserved for checks this browser runs. */
 export function trueRow(c: CardView): Row {
   if (c.verification) {
     const r = c.verification.report;
     return r.result === 'VERIFIED'
-      ? { value: 'VERIFIED', tone: 'pass', reason: null }
+      ? { value: 'Invoice confirmed by Chainlink CRE', tone: 'pass', reason: null }
       : { value: 'MISMATCH', tone: 'fail', reason: r.reason };
   }
   if (c.verifying) return { value: 'Verifying…', tone: 'pending', reason: null };
@@ -274,7 +280,7 @@ export function statusLine(c: CardView): { text: string; tone: RowTone } {
 export function treasury(view: RunView): { balance: bigint; spent: bigint } | null {
   if (!view.started) return null;
   const settled = view.cards.reduce(
-    (sum, c) => ((c.state === 'SETTLED' || c.state === 'PROVEN') && c.authorization ? sum + BigInt(c.authorization.fields.amount) : sum),
+    (sum, c) => ((c.state === 'SETTLED' || c.state === 'PROVEN') && c.authorization ? sum + units(c.authorization.fields.amount) : sum),
     0n,
   );
   return { balance: BigInt(view.started.vault.balance) - settled, spent: BigInt(view.started.vault.spent_today) + settled };

@@ -2,7 +2,18 @@ import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '
 import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '../lib/contract';
 import { formatUnits } from '../lib/format';
-import { REPLAY_FAILED, REPLAY_UNANCHORED, REPLAY_VERIFIED, logIntact, replayDelays, replayPlan } from '../lib/replay';
+import type { KoiosTx } from '../lib/chain';
+import {
+  REPLAY_FAILED,
+  REPLAY_UNANCHORED,
+  REPLAY_VERIFIED,
+  logIntact,
+  readAnchor,
+  replayDelays,
+  replayPlan,
+  replayVerifiedThrough,
+  unanchoredActions,
+} from '../lib/replay';
 import { applyEvent, emptyRun, enforcedRow, mayRow, reduceRun, statusLine, treasury, trueRow } from '../lib/run';
 import { recorded, stage } from './load';
 
@@ -33,9 +44,10 @@ describe('run reducer on the recorded stage run', () => {
       const c = byId[id]!;
       return [mayRow(c).value, trueRow(c).value, enforcedRow(c).value];
     };
-    expect(rows('A-0001')).toEqual(['ALLOW', 'VERIFIED', 'SETTLED']);
-    expect(rows('A-0002')).toEqual(['REQUIRES APPROVAL', 'VERIFIED', 'SETTLED']);
-    expect(rows('A-0003')).toEqual(['REQUIRES APPROVAL', 'VERIFIED', 'Not reached']);
+    const cre = 'Invoice confirmed by Chainlink CRE';
+    expect(rows('A-0001')).toEqual(['ALLOW', cre, 'SETTLED']);
+    expect(rows('A-0002')).toEqual(['REQUIRES APPROVAL', cre, 'SETTLED']);
+    expect(rows('A-0003')).toEqual(['REQUIRES APPROVAL', cre, 'Not reached']);
     expect(rows('A-0004')).toEqual(['DENY', 'Not reached', 'Not reached']);
     expect(rows('A-0005')).toEqual(['DENY', 'Not reached', 'Not reached']);
     expect(rows('A-0006')).toEqual(['ALLOW', 'MISMATCH', 'Not reached']);
@@ -166,6 +178,14 @@ describe('REPLAY banner', () => {
     expect(plan).toMatchObject({ verified: true, anchoredThrough: mid.seq });
     expect(plan.events).toHaveLength(events.length);
   });
+  it('never shows the full VERIFIED banner over an unanchored tail', () => {
+    const events = stage();
+    const mid = events[10]!;
+    const plan = replayPlan(events, { seq: mid.seq, head: mid.hash });
+    expect(plan.banner).toBe('REPLAY — VERIFIED THROUGH EVENT 11 · LATER EVENTS NOT ANCHORED');
+    expect(plan.banner).toBe(replayVerifiedThrough(11));
+    expect(replayPlan(events.slice(0, 11), { seq: mid.seq, head: mid.hash }).banner).toBe(REPLAY_VERIFIED);
+  });
   it('fails a forged but self-consistent chain against the anchor and plays nothing', () => {
     const real = stage();
     const fake = forged();
@@ -202,6 +222,49 @@ describe('REPLAY banner', () => {
   });
 });
 
+const koios = async (txHash: string): Promise<KoiosTx | null> => structuredClone(recorded.koios[txHash] ?? null);
+const withHead = (logHead: unknown) => async (txHash: string): Promise<KoiosTx | null> => {
+  const tx = structuredClone(recorded.koios[txHash]!);
+  tx.metadata = { '1694': { ...(tx.metadata?.['1694'] as object), log_head: logHead } };
+  return tx;
+};
+
+describe('REPLAY anchor read from Cardano', () => {
+  it('pairs the latest settlement log head with that settlement event', async () => {
+    const events = stage();
+    const anchor = await readAnchor(events, koios);
+    expect(anchor).toEqual({ seq: 30, head: events[29]!.hash });
+    const plan = replayPlan(events, anchor);
+    expect(plan).toMatchObject({ verified: true, banner: replayVerifiedThrough(30), anchoredThrough: 30 });
+    expect(replayPlan(events.slice(0, 30), anchor).banner).toBe(REPLAY_VERIFIED);
+  });
+  it('accepts a log head that names its own sequence number', async () => {
+    const events = stage();
+    const last = events[events.length - 1]!;
+    const anchor = await readAnchor(events, withHead({ seq: last.seq, hash: last.hash }));
+    expect(anchor).toEqual({ seq: 60, head: last.hash });
+    expect(replayPlan(events, anchor).banner).toBe(REPLAY_VERIFIED);
+  });
+  it('reads no anchor when the run never settled, the chain does not answer, or the metadata has no head', async () => {
+    const unsettled = stage().filter((e) => e.type !== 'TransactionConfirmed');
+    expect(await readAnchor(unsettled, koios)).toBeNull();
+    expect(await readAnchor(stage(), async () => null)).toBeNull();
+    expect(await readAnchor(stage(), () => Promise.reject(new Error('relay down')))).toBeNull();
+    for (const head of [undefined, null, 42, { seq: '30', hash: 'ab' }, { seq: 30 }]) {
+      expect(await readAnchor(stage(), withHead(head))).toBeNull();
+    }
+  });
+  it('fails the replay when the on-chain head disagrees with the stored log', async () => {
+    const anchor = await readAnchor(stage(), withHead('ff'.repeat(32)));
+    expect(replayPlan(stage(), anchor).banner).toBe(REPLAY_FAILED);
+  });
+  it('lists the actions whose evidence runs past the anchor', () => {
+    expect([...unanchoredActions(stage(), 30)]).toEqual(['A-0002', 'A-0003', 'A-0004', 'A-0005', 'A-0006', 'A-0007']);
+    expect([...unanchoredActions(stage(), 60)]).toEqual([]);
+    expect([...unanchoredActions(stage(), null)]).toEqual([]);
+  });
+});
+
 describe('run reducer on damaged input', () => {
   it('counts a corrupt payload as ignored instead of throwing', () => {
     const events = stage();
@@ -224,6 +287,25 @@ describe('run reducer on damaged input', () => {
     const events = stage();
     expect(reduceRun(events).gap).toBe(false);
     expect(reduceRun(events.filter((e) => e.seq !== 4)).gap).toBe(true);
+  });
+  it('flags a stream that does not begin at the start of the run', () => {
+    expect(reduceRun(stage().slice(1)).gap).toBe(true);
+    expect(reduceRun(recorded.logs['run-lab-recipient_swap']!).gap).toBe(false);
+  });
+  it('accepts only plain integer strings for amounts', () => {
+    const events = stage();
+    const before = events.slice(0, 5).reduce(applyEvent, emptyRun());
+    for (const amount of ['', '0x10', '1e3', ' 8', '8.42']) {
+      const auth = structuredClone(events.find((x) => x.type === 'AuthorizationIssued')!) as RunEvent;
+      if (auth.type === 'AuthorizationIssued') auth.payload.authorization.fields.amount = amount;
+      expect(applyEvent(before, { ...auth, seq: 99 }).ignored, amount).toBe(before.ignored + 1);
+      const proposal = structuredClone(events.find((x) => x.type === 'ActionProposed')!) as RunEvent;
+      if (proposal.type === 'ActionProposed') proposal.payload.action.amount.value = amount;
+      expect(applyEvent(before, { ...proposal, seq: 99, action_id: 'A-9999' }).ignored, amount).toBe(before.ignored + 1);
+    }
+    const started = structuredClone(events[0]!) as RunEvent;
+    if (started.type === 'RunStarted') started.payload.limits.hard_cap = '0x10';
+    expect(applyEvent(emptyRun(), started)).toMatchObject({ started: null, ignored: 1 });
   });
 });
 

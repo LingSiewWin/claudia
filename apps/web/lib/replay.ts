@@ -1,4 +1,5 @@
 import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '@authority/core';
+import type { KoiosTx } from './chain';
 import type { RunEvent } from './contract';
 
 /** Delay in ms before each event when replaying at stage speed: recorded gaps clamped to [min, max]. */
@@ -39,6 +40,7 @@ export function logIntact(events: RunEvent[], startsChain = true): boolean {
 export const REPLAY_VERIFIED = 'REPLAY — VERIFIED HISTORICAL RUN';
 export const REPLAY_UNANCHORED = 'REPLAY — RECORDED RUN · INTEGRITY CHECKED, NOT ANCHORED';
 export const REPLAY_FAILED = 'REPLAY — EVIDENCE LOG FAILED VERIFICATION';
+export const replayVerifiedThrough = (seq: number) => `REPLAY — VERIFIED THROUGH EVENT ${seq} · LATER EVENTS NOT ANCHORED`;
 
 /** The log head committed on-chain in the settlement transaction metadata (log_head), read by the browser itself. */
 export interface LogAnchor {
@@ -57,8 +59,8 @@ export interface ReplayPlan {
 
 /**
  * What REPLAY plays. VERIFIED needs an internally consistent log AND the on-chain anchor matching the event at
- * anchor.seq. Consistent but unanchored plays under a weaker banner. Anything inconsistent, or an anchor that
- * disagrees, plays nothing.
+ * anchor.seq; an anchor short of the last event says how far it reaches. Consistent but unanchored plays under a
+ * weaker banner. Anything inconsistent, or an anchor that disagrees, plays nothing.
  */
 export function replayPlan(events: RunEvent[], anchor: LogAnchor | null = null, startsChain = true): ReplayPlan {
   const failed = { verified: false, banner: REPLAY_FAILED, events: [], delays: [], anchoredThrough: null };
@@ -66,5 +68,32 @@ export function replayPlan(events: RunEvent[], anchor: LogAnchor | null = null, 
   const play = { events, delays: replayDelays(events) };
   if (!anchor) return { verified: false, banner: REPLAY_UNANCHORED, ...play, anchoredThrough: null };
   if (events.find((e) => e.seq === anchor.seq)?.hash !== anchor.head) return failed;
-  return { verified: true, banner: REPLAY_VERIFIED, ...play, anchoredThrough: anchor.seq };
+  const whole = anchor.seq === events[events.length - 1]?.seq;
+  return { verified: true, banner: whole ? REPLAY_VERIFIED : replayVerifiedThrough(anchor.seq), ...play, anchoredThrough: anchor.seq };
+}
+
+/**
+ * The log head the run's latest settlement committed on Cardano (metadata label 1694, `log_head`), from chain data the
+ * browser reads itself. `{ seq, hash }` names its event; a bare hash is the head at that settlement's
+ * TransactionConfirmed event. A chain that does not answer, or metadata without a head, is no anchor, never a pass.
+ */
+export async function readAnchor(events: RunEvent[], read: (txHash: string) => Promise<KoiosTx | null>): Promise<LogAnchor | null> {
+  const settled = events.findLast((e) => e.type === 'TransactionConfirmed');
+  if (settled?.type !== 'TransactionConfirmed') return null;
+  let head: unknown;
+  try {
+    head = ((await read(settled.payload.tx_hash))?.metadata?.['1694'] as { log_head?: unknown } | undefined)?.log_head;
+  } catch {
+    return null;
+  }
+  if (typeof head === 'string') return { seq: settled.seq, head };
+  const named = head as { seq?: unknown; hash?: unknown } | null | undefined;
+  if (typeof named?.seq === 'number' && Number.isInteger(named.seq) && typeof named.hash === 'string') return { seq: named.seq, head: named.hash };
+  return null;
+}
+
+/** Actions with any event after the anchored head: their outcome is not covered by the on-chain anchor. */
+export function unanchoredActions(events: RunEvent[], anchoredThrough: number | null): Set<string> {
+  if (anchoredThrough === null) return new Set();
+  return new Set(events.flatMap((e) => (e.action_id !== null && e.seq > anchoredThrough ? [e.action_id] : [])));
 }

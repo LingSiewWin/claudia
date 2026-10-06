@@ -5,6 +5,8 @@ export const config = {
   sepoliaRpc: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com',
   registryAddress: (process.env.NEXT_PUBLIC_VERIFICATION_REGISTRY_ADDRESS || '').toLowerCase(),
   stageMandateId: process.env.NEXT_PUBLIC_STAGE_MANDATE_ID || 'M-001',
+  /** The recorded run that opens the evidence chain. Only this run is replayed under the genesis rule. */
+  stageRunId: process.env.NEXT_PUBLIC_STAGE_RUN_ID || 'run-stage-0001',
 };
 
 export const cardanoTxUrl = (hash: string) => `https://preprod.cexplorer.io/tx/${hash}`;
