@@ -6,7 +6,8 @@
   "exports": { ".": "./src/index.ts", "./codec": "./src/codec.ts" },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "verify-invoice": "tsx scripts/verify-invoice.ts"
   },
   "dependencies": {
     "@authority/core": "workspace:*",

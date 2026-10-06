@@ -8,6 +8,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "vectors": "tsx scripts/gen-vectors.ts && tsx scripts/gen-decision-vectors.ts",
+    "aiken:gen": "tsx scripts/gen-aiken.ts",
     "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {

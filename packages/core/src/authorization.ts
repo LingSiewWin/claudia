@@ -22,6 +22,8 @@ export interface AuthorizationFields {
   recipient: string;
   nonce: bigint;
   validUntil: bigint;
+  // The name is fixed by the message layout; it means the release needs the mandate's payment approver
+  // (anchor approver_pkh) to co-sign, not the principal admin key.
   requiresPrincipal: boolean;
   verificationRef: string | null;
 }
