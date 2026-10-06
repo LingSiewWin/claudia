@@ -2,5 +2,6 @@ packages:
   - "apps/*"
   - "packages/*"
   - "workflows/*"
+  - "scripts"
 allowBuilds:
   esbuild: false
