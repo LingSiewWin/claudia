@@ -52,6 +52,8 @@ export function mandateRuleProblems(m: Mandate): string[] {
   const problems: string[] = [];
   const ids = m.constraints.map((c) => c.id);
   if (new Set(ids).size !== ids.length) problems.push('constraint ids must be unique');
+  // The on-chain anchor holds one principal key, so every approval must come from that one approver.
+  if (m.approvers.length !== 1) problems.push('needs exactly one approver (the on-chain principal)');
   const roles = new Set(m.approvers.map((a) => a.role));
   for (const c of m.constraints) {
     if (c.on_violation === 'REQUIRE_APPROVAL' && (c.approver === undefined || !roles.has(c.approver))) {
@@ -87,8 +89,7 @@ export function mandateHash(m: Mandate): string {
 
 export function anchorProjection(m: Mandate): AnchorProjection {
   const l = enforcementLimits(m);
-  const autonomous = m.constraints.find((c) => c.kind === 'amount_lte' && c.on_violation === 'REQUIRE_APPROVAL');
-  const principal = m.approvers.find((a) => a.role === autonomous?.approver);
+  const principal = m.approvers.length === 1 ? m.approvers[0] : undefined;
   if (!principal || l.autonomous === null || l.hardCap === null || l.dailyCap === null || l.treasuryMinimum === null) {
     throw new MandateError(mandateRuleProblems(m));
   }

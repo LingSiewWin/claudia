@@ -20,6 +20,13 @@ describe('parseMandate', () => {
     expect(() => parseMandate(withConstraints(cs))).toThrow(MandateError);
   });
 
+  it('rejects more than one approver: the anchor holds a single principal key', () => {
+    const ceo = { role: 'CEO', cardano_key_hash: '66'.repeat(28) };
+    expect(() => parseMandate({ ...M001_INPUT, approvers: [...M001_INPUT.approvers, ceo] })).toThrow(/exactly one approver/);
+    const split = M001_INPUT.constraints.map((c) => (c.id === 'counterparty' ? { ...c, approver: 'CEO' } : c));
+    expect(() => parseMandate({ ...withConstraints(split), approvers: [...M001_INPUT.approvers, ceo] })).toThrow(/exactly one approver/);
+  });
+
   it('rejects duplicate constraint ids', () => {
     const cs = [...M001_INPUT.constraints, { id: 'purpose', kind: 'purpose_in', values: ['x'], on_violation: 'DENY' }];
     expect(() => parseMandate(withConstraints(cs))).toThrow(/unique/);
@@ -51,6 +58,11 @@ describe('anchorProjection', () => {
       treasury_minimum: 100_000_000n,
       valid_until_ms: Date.parse('2026-11-06T00:00:00Z'),
     });
+  });
+
+  it('refuses to project a mandate with several approvers', () => {
+    const approvers = [...M001.approvers, { role: 'CEO', cardano_key_hash: '66'.repeat(28) }];
+    expect(() => anchorProjection({ ...M001, approvers })).toThrow(/exactly one approver/);
   });
 
   it('mandateHash is order-independent', () => {
