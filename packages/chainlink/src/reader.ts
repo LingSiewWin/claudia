@@ -30,7 +30,8 @@ export async function readReportAtTx(
   actionHash: string,
   txHash: Hex,
 ): Promise<StoredReport> {
-  const receipt = await client.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  // 2 confirmations guard against a shallow reorg; finality (~16 min) would exceed the 600 s freshness window.
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, confirmations: 2, timeout: 120_000 });
   if (receipt.status !== 'success') throw new Error(`tx ${txHash} reverted`);
   const events = parseEventLogs({ abi: REGISTRY_ABI, eventName: 'InvoiceVerified', logs: receipt.logs }).filter(
     (e) => e.address.toLowerCase() === registry.toLowerCase() && e.args.actionHash === `0x${actionHash}`,

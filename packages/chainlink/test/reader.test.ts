@@ -3,7 +3,7 @@ import { stringToHex } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { reportFromStored, type StoredFields, toStoredFields } from '../src/codec';
 import { readReportAtTx, type StoredReport, verifyStoredReport } from '../src/reader';
-import { FIXTURE, fakeChain, REGISTRY } from './fixtures';
+import { FIXTURE, fakeChain, invoiceVerifiedLog, REGISTRY } from './fixtures';
 
 const expected = { actionHash: FIXTURE.action_hash, triggerId: FIXTURE.trigger_id };
 const stored = (fields: StoredFields = toStoredFields(FIXTURE)): StoredReport => ({
@@ -62,18 +62,33 @@ describe('verifyStoredReport: trust only Sepolia reports whose hash matches', ()
 describe('readReportAtTx: reads only the configured registry', () => {
   const tx = `0x${'ab'.repeat(32)}` as const;
 
-  it('reads latestReport from the registry at the block of the write', async () => {
-    const { client, reads } = fakeChain(FIXTURE);
+  it('reads latestReport from the registry at the block of the write, after 2 confirmations', async () => {
+    const { client, reads, receipts } = fakeChain(FIXTURE);
     const s = await readReportAtTx(client, REGISTRY, FIXTURE.action_hash, tx);
     expect(verifyStoredReport(s, expected).report).toEqual(FIXTURE);
+    expect(receipts).toEqual([{ hash: tx, confirmations: 2, timeout: 120_000 }]);
     expect(reads).toEqual([
       { address: REGISTRY, abi: expect.anything(), functionName: 'latestReport', args: [`0x${FIXTURE.action_hash}`], blockNumber: 7n },
     ]);
   });
 
   it('ignores an InvoiceVerified event emitted by another contract', async () => {
-    const { client, reads } = fakeChain(FIXTURE, { emitter: '0x000000000000000000000000000000000000dEaD' });
+    const { client, reads } = fakeChain(FIXTURE, { logs: [invoiceVerifiedLog(FIXTURE, '0x000000000000000000000000000000000000dEaD')] });
     await expect(readReportAtTx(client, REGISTRY, FIXTURE.action_hash, tx)).rejects.toThrow('has 0 InvoiceVerified events');
+    expect(reads).toEqual([]);
+  });
+
+  it('ignores an InvoiceVerified event for another action in the same tx', async () => {
+    const other = { ...FIXTURE, action_hash: '99'.repeat(32) };
+    const { client, reads } = fakeChain(FIXTURE, { logs: [invoiceVerifiedLog(other)] });
+    await expect(readReportAtTx(client, REGISTRY, FIXTURE.action_hash, tx)).rejects.toThrow('has 0 InvoiceVerified events');
+    expect(reads).toEqual([]);
+  });
+
+  it('rejects a tx with two InvoiceVerified events for this action', async () => {
+    const second = { ...FIXTURE, trigger_id: 'second-write' };
+    const { client, reads } = fakeChain(FIXTURE, { logs: [invoiceVerifiedLog(FIXTURE), invoiceVerifiedLog(second)] });
+    await expect(readReportAtTx(client, REGISTRY, FIXTURE.action_hash, tx)).rejects.toThrow('has 2 InvoiceVerified events');
     expect(reads).toEqual([]);
   });
 

@@ -39,36 +39,47 @@ export function verificationRequestFor(action: ActionIR, customerId: string): Ve
 export function simulateBroadcast(opts: { workflowsDir: string; envFile: string; creBin?: string; timeoutMs?: number }): Trigger {
   const run = promisify(execFile);
   return async (payload) => {
-    const { stdout, stderr } = await run(
-      opts.creBin ?? 'cre',
-      [
-        'workflow', 'simulate', 'cre-verifier',
-        '--target', 'sepolia-simulation',
-        '--non-interactive', '--trigger-index', '0',
-        '--broadcast',
-        '--http-payload', JSON.stringify(payload),
-        '-e', opts.envFile,
-      ],
-      { cwd: opts.workflowsDir, timeout: opts.timeoutMs ?? 300_000, maxBuffer: 16 * 1024 * 1024 },
-    );
-    return `${stdout}\n${stderr}`;
+    try {
+      const { stdout, stderr } = await run(
+        opts.creBin ?? 'cre',
+        [
+          'workflow', 'simulate', 'cre-verifier',
+          '--target', 'sepolia-simulation',
+          '--non-interactive', '--trigger-index', '0',
+          '--broadcast',
+          '--http-payload', JSON.stringify(payload),
+          '-e', opts.envFile,
+        ],
+        { cwd: opts.workflowsDir, timeout: opts.timeoutMs ?? 300_000, maxBuffer: 16 * 1024 * 1024 },
+      );
+      return `${stdout}\n${stderr}`;
+    } catch (e) {
+      // execFile's message embeds the full command line and all of stderr; keep only a short tail.
+      const { code, signal, stderr } = e as { code?: unknown; signal?: unknown; stderr?: unknown };
+      throw new Error(`cre simulate failed (${String(code ?? signal)}): ${String(stderr ?? '').slice(-500)}`);
+    }
   };
 }
 
-const TX_LINE = /InvoiceVerified tx=(0x[0-9a-fA-F]{64})/;
+// The workflow's own log line, matched as a whole line so logged data cannot inject a tx hash.
+const TX_LINE = /^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z )?\[USER LOG\] InvoiceVerified tx=(0x[0-9a-f]{64}) report_hash=[0-9a-f]{64}$/gm;
 
 // Never returns a report the chain does not hold: the workflow output is used only to find the tx.
 export async function verifyInvoice(
   req: VerificationRequest,
   deps: { trigger: Trigger; client: PublicClient; registry: Address; newTriggerId?: () => string },
 ): Promise<VerificationOutcome> {
-  const payload: TriggerPayload = { trigger_id: (deps.newTriggerId ?? randomUUID)(), ...req };
+  // The id is issued here and set last, so nothing in req can replace it.
+  const triggerId = (deps.newTriggerId ?? randomUUID)();
+  const payload: TriggerPayload = { ...req, trigger_id: triggerId };
   try {
     const output = await deps.trigger(payload);
-    const tx = TX_LINE.exec(output)?.[1] as Hex | undefined;
-    if (tx === undefined) throw new Error('workflow output has no InvoiceVerified tx');
+    const txs = Array.from(output.matchAll(TX_LINE), (m) => m[1] as Hex);
+    if (txs.length === 0) throw new Error('workflow output has no InvoiceVerified tx');
+    if (txs.length > 1) throw new Error('workflow output has more than one InvoiceVerified tx');
+    const tx = txs[0]!;
     const stored = await readReportAtTx(deps.client, deps.registry, req.action_hash, tx);
-    const verified = verifyStoredReport(stored, { actionHash: req.action_hash, triggerId: payload.trigger_id });
+    const verified = verifyStoredReport(stored, { actionHash: req.action_hash, triggerId });
     return { status: 'reported', verified, tx_hash: tx };
   } catch (e) {
     return { status: 'unavailable', error: e instanceof Error ? e.message : String(e) };
