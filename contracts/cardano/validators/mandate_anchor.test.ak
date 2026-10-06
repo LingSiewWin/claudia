@@ -361,6 +361,33 @@ test update_hands_over_to_approver_key() {
   )
 }
 
+/// Promoting the old approver key to principal (rotating the approver in the
+/// same Update) is a handover like any other: the new principal must sign.
+test update_promotes_old_approver_without_its_signature() {
+  let promoted = AnchorDatum {
+    ..bumped,
+    principal_pkh: approver,
+    approver_pkh: new_principal,
+  }
+  !spend(mandate, Update { new: promoted }, anchor_spend_tx(mandate, promoted))
+}
+
+test update_promotes_old_approver_with_both_principals() {
+  let promoted = AnchorDatum {
+    ..bumped,
+    principal_pkh: approver,
+    approver_pkh: new_principal,
+  }
+  spend(
+    mandate,
+    Update { new: promoted },
+    Transaction {
+      ..anchor_spend_tx(mandate, promoted),
+      extra_signatories: [cfo, approver],
+    },
+  )
+}
+
 test update_signed_only_by_new_principal() {
   let takeover = AnchorDatum { ..bumped, principal_pkh: intruder }
   !spend(
