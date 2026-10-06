@@ -78,6 +78,14 @@ describe('listOpenInvoices', () => {
   });
 });
 
+describe('listOpenInvoices id validation', () => {
+  it.each(['', undefined as unknown as string, 'acme'])('rejects customer id %j before any request', async (id) => {
+    const { stripe, calls } = fakeStripe(() => ({ json: list([]) }));
+    await expect(listOpenInvoices(stripe, id)).rejects.toThrow(TypeError);
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('getInvoice', () => {
   it('returns the summary', async () => {
     const { stripe, calls } = fakeStripe(() => ({ json: invoiceJson({ status: 'paid' }) }));

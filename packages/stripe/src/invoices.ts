@@ -31,6 +31,7 @@ export interface InvoiceSummary {
   cardano_tx_hash: string | null;
 }
 
+const CUSTOMER_ID = /^cus_[A-Za-z0-9]+$/;
 const INVOICE_ID = /^in_[A-Za-z0-9]{1,61}$/;
 
 export function readOnlyStripe(key: string | undefined, config: Stripe.StripeConfig = {}): Stripe {
@@ -61,6 +62,8 @@ export function toSummary(invoice: Stripe.Invoice): InvoiceSummary {
 }
 
 export async function listOpenInvoices(stripe: Stripe, customerId: string): Promise<InvoiceSummary[]> {
+  // A missing id would drop the filter and list every open invoice on the account.
+  if (!CUSTOMER_ID.test(customerId)) throw new TypeError('customer id must look like cus_...');
   const invoices = await stripe.invoices
     .list({ customer: customerId, status: 'open', limit: 100 })
     .autoPagingToArray({ limit: 1000 });
