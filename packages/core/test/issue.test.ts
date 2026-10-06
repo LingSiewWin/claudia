@@ -5,7 +5,7 @@ import { canonicalHash } from '../src/hash';
 import * as core from '../src/index';
 import { AUTHORIZATION_TTL_MS, type IssueInput, IssuanceRefused, issueAuthorization } from '../src/issue';
 import type { ActionIR, Mandate } from '../src/schemas';
-import { ATTACKER_ADDR, CHAIN, ENGINE_PK, ENGINE_SK, M001, NOW, action, propose, state, verified } from './fixtures';
+import { ATTACKER_ADDR, CHAIN, ENGINE_PK, ENGINE_SK, GLOBEX_ADDR, M001, NOW, action, propose, state, verified } from './fixtures';
 
 function prepared(a: ActionIR, opts: { signed?: boolean; now?: number; mandate?: Mandate } = {}): IssueInput {
   const now = opts.now ?? NOW;
@@ -54,6 +54,13 @@ describe('issueAuthorization (gate)', () => {
     expect(refusal({ ...input, approval: { ...cfo(a), approver: 'CEO' } })).toBe('APPROVAL_MISSING');
     const record = issueAuthorization({ ...input, approval: cfo(a) });
     expect(record.fields.requires_principal).toBe(true);
+  });
+
+  it('a counterparty-only approval below the autonomous limit still sets requires_principal', () => {
+    const a = action({ id: 'A-G0042', amount: 5, counterparty: 'globex', display: 'Globex (demo vendor)', recipient: GLOBEX_ADDR, invoice: 'INV-G-0042' });
+    const input = prepared(a);
+    expect(evaluate(input).approvals_required.map((x) => x.reason)).toEqual(['COUNTERPARTY_NOT_APPROVED']);
+    expect(issueAuthorization({ ...input, approval: cfo(a) }).fields.requires_principal).toBe(true);
   });
 
   it('refuses DENY and NEEDS_VERIFICATION', () => {
