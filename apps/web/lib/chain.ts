@@ -50,8 +50,9 @@ export async function koiosTx(txHash: string): Promise<KoiosTx | null> {
     body: JSON.stringify({ _tx_hashes: [txHash], _inputs: true, _scripts: true, _metadata: true }),
   });
   if (!res.ok) throw new Error(`Koios HTTP ${res.status}`);
-  const rows = (await res.json()) as KoiosTx[];
-  return rows[0] ?? null;
+  const rows: unknown = await res.json();
+  if (!Array.isArray(rows)) throw new Error('Koios returned an unexpected response');
+  return (rows[0] as KoiosTx | undefined) ?? null;
 }
 
 export async function sepoliaReceipt(txHash: string): Promise<EthReceipt | null> {
@@ -74,11 +75,12 @@ export const bytesOf = (d: PlutusJson | null): string | null => (d && 'bytes' in
 export const intOf = (d: PlutusJson | null): number | null => (d && 'int' in d ? d.int : null);
 
 /** True when any `bytes` node anywhere in the datum equals `hex`. Layout-independent search. */
-export function containsBytes(d: PlutusJson, hex: string): boolean {
-  if ('bytes' in d) return d.bytes.toLowerCase() === hex.toLowerCase();
-  if ('fields' in d) return d.fields.some((x) => containsBytes(x, hex));
-  if ('list' in d) return d.list.some((x) => containsBytes(x, hex));
-  if ('map' in d) return d.map.some(({ k, v }) => containsBytes(k, hex) || containsBytes(v, hex));
+export function containsBytes(d: PlutusJson | null | undefined, hex: string): boolean {
+  if (typeof d !== 'object' || d === null) return false;
+  if ('bytes' in d) return typeof d.bytes === 'string' && d.bytes.toLowerCase() === hex.toLowerCase();
+  if ('fields' in d) return Array.isArray(d.fields) && d.fields.some((x) => containsBytes(x, hex));
+  if ('list' in d) return Array.isArray(d.list) && d.list.some((x) => containsBytes(x, hex));
+  if ('map' in d) return Array.isArray(d.map) && d.map.some((e) => containsBytes(e?.k, hex) || containsBytes(e?.v, hex));
   return false;
 }
 

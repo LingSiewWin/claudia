@@ -69,10 +69,14 @@ export interface Payloads {
 }
 export type EventType = keyof Payloads;
 
+/** Timestamps are RFC 3339 UTC with milliseconds and a Z suffix (Date.toISOString); the event hash covers the exact string. */
+export const CREATED_AT_FORMAT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 interface Envelope {
   seq: number;
   run_id: string;
   action_id: string | null;
+  /** Matches CREATED_AT_FORMAT. */
   created_at: string;
   hash: string;
   prev_hash: string;
@@ -110,8 +114,8 @@ export interface Receipt {
   delegate: string;
   mandate: { id: string; version: number; hash: string; anchor: string };
   action: { ir: ActionIR; hash: string; agent_signature: string };
-  evaluation: { outcome: string; reason: string | null; checks: Evaluation['checks'] };
-  verification: { id: string; report_hash: string; sepolia_tx: string; result: string } | null;
+  evaluation: { outcome: Evaluation['outcome']; reason: ReasonCode | null; checks: Evaluation['checks'] };
+  verification: { id: string; report_hash: string; sepolia_tx: string; result: VerificationReport['result'] } | null;
   authorization: {
     id: string;
     verification_id: string | null;

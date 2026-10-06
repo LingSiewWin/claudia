@@ -1,5 +1,18 @@
-import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '@authority/core';
+import {
+  bytesToHex,
+  canonicalHash,
+  canonicalJson,
+  concatBytes,
+  hexToBytes,
+  mandateHash,
+  publicKeyFromSecret,
+  sha256Hex,
+  utf8ToBytes,
+  verifyAuthorizationRecord,
+  verifyProposal,
+} from '@authority/core';
 import { describe, expect, it } from 'vitest';
+import { CREATED_AT_FORMAT } from '../lib/contract';
 import { formatUnits } from '../lib/format';
 import { recorded, stage } from './load';
 
@@ -34,6 +47,57 @@ describe('recorded fixtures', () => {
   });
 
   it('contain no secret-looking material', () => {
-    expect(JSON.stringify(recorded)).not.toMatch(/mnemonic|-----BEGIN|xprv|secret_key|ed25519_sk/i);
+    const words = [['mnemo', 'nic'], ['-----BEGIN'], ['xp', 'rv'], ['secret', '_key'], ['ed25519', '_sk']].map((w) => w.join(''));
+    expect(JSON.stringify(recorded)).not.toMatch(new RegExp(words.join('|'), 'i'));
+  });
+
+  it('pin the created_at format the event hash depends on', () => {
+    for (const e of Object.values(recorded.logs).flat()) expect(e.created_at).toMatch(CREATED_AT_FORMAT);
+  });
+
+  it('carry valid receipt hashes, mandate hashes, and signatures', () => {
+    const events = Object.values(recorded.logs).flat();
+    const engineKeys = new Set(events.flatMap((e) => (e.type === 'RunStarted' ? [e.payload.engine_public_key] : [])));
+    for (const [id, b] of Object.entries(recorded.bundles)) {
+      expect(canonicalHash(b.receipt), id).toBe(b.receipt_hash);
+      expect(mandateHash(b.mandate), id).toBe(b.receipt.mandate.hash);
+      expect(verifyProposal(b.receipt.action.hash, b.receipt.action.agent_signature, b.mandate.delegate.public_key.replace('ed25519:', ''))).toBe(true);
+      expect(canonicalHash(b.receipt.action.ir)).toBe(b.receipt.action.hash);
+      expect(verifyAuthorizationRecord(b.authorization, b.receipt.authorization.engine_public_key)).toBe(true);
+      expect(engineKeys.has(b.receipt.authorization.engine_public_key)).toBe(true);
+      expect(events.some((e) => e.hash === b.receipt.evidence.first_event_hash)).toBe(true);
+      expect(events.some((e) => e.hash === b.receipt.evidence.last_event_hash)).toBe(true);
+    }
+    for (const [id, v] of Object.entries(recorded.mandates)) expect(mandateHash(v.mandate), id).toBe(v.mandate_hash);
+    for (const e of events) {
+      if (e.type === 'ActionProposed') expect(verifyProposal(e.payload.action_hash, e.payload.agent_signature ?? '', e.payload.action.actor === 'cfo-agent-01' ? agentKeyOf(e.run_id) : '')).toBe(true);
+      if (e.type === 'ActionProposed') expect(canonicalHash(e.payload.action)).toBe(e.payload.action_hash);
+      if (e.type === 'CREVerificationCompleted') expect(canonicalHash(e.payload.report)).toBe(e.payload.report_hash);
+      if (e.type === 'AuthorizationIssued') {
+        const start = (recorded.logs[e.run_id] ?? []).find((x) => x.type === 'RunStarted');
+        expect(verifyAuthorizationRecord(e.payload.authorization, start?.type === 'RunStarted' ? start.payload.engine_public_key : '')).toBe(true);
+      }
+    }
+  });
+
+  it('use only the fixed TEST keys', () => {
+    const test = new Set([1, 2, 3, 4, 5, 6].map((n) => bytesToHex(publicKeyFromSecret(new Uint8Array(32).fill(n)))));
+    const events = Object.values(recorded.logs).flat();
+    const keys = [
+      ...events.flatMap((e) => (e.type === 'RunStarted' ? [e.payload.agent_public_key, e.payload.engine_public_key] : [])),
+      ...Object.values(recorded.mandates).flatMap((v) => [v.mandate.delegate.public_key, v.mandate.authority_engine.public_key]),
+      ...Object.values(recorded.bundles).map((b) => b.receipt.authorization.engine_public_key),
+    ].map((k) => k.replace('ed25519:', ''));
+    expect(keys.length).toBeGreaterThan(10);
+    for (const k of keys) expect(test.has(k), k).toBe(true);
+  });
+
+  it('include a revoked mandate', () => {
+    expect(recorded.mandates['M-REVOKED']?.anchor.status).toBe('revoked');
   });
 });
+
+function agentKeyOf(runId: string): string {
+  const start = (recorded.logs[runId] ?? []).find((x) => x.type === 'RunStarted');
+  return start?.type === 'RunStarted' ? start.payload.agent_public_key : '';
+}

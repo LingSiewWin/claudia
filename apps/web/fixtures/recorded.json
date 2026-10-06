@@ -7099,6 +7099,131 @@
     "last_nonce": "1",
     "tx_hash": "1c10d76c9dcebb95305719677fca468984673a1699871dc351e8dfe7898268f8"
    }
+  },
+  "M-REVOKED": {
+   "mandate": {
+    "schema": "mandate/v0.1",
+    "id": "M-REVOKED",
+    "version": 2,
+    "status": "active",
+    "principal": {
+     "type": "organization",
+     "id": "acme",
+     "name": "Acme Corp"
+    },
+    "delegate": {
+     "type": "agent",
+     "id": "cfo-agent-01",
+     "public_key": "ed25519:8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17"
+    },
+    "approvers": [
+     {
+      "role": "CFO",
+      "cardano_key_hash": "7311160397fe202bc29b6d499bf819a07e69638fd907bcd68871de3b"
+     }
+    ],
+    "authority_engine": {
+     "public_key": "ed25519:6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1"
+    },
+    "asset": {
+     "symbol": "USDM",
+     "decimals": 6
+    },
+    "validity": {
+     "starts_at": "2026-10-06T00:00:00Z",
+     "expires_at": "2026-11-06T00:00:00Z"
+    },
+    "delegation": {
+     "allowed": false
+    },
+    "constraints": [
+     {
+      "id": "purpose",
+      "on_violation": "DENY",
+      "kind": "purpose_in",
+      "values": [
+       "invoice_payment"
+      ]
+     },
+     {
+      "id": "action",
+      "on_violation": "DENY",
+      "kind": "action_in",
+      "values": [
+       "pay_invoice"
+      ]
+     },
+     {
+      "id": "asset",
+      "on_violation": "DENY",
+      "kind": "asset_eq",
+      "value": "USDM"
+     },
+     {
+      "id": "counterparty",
+      "on_violation": "REQUIRE_APPROVAL",
+      "approver": "CFO",
+      "kind": "counterparty_in",
+      "values": [
+       "aws"
+      ]
+     },
+     {
+      "id": "autonomous",
+      "on_violation": "REQUIRE_APPROVAL",
+      "approver": "CFO",
+      "kind": "amount_lte",
+      "value": "1000000"
+     },
+     {
+      "id": "hard_cap",
+      "on_violation": "DENY",
+      "kind": "amount_lte",
+      "value": "5000000"
+     },
+     {
+      "id": "daily_cap",
+      "on_violation": "DENY",
+      "kind": "daily_spend_lte",
+      "value": "5000000"
+     },
+     {
+      "id": "treasury_floor",
+      "on_violation": "DENY",
+      "kind": "balance_after_gte",
+      "value": "1000000"
+     },
+     {
+      "id": "invoice_facts",
+      "on_violation": "DENY",
+      "kind": "verified_facts",
+      "source": "stripe"
+     }
+    ]
+   },
+   "mandate_hash": "04bf4d3e8a9be9756a704c032fed55e438b25a7b504982c36c4f76b41e3217c2",
+   "limits": {
+    "symbol": "USDM",
+    "decimals": 6,
+    "autonomous_limit": "1000000",
+    "hard_cap": "5000000",
+    "daily_cap": "5000000",
+    "treasury_minimum": "1000000"
+   },
+   "anchor": {
+    "mandate_ref": "b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+    "version": 2,
+    "status": "revoked",
+    "tx_hash": "ba50c78a79a912175f582dd1866f20d1d157d5aef33019dd3ce80578750edc71"
+   },
+   "vault": {
+    "vault_hash": "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+    "balance": "10000000",
+    "spent_today": "0",
+    "day_index": 20733,
+    "last_nonce": "0",
+    "tx_hash": "01f6b25be0844ec5879371d83eba1608aa4afd7d7dbc05ccacc9c10e3cdf15f3"
+   }
   }
  },
  "approvals": [

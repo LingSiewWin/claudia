@@ -2,6 +2,7 @@ import type { ActionIR, ReasonCode } from '@authority/core';
 
 /** Base units -> display string with at least 2 decimals ("8.42", "18.00", "0.000001"). */
 export function formatUnits(value: string | bigint, decimals = 6): string {
+  if (typeof value === 'string' && !/^-?\d+$/.test(value)) throw new Error('Not a base-unit amount');
   const v = BigInt(value);
   const sign = v < 0n ? '-' : '';
   const abs = v < 0n ? -v : v;
@@ -26,8 +27,10 @@ export function parseUnits(text: string, decimals = 6): bigint {
  * Every amount on screen goes through here: the UI shows the amounts the chain and Stripe hold.
  */
 export function money(value: string | bigint, decimals = 6, whole = false): string {
-  const [int = '0', frac = '00'] = formatUnits(value, decimals).split('.');
-  return `$${int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${whole && frac === '00' ? '' : `.${frac}`}`;
+  const text = formatUnits(value, decimals);
+  const sign = text.startsWith('-') ? '-' : '';
+  const [int = '0', frac = '00'] = text.replace('-', '').split('.');
+  return `${sign}$${int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${whole && frac === '00' ? '' : `.${frac}`}`;
 }
 
 /** The business object an action is about: "AWS invoice", "NFT marketplace purchase". */
@@ -92,5 +95,6 @@ export const INVARIANT_TEXT: Record<string, string> = {
 };
 
 export function plainReason(code: string): string {
-  return (REASON_TEXT as Record<string, string>)[code] ?? INVARIANT_TEXT[code] ?? code;
+  if (Object.hasOwn(REASON_TEXT, code)) return (REASON_TEXT as Record<string, string>)[code] as string;
+  return Object.hasOwn(INVARIANT_TEXT, code) ? (INVARIANT_TEXT[code] as string) : code;
 }

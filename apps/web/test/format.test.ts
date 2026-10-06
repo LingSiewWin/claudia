@@ -39,3 +39,19 @@ describe('plainReason', () => {
     expect(plainReason('SOMETHING_NEW')).toBe('SOMETHING_NEW');
   });
 });
+
+describe('money rejects malformed amounts', () => {
+  it.each(['', '  ', '0x10', '8.42', '1e6', '+5', '--5'])('throws on %j', (bad) => {
+    expect(() => money(bad)).toThrow();
+  });
+  it('puts the sign before the currency mark', () => {
+    expect(money('-5000000')).toBe('-$5.00');
+    expect(money(-8420000n)).toBe('-$8.42');
+  });
+});
+
+describe('plainReason uses own properties only', () => {
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])('%s is returned as plain text', (k) => {
+    expect(plainReason(k)).toBe(k);
+  });
+});

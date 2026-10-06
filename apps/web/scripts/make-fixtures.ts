@@ -106,6 +106,19 @@ const MLAB: Setup = {
   start: '10',
 };
 
+// Revoked mandate (anchor status Revoked) for the "nobody can spend" state. No runs.
+const MREV: Setup = {
+  id: 'M-REVOKED',
+  version: 2,
+  engineSk: new Uint8Array(32).fill(5), // TEST key, fixtures only
+  agentSk: new Uint8Array(32).fill(6), // TEST key, fixtures only
+  vaultHash: 'a3'.repeat(28),
+  mandateRef: 'b3'.repeat(28),
+  limits: MLAB.limits,
+  vendors: ['aws'],
+  start: '10',
+};
+
 const pk = (sk: Uint8Array) => bytesToHex(publicKeyFromSecret(sk));
 
 function buildMandate(s: Setup, version = s.version): Mandate {
@@ -316,6 +329,7 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
     run.emit('CFOApproved', action.id, { approval_id, cfo_key_hash: CFO_PKH }, 8_000);
     report = cre(run, action, actionHash, ++round);
     evaluation = evaluateNow();
+    if (evaluation.outcome === 'DENY') throw new Error(`fixture ${action.id}: denied after CFO approval (${evaluation.reason}); refusing to authorize`);
     approved = true;
   }
   return { action, actionHash, signature, evaluation, report, approved, firstEventHash: first.hash };
@@ -648,6 +662,7 @@ for (const attack of LAB_ATTACKS) {
   labVault = v;
 }
 out.mandates['M-LAB'] = mandateView(MLAB, buildMandate(MLAB), labVault);
+out.mandates['M-REVOKED'] = mandateView(MREV, buildMandate(MREV), { balance: BigInt(u(MREV.start)), spent: 0n, nonce: 0n }, 'revoked');
 for (const r of out.runs) r.event_count = out.logs[r.run_id]?.length ?? 0;
 
 writeFileSync(new URL('../fixtures/recorded.json', import.meta.url), `${JSON.stringify(out, null, 1)}\n`);
