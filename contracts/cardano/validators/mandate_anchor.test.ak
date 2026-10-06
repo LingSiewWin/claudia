@@ -1,6 +1,7 @@
+use aiken/primitive/bytearray
 use authority/testkit.{
   anchor_input, anchor_mint_tx, anchor_ref, anchor_seed, anchor_spend_tx,
-  anchor_utxo, attacker, fee_input, intruder, key_address, mandate,
+  anchor_utxo, attacker, cfo, fee_input, intruder, key_address, mandate,
 }
 use authority/types.{
   Active, AnchorDatum, AnchorRedeemer, Revoke, Revoked, Update,
@@ -43,6 +44,9 @@ const bumped: AnchorDatum =
 
 const revoked: AnchorDatum =
   AnchorDatum { ..mandate, status: Revoked, version: 4 }
+
+const new_principal: ByteArray =
+  #"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
 
 // ## M1-M5: one-shot creation
 
@@ -180,6 +184,54 @@ test m4_long_asset_name() {
   )
 }
 
+test m4_long_engine_key() {
+  !mint_with(
+    AnchorDatum {
+      ..mandate,
+      engine_vkey: bytearray.push(mandate.engine_vkey, 0),
+    },
+  )
+}
+
+test m4_long_principal() {
+  !mint_with(
+    AnchorDatum {
+      ..mandate,
+      principal_pkh: bytearray.push(mandate.principal_pkh, 0),
+    },
+  )
+}
+
+test m4_long_asset_policy() {
+  !mint_with(
+    AnchorDatum {
+      ..mandate,
+      asset_policy: bytearray.push(mandate.asset_policy, 0),
+    },
+  )
+}
+
+test m_accepts_hard_cap_equal_to_autonomous_limit() {
+  mint_with(AnchorDatum { ..mandate, hard_cap: mandate.autonomous_limit })
+}
+
+test m_accepts_daily_cap_equal_to_autonomous_limit() {
+  mint_with(AnchorDatum { ..mandate, daily_cap: mandate.autonomous_limit })
+}
+
+test m_accepts_zero_treasury_minimum() {
+  mint_with(AnchorDatum { ..mandate, treasury_minimum: 0 })
+}
+
+test m_accepts_32_byte_asset_name() {
+  mint_with(
+    AnchorDatum {
+      ..mandate,
+      asset_name: #"0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  )
+}
+
 test m5_not_signed_by_principal() {
   !mint(
     Transaction { ..anchor_mint_tx(mandate), extra_signatories: [intruder] },
@@ -222,6 +274,33 @@ test update_signed_only_by_new_principal() {
       extra_signatories: [intruder],
     },
   )
+}
+
+test update_hands_over_to_new_principal() {
+  let handover = AnchorDatum { ..bumped, principal_pkh: new_principal }
+  spend(
+    mandate,
+    Update { new: handover },
+    Transaction {
+      ..anchor_spend_tx(mandate, handover),
+      extra_signatories: [cfo, new_principal],
+    },
+  )
+}
+
+test update_handover_without_new_principal() {
+  let handover = AnchorDatum { ..bumped, principal_pkh: new_principal }
+  !spend(mandate, Update { new: handover }, anchor_spend_tx(mandate, handover))
+}
+
+test update_to_max_u32_version() {
+  let top = AnchorDatum { ..bumped, version: 4_294_967_295 }
+  spend(mandate, Update { new: top }, anchor_spend_tx(mandate, top))
+}
+
+test update_version_over_u32() {
+  let over = AnchorDatum { ..bumped, version: 4_294_967_296 }
+  !spend(mandate, Update { new: over }, anchor_spend_tx(mandate, over))
 }
 
 test update_same_version() {

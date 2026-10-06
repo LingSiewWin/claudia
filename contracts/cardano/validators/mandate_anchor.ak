@@ -52,29 +52,48 @@ validator mandate_anchor(seed: OutputReference) {
       self.outputs,
       fn(o) { assets.quantity_of(o.value, own_hash, anchor_token_name) > 0 },
     )
-    let next: AnchorDatum = when redeemer is {
-      Update { new } -> new
-      Revoke -> AnchorDatum { ..old, status: Revoked, version: old.version + 1 }
-    }
-    let u_nft = assets.quantity_of(
+    let holds_nft = assets.quantity_of(
       own.output.value,
       own_hash,
       anchor_token_name,
     ) == 1
-    let u_signed = list.has(self.extra_signatories, old.principal_pkh)
-    let u_continuing = and {
-      out.address == own.output.address,
-      out.datum == InlineDatum(next),
+    let signed_by = fn(pkh) { list.has(self.extra_signatories, pkh) }
+    let continues_as = fn(next: AnchorDatum) {
+      and {
+        out.address == own.output.address,
+        out.datum == InlineDatum(next),
+      }
     }
-    let u_rule = when redeemer is {
-      Update { new } -> new.version > old.version && anchor.valid_datum(new)
-      Revoke -> True
-    }
-    and {
-      u_nft?,
-      u_signed?,
-      u_continuing?,
-      u_rule?,
+    when redeemer is {
+      Update { new } -> {
+        let update_nft = holds_nft
+        let update_signed = signed_by(old.principal_pkh)
+        // A new principal proves it holds its key, as at creation (M5).
+        let update_handover = new.principal_pkh == old.principal_pkh || signed_by(
+          new.principal_pkh,
+        )
+        let update_continuing = continues_as(new)
+        let update_rule = new.version > old.version && anchor.valid_datum(new)
+        and {
+          update_nft?,
+          update_signed?,
+          update_handover?,
+          update_continuing?,
+          update_rule?,
+        }
+      }
+      Revoke -> {
+        let revoke_nft = holds_nft
+        let revoke_signed = signed_by(old.principal_pkh)
+        let revoke_continuing = continues_as(
+          AnchorDatum { ..old, status: Revoked, version: old.version + 1 },
+        )
+        and {
+          revoke_nft?,
+          revoke_signed?,
+          revoke_continuing?,
+        }
+      }
     }
   }
 

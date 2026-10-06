@@ -6,9 +6,12 @@ use cardano/assets
 use cardano/transaction.{InlineDatum, Input}
 
 /// M4: limits are ordered and every key, hash and name has its exact length.
+/// The version fits the authorization message's u32 `mandate_version`: a
+/// larger one could never be signed for, and versions only go up.
 pub fn valid_datum(d: AnchorDatum) -> Bool {
   and {
     d.version >= 1,
+    d.version <= 4_294_967_295,
     d.autonomous_limit > 0,
     d.hard_cap >= d.autonomous_limit,
     d.daily_cap >= d.autonomous_limit,
