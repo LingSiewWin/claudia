@@ -5,3 +5,5 @@ export * from './ed25519';
 export * from './proposal';
 export * from './address';
 export * from './authorization';
+export * from './schemas';
+export * from './mandate';
