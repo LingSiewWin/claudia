@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { verifyAuthorizationRecord } from '../src/authorization';
 import { type Evaluation, evaluate } from '../src/engine';
+import { canonicalHash } from '../src/hash';
 import * as core from '../src/index';
 import { AUTHORIZATION_TTL_MS, type IssueInput, IssuanceRefused, issueAuthorization } from '../src/issue';
 import type { ActionIR, Mandate } from '../src/schemas';
@@ -21,7 +22,7 @@ function prepared(a: ActionIR, opts: { signed?: boolean; now?: number; mandate?:
   };
 }
 
-const cfo = (_a: ActionIR, at = NOW) => ({ approver: 'CFO', approved_at_ms: at });
+const cfo = (a: ActionIR, at = NOW) => ({ approver: 'CFO', action_hash: canonicalHash(a), approved_at_ms: at });
 
 const refusal = (input: IssueInput) => {
   try {
@@ -126,6 +127,8 @@ describe('issueAuthorization (refusals that remain)', () => {
     ['approval in the future', { ...prepared(needsCfo), approval: cfo(needsCfo, NOW + 1) }, 'APPROVAL_MISSING'],
     ['approval older than 60s', { ...prepared(needsCfo), approval: cfo(needsCfo, NOW - 60_001) }, 'APPROVAL_MISSING'],
     ['approval with NaN time', { ...prepared(needsCfo), approval: cfo(needsCfo, Number.NaN) }, 'APPROVAL_MISSING'],
+    ['approval for another action', { ...prepared(needsCfo), approval: cfo(action({ id: 'A-3', amount: 18 })) }, 'APPROVAL_MISSING'],
+    ['approval without an action hash', { ...prepared(needsCfo), approval: { approver: 'CFO', approved_at_ms: NOW } as IssueInput['approval'] }, 'APPROVAL_MISSING'],
   ];
 
   it.each(cases)('refuses %s', (_, input, code) => {

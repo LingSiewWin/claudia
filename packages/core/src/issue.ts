@@ -35,6 +35,7 @@ export interface ChainBinding {
 
 export interface Approval {
   approver: string;
+  action_hash: string;
   approved_at_ms: number;
 }
 
@@ -44,7 +45,7 @@ export interface Approval {
  * The only public signing path. It takes evaluate()'s inputs, never an Evaluation: it runs evaluate() itself
  * at nowMs, so report freshness is measured at signing time, and signs only what that evaluation allows.
  * ALLOW signs with requires_principal = 0. REQUIRE_APPROVAL needs a fresh approval from the mandate's approver
- * and signs with requires_principal = 1. Everything else throws IssuanceRefused.
+ * for this exact action_hash and signs with requires_principal = 1. Everything else throws IssuanceRefused.
  */
 export interface IssueInput extends EvaluateInput {
   approval: Approval | null;
@@ -73,12 +74,18 @@ export function issueAuthorization(input: IssueInput): AuthorizationRecord {
   const e = evaluate({ mandate, proposal, state: input.state, verification: input.verification, nowMs });
   if (!e.signed) refuse('UNSIGNED_PROPOSAL');
 
+  const actionHash = canonicalHash(action);
   const amount = BigInt(action.amount.value);
   const { autonomous, hardCap } = enforcementLimits(mandate);
   let requiresPrincipal = false;
   if (e.outcome === 'REQUIRE_APPROVAL') {
     const approval = input.approval;
-    if (approval === null || !fresh(approval.approved_at_ms, nowMs) || !e.approvals_required.every((a) => a.approver === approval.approver)) {
+    if (
+      approval === null ||
+      approval.action_hash !== actionHash ||
+      !fresh(approval.approved_at_ms, nowMs) ||
+      !e.approvals_required.every((a) => a.approver === approval.approver)
+    ) {
       refuse('APPROVAL_MISSING');
     }
     requiresPrincipal = true;
@@ -106,7 +113,7 @@ export function issueAuthorization(input: IssueInput): AuthorizationRecord {
       mandateRef: chain.mandateRef,
       mandateHash: e.mandate_hash,
       mandateVersion: mandate.version,
-      actionHash: canonicalHash(action),
+      actionHash,
       actionType: ACTION_TYPE_CODE.pay_invoice,
       assetPolicy: chain.assetPolicy,
       assetName: chain.assetName,

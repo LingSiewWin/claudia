@@ -90,7 +90,7 @@ describe('engine invariants', () => {
         const { a, input } = build(s);
         if (BigInt(a.amount.value) <= HARD_CAP) return;
         expect(evaluate(input).outcome).toBe('DENY');
-        const approval = { approver: 'CFO', approved_at_ms: NOW };
+        const approval = { approver: 'CFO', action_hash: canonicalHash(a), approved_at_ms: NOW };
         expect(() => issueAuthorization({ ...input, approval, chain: CHAIN, nonce: 1n, engineSecretKey: ENGINE_SK })).toThrow(IssuanceRefused);
       }),
     );
