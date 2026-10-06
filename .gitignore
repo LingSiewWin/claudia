@@ -29,3 +29,8 @@ cre/
 
 # Browser automation artifacts
 .playwright-mcp/
+
+# Foundry build output
+contracts/sepolia/out/
+contracts/sepolia/cache/
+contracts/sepolia/broadcast/
