@@ -21,8 +21,12 @@ const secretNames = readFileSync(join(root, '../../.env.example'), 'utf8')
 
 describe('the web app holds public values only', () => {
   it('reads no environment variable except NEXT_PUBLIC_*', () => {
+    // Any process.env / import.meta.env use that is not a direct NEXT_PUBLIC_* read: dot, bracket, destructuring, spread, aliasing.
+    const publicRead = /^(?:\.NEXT_PUBLIC_[A-Z0-9_]+|\[\s*['"]NEXT_PUBLIC_[A-Z0-9_]+['"]\s*\])/;
     const offenders = sources.flatMap(({ p, text }) =>
-      [...text.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((m) => m[1]).filter((n) => !n?.startsWith('NEXT_PUBLIC_')).map((n) => `${p}: ${n}`),
+      [...text.matchAll(/(?:process|import\.meta)\.env(?![A-Za-z0-9_])/g)]
+        .filter((m) => !publicRead.test(text.slice(m.index + m[0].length)))
+        .map((m) => `${p}: ${text.slice(m.index, m.index + 40).split('\n')[0]}`),
     );
     expect(offenders).toEqual([]);
   });
