@@ -14,22 +14,22 @@ const APPLY = {
   anchorSeed: 'd8799f5820' + 'a5'.repeat(32) + '00ff',
   chainTag: '00',
   vaultSeed: 'd8799f5820' + 'b5'.repeat(32) + '01ff',
-  anchorPolicy: 'c17f6b5eb72bc5c4484ad9a0f1bf8629046291e32630b1a10798af61',
-  vaultPolicy: 'bdfb6dd3c14913744541b3c21e0ce69aa0ef54cf5cc26cfc6c20eb56',
-  vaultAddress: 'addr_test1wz7lkmwnc9y3xaz9gxeuy8svu6d2pm65eawvym8udsswk4sgxfyuz',
+  anchorPolicy: '01eb5cae63817c211d2f36f9f60487eea2907ca6a3844d610874cba6',
+  vaultPolicy: 'c1cdae438126d8e791c5fa2a2709950381b48d7522f6e0813bd4d42d',
+  vaultAddress: 'addr_test1wrqumtjrsynd3eu3chaz5fcfj5pcrdydw530dcyp802dgtgaep57y',
 };
 
 const BASELINE = {
   compiler: 'v1.1.24+bacbeb3',
   'mandate_anchor.mandate_anchor': {
-    bytes: 2305,
-    hash: '098ba05e80adc48ea5d6734b63eea0e1dea10e1027f73150716ab295',
+    bytes: 2393,
+    hash: '4f69d00e2a5263d433a0be024de96e2591908a603b5e724bcbe6a185',
     params: 'seed',
     label: 'm1 ? False',
   },
   'vault.vault': {
-    bytes: 5990,
-    hash: 'ea55be3d25b64cb1560b2b803e7b018805efc1a6a0d34a29c0196764',
+    bytes: 6025,
+    hash: 'c06131cb3b055f7dfe747c5be8eb815b490a06cfda192ae2691f7cc8',
     params: 'anchor_ref,chain_tag,seed',
     label: 'r16 ? False',
   },
