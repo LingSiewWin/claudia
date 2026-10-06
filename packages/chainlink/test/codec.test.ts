@@ -65,4 +65,21 @@ describe('codec', () => {
   ])('rejects unknown stored code: %s', (_l, patch) => {
     expect(() => reportFromStored({ ...toStoredFields(FIXTURE), ...patch })).toThrow(RangeError);
   });
+
+  it.each(['verified_currency', 'verified_recipient', 'status'] as const)('rejects empty string for %s', (k) => {
+    expect(() => toStoredFields({ ...FIXTURE, [k]: '' })).toThrow(RangeError);
+  });
+
+  it.each([['invalid utf-8', '0xff'], ['leading BOM', '0xefbbbf61']] as const)('rejects non-canonical recipient bytes: %s', (_l, hex) => {
+    expect(() => reportFromStored({ ...toStoredFields(FIXTURE), verifiedRecipient: hex })).toThrow(RangeError);
+  });
+
+  it('rejects an unknown reason when encoding', () => {
+    const bad = { ...FIXTURE, result: 'MISMATCH', reason: 'NOPE' } as unknown as VerificationReport;
+    expect(() => toStoredFields(bad)).toThrow(RangeError);
+  });
+
+  it('rejects an invalid report before encoding', () => {
+    expect(() => encodeReportPayload({ ...FIXTURE, reason: 'AMOUNT_MISMATCH' })).toThrow();
+  });
 });

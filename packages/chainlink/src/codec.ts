@@ -1,6 +1,6 @@
 // On-chain layout of verification reports in VerificationRegistry. Shared by the CRE workflow
 // (encoder) and the engine-side reader (decoder) so both sides use one definition.
-import { canonicalHash, type VerificationReport } from '@authority/core';
+import { canonicalHash, type VerificationReport, VerificationReportSchema } from '@authority/core';
 import { encodeAbiParameters, type Hex, hexToString, stringToHex } from 'viem';
 
 type Facts = VerificationReport['facts'];
@@ -23,6 +23,11 @@ export const FACT_REASONS = [
   'CURRENCY_MISMATCH',
   'RECIPIENT_MISMATCH',
 ] as const satisfies readonly FactReason[];
+
+// Compile errors if a fact key or reason is missing from its code list.
+type AssertNever<T extends never> = T;
+export type _UncoveredFactKeys = AssertNever<Exclude<keyof Facts, (typeof FACT_KEYS)[number]>>;
+export type _UncoveredReasons = AssertNever<Exclude<FactReason, (typeof FACT_REASONS)[number]>>;
 
 export const RESULT_CODE = { VERIFIED: 1, MISMATCH: 2 } as const;
 
@@ -94,9 +99,15 @@ export function resultFromFacts(facts: Facts): { result: 'VERIFIED' | 'MISMATCH'
   return failed === -1 ? { result: 'VERIFIED', reason: null } : { result: 'MISMATCH', reason: FACT_REASONS[failed]! };
 }
 
-// Nullable report fields travel as empty strings / empty bytes. Lossless because every
-// non-null value the workflow emits is non-empty.
+// Nullable report fields travel as empty strings / empty bytes, so an empty non-null value
+// cannot be represented and is rejected.
 export function toStoredFields(r: VerificationReport): StoredFields {
+  for (const k of ['verified_currency', 'verified_recipient', 'status'] as const) {
+    if (r[k] === '') throw new RangeError(`${k} must not be empty`);
+  }
+  const reasonIdx = r.reason === null ? -1 : FACT_REASONS.indexOf(r.reason);
+  if (r.reason !== null && reasonIdx === -1) throw new RangeError(`unknown reason ${r.reason}`);
+  if (!(r.result in RESULT_CODE)) throw new RangeError(`unknown result ${r.result}`);
   return {
     actionHash: `0x${r.action_hash}`,
     invoiceId: r.invoice_id,
@@ -107,7 +118,7 @@ export function toStoredFields(r: VerificationReport): StoredFields {
     status: r.status ?? '',
     facts: FACT_KEYS.reduce((mask, key, bit) => (r.facts[key] ? mask | (1 << bit) : mask), 0),
     result: RESULT_CODE[r.result],
-    reason: r.reason === null ? 0 : FACT_REASONS.indexOf(r.reason) + 1,
+    reason: reasonIdx + 1,
     triggerId: r.trigger_id,
   };
 }
@@ -116,6 +127,10 @@ export function reportFromStored(f: StoredFields): VerificationReport {
   if (f.result !== RESULT_CODE.VERIFIED && f.result !== RESULT_CODE.MISMATCH) throw new RangeError(`result code ${f.result}`);
   if (!Number.isInteger(f.reason) || f.reason < 0 || f.reason > FACT_REASONS.length) throw new RangeError(`reason code ${f.reason}`);
   if (!Number.isInteger(f.facts) || f.facts < 0 || f.facts >= 1 << FACT_KEYS.length) throw new RangeError(`facts mask ${f.facts}`);
+  const recipient = f.verifiedRecipient === '0x' ? null : hexToString(f.verifiedRecipient);
+  if (recipient !== null && stringToHex(recipient) !== f.verifiedRecipient.toLowerCase()) {
+    throw new RangeError('verified recipient is not canonical UTF-8');
+  }
   const empty = (s: string) => (s === '' ? null : s);
   return {
     schema: 'verification/v0.1',
@@ -124,7 +139,7 @@ export function reportFromStored(f: StoredFields): VerificationReport {
     invoice_hash: f.invoiceHash.slice(2).toLowerCase(),
     verified_amount: empty(f.verifiedAmount),
     verified_currency: empty(f.verifiedCurrency),
-    verified_recipient: f.verifiedRecipient === '0x' ? null : hexToString(f.verifiedRecipient),
+    verified_recipient: recipient,
     status: empty(f.status),
     facts: Object.fromEntries(FACT_KEYS.map((key, bit) => [key, (f.facts & (1 << bit)) !== 0])) as Facts,
     result: f.result === RESULT_CODE.VERIFIED ? 'VERIFIED' : 'MISMATCH',
@@ -135,6 +150,7 @@ export function reportFromStored(f: StoredFields): VerificationReport {
 
 // The onReport payload: abi.encode(bytes32 reportHash, Fields fields).
 export function encodeReportPayload(r: VerificationReport): { reportHash: string; payload: Hex } {
+  VerificationReportSchema.parse(r);
   const reportHash = canonicalHash(r);
   const payload = encodeAbiParameters(
     [{ type: 'bytes32' }, { type: 'tuple', components: FIELDS_COMPONENTS }],
