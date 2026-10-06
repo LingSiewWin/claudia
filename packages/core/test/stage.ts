@@ -8,30 +8,33 @@ export interface StageRow {
   outcome: string;
   reason: string | null;
   approvals: string[];
-  balance: number;
-  spent: number;
+  cre: 'VERIFIED' | 'MISMATCH' | null;
+  balance: bigint;
+  spent: bigint;
 }
 
 type Human = 'approve' | 'decline' | null;
 
 export function runStage(): StageRow[] {
-  let balance = 135;
-  let spent = 0;
+  let balance = 135_000_000n;
+  let spent = 0n;
   const rows: StageRow[] = [];
   const step = (n: number, label: string, a: ActionIR, mismatch: boolean, human: Human) => {
-    const input = { mandate: M001, proposal: propose(a), state: state(balance, spent), nowMs: NOW };
+    const input = { mandate: M001, proposal: propose(a), state: state(0, 0, { vault_balance: balance.toString(), spent_today: spent.toString() }), nowMs: NOW };
     let e = evaluate({ ...input, verification: null });
+    let cre: StageRow['cre'] = null;
     if (e.outcome === 'NEEDS_VERIFICATION') {
+      cre = mismatch ? 'MISMATCH' : 'VERIFIED';
       e = evaluate({ ...input, verification: mismatch ? verified(a, 'MISMATCH', 'RECIPIENT_MISMATCH') : verified(a) });
     }
-    const amount = Number(a.amount.value) / 1_000_000;
+    const amount = BigInt(a.amount.value);
     const settles = e.outcome === 'ALLOW' || (e.outcome === 'REQUIRE_APPROVAL' && human === 'approve');
     if (settles) {
-      balance = Math.round((balance - amount) * 100) / 100;
-      spent = Math.round((spent + amount) * 100) / 100;
+      balance -= amount;
+      spent += amount;
     }
     const reason = e.outcome === 'REQUIRE_APPROVAL' && human === 'decline' ? 'PRINCIPAL_DECLINED' : e.reason;
-    rows.push({ case: n, label, outcome: e.outcome, reason, approvals: e.approvals_required.map((x) => x.reason), balance, spent });
+    rows.push({ case: n, label, outcome: e.outcome, reason, approvals: e.approvals_required.map((x) => x.reason), cre, balance, spent });
   };
 
   step(1, 'Pay AWS INV-3821 8.42', action({ id: 'A-3821', amount: 8.42, invoice: 'INV-3821' }), false, null);
