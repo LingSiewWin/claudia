@@ -1,0 +1,14 @@
+/*
+!apps
+!packages
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!.npmrc
+apps/*
+!apps/web
+packages/*
+!packages/core
+**/.env
+**/.env.*

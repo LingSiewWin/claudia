@@ -29,3 +29,10 @@ cre/
 
 # Browser automation artifacts
 .playwright-mcp/
+
+# Web build and test output
+.next/
+next-env.d.ts
+test-results/
+playwright-report/
+.vercel/
