@@ -23,3 +23,6 @@ node_modules/
 skills-lock.json
 # CRE onboarding scaffold (hello-world); real workflow decided in Phase 6
 cre/
+
+# Local agent execution workspace
+.superpowers/
