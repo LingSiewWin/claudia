@@ -136,7 +136,7 @@ export function evaluate(input: EvaluateInput): Evaluation {
       }
       verificationHash = verification.report_hash;
     }
-    const out = checkConstraint(constraint, { action, amount, state, dayIndex, verification });
+    const out = checkConstraint(constraint, { action, amount, state, dayIndex, verification, mandateAsset: mandate.asset.symbol });
     if (!out.violated) {
       set(index, 'pass', null, out.detail);
       continue;

@@ -57,6 +57,7 @@ export const ActionIRSchema = z.strictObject({
     address: z
       .string()
       .max(200)
+      .regex(/^[a-z0-9_]+$/, { abort: true })
       .refine((address) => {
         try {
           parseShelleyAddress(address);
