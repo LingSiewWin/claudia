@@ -1,7 +1,7 @@
 import { canonicalJson, sha256Hex } from '@authority/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrate } from '../src/db';
-import { appendEvent, chainHead, GENESIS_HASH, readRun, verifyChain } from '../src/events';
+import { appendEvent, chainHead, eventByHash, GENESIS_HASH, readRun, verifyChain } from '../src/events';
 import { memoryDb } from '../src/testing';
 
 const RUN_A = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +67,24 @@ describe('event log hash chain', () => {
     expect(await verifyChain(db)).toMatchObject({ ok: true, count: 4 });
   });
 
+  it('reports the genesis head for an empty log', async () => {
+    expect(await chainHead(db)).toEqual({ seq: 0, hash: GENESIS_HASH });
+    expect(await verifyChain(db)).toEqual({ ok: true, count: 0, head: GENESIS_HASH });
+  });
+
+  it('finds an event by its hash', async () => {
+    await seed();
+    const [, e3] = await readRun(db, RUN_A);
+    expect(await eventByHash(db, e3!.hash)).toEqual(e3);
+    expect(await eventByHash(db, 'ab'.repeat(32))).toBeNull();
+  });
+
+  it('rejects a timestamp that is not a safe integer', async () => {
+    await expect(db.tx((q) => appendEvent(q, { run_id: RUN_A, action_id: null, type: 'Tick', payload: {} }, 1.5))).rejects.toThrow(
+      'nowMs must be a safe integer',
+    );
+  });
+
   it('refuses updates, deletes and truncation from the application role', async () => {
     await seed();
     await expect(db.query(`update events set type = 'X' where seq = 2`)).rejects.toThrow('events are append-only');
@@ -116,11 +134,28 @@ describe('tamper detection (database admin is malicious)', () => {
     expect(await verifyChain(db, [{ seq: 9, hash: e4!.hash }])).toMatchObject({ ok: false, seq: 9 });
   });
 
+  it('accepts an anchored hash written in uppercase hex', async () => {
+    await seed();
+    const [, e3] = await readRun(db, RUN_A);
+    expect(await verifyChain(db, [{ seq: 3, hash: e3!.hash.toUpperCase() }])).toMatchObject({ ok: true });
+  });
+
+  it('reports the lowest mismatching anchored seq whatever the input order', async () => {
+    await seed();
+    const bad = 'ab'.repeat(32);
+    expect(await verifyChain(db, [{ seq: 4, hash: bad }, { seq: 2, hash: bad }])).toMatchObject({ ok: false, seq: 2 });
+  });
+
+  it('an edited prev_hash breaks the link at exactly that seq', async () => {
+    await seed();
+    await asAdmin(`update events set prev_hash = decode(repeat('ab', 32), 'hex') where seq = 3`);
+    expect(await verifyChain(db)).toEqual({ ok: false, seq: 3, problem: 'prev_hash does not link to the previous event' });
+  });
+
   it('a full rewrite that recomputes every later hash is caught by an anchored head', async () => {
     await seed();
     const last = (await readRun(db, RUN_A)).at(-1)!;
     const anchored = { seq: last.seq, hash: last.hash }; // the head a settlement committed on-chain
-    const rows = await db.query<{ seq: string }>('select seq::text as seq from events order by seq');
     await db.exec('alter table events disable trigger events_no_rewrite');
     await db.query('delete from events');
     await db.exec('alter table events enable trigger events_no_rewrite');
@@ -128,7 +163,6 @@ describe('tamper detection (database admin is malicious)', () => {
     await append(RUN_B, 'RunStarted', { kind: 'masumi', goal: 'check' }, 1);
     await append(RUN_A, 'ActionProposed', { action_hash: 'dd'.repeat(32), amount: '84200000' }, 2, 'A-0001');
     await append(RUN_A, 'ActionDenied', { reason: 'PURPOSE_NOT_AUTHORIZED', layer: 'engine' }, 3, 'A-0001');
-    expect(rows).toHaveLength(4);
     expect((await verifyChain(db)).ok).toBe(true);
     expect(await verifyChain(db, [anchored])).toEqual({
       ok: false,

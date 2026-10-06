@@ -111,7 +111,7 @@ export type ChainCheck = { ok: true; count: number; head: string } | { ok: false
  * Recomputes the whole chain from genesis. `anchored` are heads committed on-chain (settlement metadata log_head
  * { seq, hash }): recomputing the stored chain up to each seq must give exactly that hash, so a rewrite that
  * recomputes every later hash is caught as well.
- * ponytail: loads every row; page through by seq if the log outgrows memory.
+ * Loads every row; page through by seq if the log outgrows memory.
  */
 export async function verifyChain(q: Sql, anchored: readonly ChainHead[] = []): Promise<ChainCheck> {
   const rows = await q.query<Row>(`select ${COLUMNS} from events order by events.seq`);
@@ -132,7 +132,7 @@ export async function verifyChain(q: Sql, anchored: readonly ChainHead[] = []): 
     recomputed.set(seq, hash);
     prev = hash;
   }
-  const missing = anchored.find((a) => recomputed.get(a.seq) !== a.hash);
+  const missing = [...anchored].sort((a, b) => a.seq - b.seq).find((a) => recomputed.get(a.seq) !== a.hash.toLowerCase());
   if (missing !== undefined) return { ok: false, seq: missing.seq, problem: `anchored head ${missing.hash} is not the chain at seq ${missing.seq}` };
   return { ok: true, count: rows.length, head: prev };
 }
