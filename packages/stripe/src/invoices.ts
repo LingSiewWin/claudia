@@ -31,7 +31,7 @@ export interface InvoiceSummary {
   cardano_tx_hash: string | null;
 }
 
-const CUSTOMER_ID = /^cus_[A-Za-z0-9]+$/;
+export const CUSTOMER_ID = /^cus_[A-Za-z0-9]+$/;
 const INVOICE_ID = /^in_[A-Za-z0-9]{1,61}$/;
 
 export function readOnlyStripe(key: string | undefined, config: Stripe.StripeConfig = {}): Stripe {

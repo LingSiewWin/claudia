@@ -1,6 +1,6 @@
 import { parseShelleyAddress } from '@authority/core';
 import Stripe from 'stripe';
-import { type InvoiceSummary, toSummary } from './invoices';
+import { CUSTOMER_ID, type InvoiceSummary, toSummary } from './invoices';
 
 // Vendor side of the demo billing network. Needs the full test-mode secret key, so only
 // scripts/ (and tests) import it. The agent never does.
@@ -83,6 +83,7 @@ export function planSeed(
   options: { sets: readonly DemoSet[]; reset?: boolean },
 ): SeedPlan {
   const plan: SeedPlan = { keep: [], voidIds: [], deleteIds: [], create: [] };
+  const scoped = wanted.filter((w) => options.sets.includes(w.set));
   const kept = new Set<string>();
   for (const invoice of existing) {
     const number = invoice.metadata?.invoice_number;
@@ -93,7 +94,7 @@ export function planSeed(
       continue;
     }
     if (invoice.status !== 'open') continue;
-    const target = wanted.find((w) => w.number === number);
+    const target = scoped.find((w) => w.number === number);
     if (!options.reset && target && !kept.has(number) && matches(invoice, target, addresses[target.vendor])) {
       kept.add(number);
       plan.keep.push(invoice);
@@ -101,7 +102,7 @@ export function planSeed(
       plan.voidIds.push(invoice.id);
     }
   }
-  plan.create = wanted.filter((w) => !kept.has(w.number));
+  plan.create = scoped.filter((w) => !kept.has(w.number));
   return plan;
 }
 
@@ -127,6 +128,7 @@ export async function seedInvoices(
   stripe: Stripe,
   input: { customerId: string; invoices: readonly DemoInvoice[]; addresses: VendorAddresses; sets: readonly DemoSet[]; reset?: boolean },
 ): Promise<SeedResult> {
+  if (!CUSTOMER_ID.test(input.customerId)) throw new TypeError('customer id must look like cus_...');
   const list = (status: 'open' | 'draft') =>
     stripe.invoices.list({ customer: input.customerId, status, limit: 100 }).autoPagingToArray({ limit: 1000 });
   const existing = [...(await list('open')), ...(await list('draft'))];
@@ -175,6 +177,7 @@ export async function markPaidOutOfBand(stripe: Stripe, invoiceId: string, carda
     if (recorded === cardanoTxHash) return invoice;
     throw new Error(`invoice ${invoiceId} is already paid${recorded ? ` by ${recorded}` : ''}`);
   }
+  if (recorded && recorded !== cardanoTxHash) throw new Error(`invoice ${invoiceId} already records settlement ${recorded}`);
   if (invoice.status !== 'open') throw new Error(`invoice ${invoiceId} is ${invoice.status}, not open`);
   // ponytail: read-then-write, assumes one executor queue; add an idempotency key per tx hash if executors run concurrently.
   await stripe.invoices.update(invoiceId, { metadata: { cardano_tx_hash: cardanoTxHash } });

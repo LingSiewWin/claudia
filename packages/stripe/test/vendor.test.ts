@@ -141,6 +141,12 @@ describe('planSeed', () => {
     expect(plan.voidIds).toEqual(['in_retired']);
   });
 
+  it('only creates invoices from the requested sets', () => {
+    const plan = planSeed([], DEMO_INVOICES, ADDRS, opts);
+    expect(plan.create.length).toBeGreaterThan(0);
+    expect(plan.create.every((i) => i.set === 'stage')).toBe(true);
+  });
+
   it('reset voids every open invoice in scope and recreates all', () => {
     const plan = planSeed([existing('INV-3821'), existing('INV-3824')], stage, ADDRS, { ...opts, reset: true });
     expect(plan.voidIds).toEqual(['in_INV3821', 'in_INV3824']);
@@ -150,6 +156,12 @@ describe('planSeed', () => {
 });
 
 describe('seedInvoices (I/O against a fake Stripe)', () => {
+  it.each(['', 'acme'])('rejects customer id %j before any request', async (customerId) => {
+    const { stripe, calls } = fakeStripe(() => list([]));
+    await expect(seedInvoices(stripe, { customerId, invoices: DEMO_INVOICES, addresses: ADDRS, sets: ['stage'] })).rejects.toThrow(TypeError);
+    expect(calls).toHaveLength(0);
+  });
+
   it('creates, adds the exact amount, finalizes, and checks the result', async () => {
     const inv = byNumber('INV-3821');
     const { stripe, calls } = fakeStripe((req) => {
@@ -217,6 +229,13 @@ describe('markPaidOutOfBand', () => {
     const meta = { ...invoiceMetadata(byNumber('INV-3821'), AWS), cardano_tx_hash: 'cd'.repeat(32) };
     const { stripe, calls } = fakeStripe(() => ({ json: existing('INV-3821', { status: 'paid', metadata: meta }) }));
     await expect(markPaidOutOfBand(stripe, 'in_INV3821', TX)).rejects.toThrow(/already paid by cdcd/);
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+  });
+
+  it('refuses to overwrite a different recorded hash on an open invoice', async () => {
+    const meta = { ...invoiceMetadata(byNumber('INV-3821'), AWS), cardano_tx_hash: 'cd'.repeat(32) };
+    const { stripe, calls } = fakeStripe(() => ({ json: existing('INV-3821', { metadata: meta }) }));
+    await expect(markPaidOutOfBand(stripe, 'in_INV3821', TX)).rejects.toThrow(/already records settlement cdcd/);
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
   });
 
