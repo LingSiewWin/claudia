@@ -5,7 +5,15 @@ packages:
   - "scripts"
 allowBuilds:
   esbuild: false
+  chacha-native: false
 packageExtensions:
   "@chainlink/cre-sdk":
     dependencies:
       typescript: 5.9.3
+# Mesh 1.9.1 pulls @connectrpc/connect@1.4.0, which peers @bufbuild/protobuf@^1.4.2
+# (exports protoBase64). CRE already has protobuf 2.6.3; autoInstallPeers was
+# wiring connect to v2, which dropped that named export.
+overrides:
+  "@connectrpc/connect>@bufbuild/protobuf": "1.10.1"
+  "@connectrpc/connect-node>@bufbuild/protobuf": "1.10.1"
+  "@connectrpc/connect-web>@bufbuild/protobuf": "1.10.1"
