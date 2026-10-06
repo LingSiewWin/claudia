@@ -9,3 +9,4 @@ export * from './schemas';
 export * from './mandate';
 export * from './constraints';
 export * from './engine';
+export * from './issue';

@@ -16,14 +16,20 @@ export interface ConstraintOutcome {
   detail: Detail;
 }
 
-const FACT_REASONS: [keyof VerificationReport['facts'], ReasonCode][] = [
+type Facts = VerificationReport['facts'];
+
+const FACT_REASONS = [
   ['exists', 'INVOICE_NOT_FOUND'],
   ['customer_match', 'CUSTOMER_MISMATCH'],
   ['status_open', 'INVOICE_NOT_OPEN'],
   ['amount_match', 'AMOUNT_MISMATCH'],
   ['currency_match', 'CURRENCY_MISMATCH'],
   ['recipient_match', 'RECIPIENT_MISMATCH'],
-];
+] as const satisfies readonly (readonly [keyof Facts, ReasonCode])[];
+
+// Compile error if a fact is added to the report schema without a reason here.
+type AssertNever<T extends never> = T;
+type UncoveredFacts = AssertNever<Exclude<keyof Facts, (typeof FACT_REASONS)[number][0]>>;
 
 const pass = (detail: Detail): ConstraintOutcome => ({ violated: false, reason: null, detail });
 const fail = (reason: ReasonCode, detail: Detail): ConstraintOutcome => ({ violated: true, reason, detail });
