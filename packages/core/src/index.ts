@@ -7,3 +7,5 @@ export * from './address';
 export * from './authorization';
 export * from './schemas';
 export * from './mandate';
+export * from './constraints';
+export * from './engine';
