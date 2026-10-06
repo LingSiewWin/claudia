@@ -1,0 +1,16 @@
+local-simulation:
+  user-workflow:
+    workflow-name: cre-verifier-local-simulation
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.local-simulation.json"
+    secrets-path: "../secrets.yaml"
+sepolia-simulation:
+  user-workflow:
+    workflow-name: cre-verifier-sepolia-simulation
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.sepolia-simulation.json"
+    secrets-path: "../secrets.yaml"

@@ -1,0 +1,21 @@
+{
+  "name": "@authority/cre-verifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@authority/chainlink": "workspace:*",
+    "@authority/core": "workspace:*",
+    "@chainlink/cre-sdk": "1.23.0",
+    "@chainlink/cre-sdk-javy-plugin": "1.7.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}
