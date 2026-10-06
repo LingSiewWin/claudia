@@ -1,0 +1,218 @@
+[
+  {
+    "name": "key recipient, no stake",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee05745553444d00000001f5df01000011111111111111111111111111111111111111111111111111111111000000000000000001000001a3185c5000000000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "c862cbaa9d53417bf662fa8c54f1693e773a172084436111699a195fec2de78e",
+      "signature_hex": "0b5de68bb89615eccc0ae5efb0a63c8be3e6588417360cea63a5542751087e7c36563950b271849977f775694ce818ece0c8013842600db8fb7a9322d3601801",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "745553444d",
+        "amount": "8420000000",
+        "recipient": "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "key recipient, key stake",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee05745553444d00000001f5df0100001111111111111111111111111111111111111111111111111111111101222222222222222222222222222222222222222222222222222222220000000000000001000001a3185c5000000000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "19bbe7cee1ac459a656d19e0162dc206fb0706f64887f639114bc0a320d7972c",
+      "signature_hex": "d75c4c3ef0f5b7dcb567b19eea2e6861379916073d8d549a8d2252dc285987d5d598b45a0e24695d44b205628d0455dcf8afdcfbdf3d1a41c70eba1baf74d905",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "745553444d",
+        "amount": "8420000000",
+        "recipient": "addr_test1qqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyfzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3qwzdgzn",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "script recipient, script stake",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee05745553444d00000001f5df0100011111111111111111111111111111111111111111111111111111111102222222222222222222222222222222222222222222222222222222220000000000000001000001a3185c5000000000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "0ac8cca97d4da23724029ff858ee32b6d34b4702ccaf03b51ad16c47e2a34cc6",
+      "signature_hex": "c5901181774c01f1b0620a084775158f6e94f08108f19f6a7d80bb65c75375105d0700cf22b8b3658cf16b0b16891e93e6f7eb466995aaa4a6ad1c389b72670c",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "745553444d",
+        "amount": "8420000000",
+        "recipient": "addr_test1xqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyfzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3qln0vfx",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "empty asset name",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000001f5df01000011111111111111111111111111111111111111111111111111111111000000000000000001000001a3185c5000000000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "2ab5cfa9b050f19cf98b7c129eaadb28eda5ceb3eaae6b574dc97a58c78ab5d1",
+      "signature_hex": "9625e61eda8961ca0b6ff5bb1bc6f14b1fda389f3501a87b89ef7a3bdef7cb19214a5290925cf19eccbc98ff1096592756599ab0e1d0cd3ce377f378af5b7e02",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "",
+        "amount": "8420000000",
+        "recipient": "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "32-byte asset name",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee20abababababababababababababababababababababababababababababababab00000001f5df01000011111111111111111111111111111111111111111111111111111111000000000000000001000001a3185c5000000000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "ea098d2d204f867ac7137c504077984bf0dbd97254142373e4120ebff2439198",
+      "signature_hex": "70c6102c67215219963d1598ce357af7b2ca3223ed90f2b96c5f2ef3ad8f864d78751942fc73fd62a7c9f87336705dc51938af2b777601b8a39bc938c14e360c",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "abababababababababababababababababababababababababababababababab",
+        "amount": "8420000000",
+        "recipient": "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "max u64 amount",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee05745553444dffffffffffffffff0011111111111111111111111111111111111111111111111111111111000000000000000001000001a3185c5000000000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "6d7cfd3888bef29e3a42e9aebac6bbf1c4c2385657b2890088d3f8ce80e693a1",
+      "signature_hex": "70bd1a656e7e37daac2293cbbf643af6efcd1c5c546b4977827ae32455a3f6627968b87620768a493f0dae71797267a40eda4869ea3dcc90116dc7c67c208f08",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "745553444d",
+        "amount": "18446744073709551615",
+        "recipient": "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "amount 1, requires principal",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee05745553444d00000000000000010011111111111111111111111111111111111111111111111111111111000000000000000001000001a3185c5000010000000000000000000000000000000000000000000000000000000000000000",
+      "digest_hex": "b077c1d7b6169f8d109db61e193eefb51a2ba321459cb6e753be8750f33dacf1",
+      "signature_hex": "43fdc3f2a747aa62ad6339dc95fde417400f8ba32180360f5eb1b819fc29c816ddaf40f6e45ac5b128e0fdf475d6035a52009416c4e98e0e8ba26fa4ceb07105",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "745553444d",
+        "amount": "1",
+        "recipient": "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6",
+        "nonce": "1",
+        "valid_until": 1800000000000,
+        "requires_principal": true,
+        "verification_ref": null
+      }
+    }
+  },
+  {
+    "name": "verification ref set",
+    "record": {
+      "schema": "authorization/v0.1",
+      "message_hex": "4147454e545f415554484f52495a4154494f4e5f563100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000003dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee05745553444d00000001f5df0100001111111111111111111111111111111111111111111111111111111100000000000000002a000001a3185c500000f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+      "digest_hex": "41d1cd0f2c5a031c26de22bb71053e7e1143ef851e4d2ed00c047e0e106ad3cf",
+      "signature_hex": "df11dbc20e2099268f186aabb50e5497dcf028073f99f20f566f49f410c3d6da269ca183379d95c98f3e347f77835ee7aac2f42a52fae28342df72d7c455170f",
+      "engine_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "fields": {
+        "chain_tag": 0,
+        "vault_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mandate_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "mandate_version": 3,
+        "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "action_type": 1,
+        "asset_policy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "asset_name": "745553444d",
+        "amount": "8420000000",
+        "recipient": "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6",
+        "nonce": "42",
+        "valid_until": 1800000000000,
+        "requires_principal": false,
+        "verification_ref": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0"
+      }
+    }
+  }
+]
