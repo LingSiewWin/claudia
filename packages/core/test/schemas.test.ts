@@ -41,6 +41,16 @@ describe('MandateSchema', () => {
     const bad = { ...M001_INPUT, constraints: [{ id: 'x', kind: 'time_of_day', on_violation: 'DENY' }] };
     expect(MandateSchema.safeParse(bad).success).toBe(false);
   });
+
+  it.each([
+    ['missing', undefined],
+    ['27 bytes', '44'.repeat(27)],
+    ['29 bytes', '44'.repeat(29)],
+    ['uppercase hex', 'AB'.repeat(28)],
+  ])('rejects a principal admin key hash that is %s', (_label, hash) => {
+    const principal = { ...M001_INPUT.principal, cardano_key_hash: hash };
+    expect(MandateSchema.safeParse({ ...M001_INPUT, principal }).success).toBe(false);
+  });
 });
 
 describe('VerificationReportSchema', () => {

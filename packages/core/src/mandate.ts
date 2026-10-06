@@ -20,6 +20,7 @@ export interface AnchorProjection {
   status: 'active' | 'revoked';
   engine_vkey: string;
   principal_pkh: string;
+  approver_pkh: string;
   asset_symbol: string;
   autonomous_limit: bigint;
   hard_cap: bigint;
@@ -52,8 +53,12 @@ export function mandateRuleProblems(m: Mandate): string[] {
   const problems: string[] = [];
   const ids = m.constraints.map((c) => c.id);
   if (new Set(ids).size !== ids.length) problems.push('constraint ids must be unique');
-  // The on-chain anchor holds one principal key, so every approval must come from that one approver.
-  if (m.approvers.length !== 1) problems.push('needs exactly one approver (the on-chain principal)');
+  // The on-chain anchor holds one admin key (principal) and one payment approver key, so every approval must
+  // come from that one approver, and the approver must not also hold the admin key.
+  if (m.approvers.length !== 1) problems.push('needs exactly one approver (the on-chain payment approver)');
+  if (m.approvers.some((a) => a.cardano_key_hash === m.principal.cardano_key_hash)) {
+    problems.push('approver key must differ from the principal admin key');
+  }
   const roles = new Set(m.approvers.map((a) => a.role));
   for (const c of m.constraints) {
     if (c.on_violation === 'REQUIRE_APPROVAL' && (c.approver === undefined || !roles.has(c.approver))) {
@@ -89,8 +94,8 @@ export function mandateHash(m: Mandate): string {
 
 export function anchorProjection(m: Mandate): AnchorProjection {
   const l = enforcementLimits(m);
-  const principal = m.approvers.length === 1 ? m.approvers[0] : undefined;
-  if (!principal || l.autonomous === null || l.hardCap === null || l.dailyCap === null || l.treasuryMinimum === null) {
+  const approver = m.approvers.length === 1 ? m.approvers[0] : undefined;
+  if (!approver || approver.cardano_key_hash === m.principal.cardano_key_hash || l.autonomous === null || l.hardCap === null || l.dailyCap === null || l.treasuryMinimum === null) {
     throw new MandateError(mandateRuleProblems(m));
   }
   return {
@@ -98,7 +103,8 @@ export function anchorProjection(m: Mandate): AnchorProjection {
     version: m.version,
     status: m.status,
     engine_vkey: m.authority_engine.public_key.slice('ed25519:'.length),
-    principal_pkh: principal.cardano_key_hash,
+    principal_pkh: m.principal.cardano_key_hash,
+    approver_pkh: approver.cardano_key_hash,
     asset_symbol: m.asset.symbol,
     autonomous_limit: l.autonomous,
     hard_cap: l.hardCap,
