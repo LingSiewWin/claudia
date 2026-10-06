@@ -70,6 +70,60 @@ describe('parseTaskDescription', () => {
   });
 });
 
+describe('hostile input shapes', () => {
+  const nested = (depth: number): unknown => {
+    let v: unknown = 'leaf';
+    for (let i = 0; i < depth; i++) v = { n: v };
+    return v;
+  };
+  const cyclic: Record<string, unknown> = { mandate_id: 'M-001', request_text: 'x' };
+  cyclic.self = cyclic;
+
+  it.each(['__proto__', 'constructor', 'prototype'])('rejects an own %s key deep in the action (object and JSON text)', (key) => {
+    const body = `{"mandate_id":"M-001","proposal":{"action":{"id":"A","amount":{"${key}":{"value":"1"}}},"agent_signature":null}}`;
+    expect(() => parseAuthorityInput(JSON.parse(body))).toThrow(InputError);
+    const proposal = `{"action":{"id":"A","amount":{"${key}":{"value":"1"}}},"agent_signature":null}`;
+    expect(() => parseAuthorityInput({ mandate_id: 'M-001', proposal })).toThrow(InputError);
+    expect(() => parseTaskDescription(body)).toThrow(InputError);
+  });
+
+  it('accepts nesting up to the depth cap and rejects deeper actions', () => {
+    const ok = { mandate_id: 'M-001', proposal: { action: { deep: nested(28) }, agent_signature: null } };
+    expect(parseAuthorityInput(ok)).toEqual({ mandate_id: 'M-001', proposal: ok.proposal });
+    const deep = { action: { deep: nested(40) }, agent_signature: null };
+    expect(() => parseAuthorityInput({ mandate_id: 'M-001', proposal: deep })).toThrow(InputError);
+    expect(() => parseAuthorityInput({ mandate_id: 'M-001', proposal: JSON.stringify(deep) })).toThrow(InputError);
+    expect(() => parseTaskDescription(JSON.stringify({ mandate_id: 'M-001', proposal: deep }))).toThrow(InputError);
+  });
+
+  it('rejects a deeply nested proposal inside 16 KiB', () => {
+    const proposal = `{"action":{"a":${'['.repeat(8000)}${']'.repeat(8000)}},"agent_signature":null}`;
+    expect(() => parseAuthorityInput({ mandate_id: 'M-001', proposal })).toThrow(InputError);
+  });
+
+  it.each<[string, unknown]>([
+    ['a BigInt', { mandate_id: 'M-001', request_text: 'x', n: 1n }],
+    ['a cycle', cyclic],
+    ['a function', () => 'x'],
+  ])('rejects input with %s as InputError', (_label, raw) => {
+    expect(() => parseAuthorityInput(raw)).toThrow(InputError);
+  });
+
+  it('rejects an oversized Task description before parsing it', () => {
+    const description = `{"mandate_id":"M-001","request_text":"${'x'.repeat(20_000)}"}`;
+    expect(() => parseTaskDescription(description)).toThrow(/larger than 16 KiB/);
+    expect(() => parseTaskDescription('x'.repeat(20_000))).toThrow(/larger than 16 KiB/);
+  });
+
+  it('counts request_text length in characters, not bytes', () => {
+    expect(parseAuthorityInput({ mandate_id: 'M-001', request_text: 'é'.repeat(2000) })).toEqual({
+      mandate_id: 'M-001',
+      request_text: 'é'.repeat(2000),
+    });
+    expect(() => parseAuthorityInput({ mandate_id: 'M-001', request_text: 'é'.repeat(2001) })).toThrow(InputError);
+  });
+});
+
 describe('INPUT_SCHEMA', () => {
   it('follows MIP-003 Attachment 01', () => {
     const ids = INPUT_SCHEMA.input_data.map((f) => f.id);

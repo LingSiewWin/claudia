@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 export const MAX_INPUT_BYTES = 16_384;
+export const MAX_INPUT_DEPTH = 32;
 export const DEFAULT_MANDATE_ID = 'M-001';
 
 export type AuthorityRequest =
@@ -22,9 +23,34 @@ const Input = z.strictObject({
   request_text: z.string().trim().min(1).max(2000).optional(),
 });
 
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function checkSize(raw: unknown): void {
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(raw ?? null);
+  } catch {
+    throw new InputError('input is not JSON');
+  }
+  if (text === undefined) throw new InputError('input is not JSON');
+  if (Buffer.byteLength(text, 'utf8') > MAX_INPUT_BYTES) throw new InputError('input is larger than 16 KiB');
+}
+
+// zod rebuilds records by assignment, which silently drops an own "__proto__" key from JSON.parse output.
+// Rejecting such keys keeps the action the engine sees identical to the one the buyer sent.
+function checkShape(value: unknown, depth: number): void {
+  if (value === null || typeof value !== 'object') return;
+  if (depth > MAX_INPUT_DEPTH) throw new InputError(`input is nested deeper than ${MAX_INPUT_DEPTH} levels`);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (FORBIDDEN_KEYS.has(key)) throw new InputError(`input contains a forbidden key: ${key}`);
+    checkShape((value as Record<string, unknown>)[key], depth + 1);
+  }
+}
+
 // MIP-003 input_data (or a JSON Task description) -> Authority Check API request.
 export function parseAuthorityInput(raw: unknown): AuthorityRequest {
-  if (Buffer.byteLength(JSON.stringify(raw ?? null), 'utf8') > MAX_INPUT_BYTES) throw new InputError('input is larger than 16 KiB');
+  checkSize(raw);
+  checkShape(raw, 0);
   const parsed = Input.safeParse(raw);
   if (!parsed.success) {
     throw new InputError(`invalid input: ${parsed.error.issues.map((i) => i.path.join('.') || '(root)').join(', ')}`);
@@ -40,6 +66,7 @@ export function parseAuthorityInput(raw: unknown): AuthorityRequest {
       } catch {
         throw new InputError('proposal is not valid JSON');
       }
+      checkShape(value, 1);
     }
     const p = Proposal.safeParse(value);
     if (!p.success) throw new InputError('proposal must be {"action": {...}, "agent_signature": "<hex>" | null}');
@@ -52,6 +79,8 @@ export function parseAuthorityInput(raw: unknown): AuthorityRequest {
 
 // Sokosumi Task description: JSON in the same shape as input_data, or plain English against M-001.
 export function parseTaskDescription(description: string | null): AuthorityRequest {
+  // Every UTF-16 code unit is at least one UTF-8 byte, so this bound holds before any copy or parse.
+  if (description !== null && description.length > MAX_INPUT_BYTES) throw new InputError('input is larger than 16 KiB');
   const text = (description ?? '').trim();
   if (!text) throw new InputError('Task description is empty');
   if (!text.startsWith('{')) return parseAuthorityInput({ mandate_id: DEFAULT_MANDATE_ID, request_text: text });
