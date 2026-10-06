@@ -53,6 +53,8 @@ export const AuthorityResponseSchema = z.object({
   receipt_id: z.string().min(1),
   receipt_hash: Hex32,
   events_url: z.string(),
+  // Additive Phase 7 field. When present it must match the worker-computed hash.
+  decision_hash: Hex32.optional(),
 });
 export type AuthorityResponse = z.infer<typeof AuthorityResponseSchema>;
 
@@ -105,6 +107,10 @@ function verifyResponse(res: AuthorityResponse, request: AuthorityRequest, engin
   if (res.authorization && !verifyAuthorizationRecord(res.authorization, enginePublicKey)) {
     throw new AuthorityContractError('authorization does not verify against the pinned engine key');
   }
+  const computed = decisionHash(res.evaluation.action_hash, res.evaluation.mandate_hash, res.evaluation.verification_hash, res.evaluation.outcome);
+  if (res.decision_hash !== undefined && res.decision_hash !== computed) {
+    throw new AuthorityContractError('decision_hash does not match the evaluation');
+  }
 }
 
 export function createAuthorityClient(opts: {
@@ -123,7 +129,7 @@ export function createAuthorityClient(opts: {
       const res = await send(url, {
         method: 'POST',
         redirect: 'error',
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(20_000),
         headers: {
           authorization: `Bearer ${opts.apiKey}`,
           'idempotency-key': idempotencyKey,
@@ -147,7 +153,12 @@ export function createAuthorityClient(opts: {
 function assertSellable(res: AuthorityResponse): void {
   const e = res.evaluation;
   const authorization = res.authorization ?? null;
-  if (authorization === null) return;
+  if (authorization === null) {
+    if (e.signed && e.outcome === 'ALLOW') {
+      throw new AuthorityContractError('signed ALLOW without an authorization record');
+    }
+    return;
+  }
   if (!e.signed) throw new AuthorityContractError('authorization returned for an unsigned proposal');
   if (e.outcome === 'DENY') throw new AuthorityContractError('authorization returned for a DENY');
   if (e.outcome === 'REQUIRE_APPROVAL' && authorization.fields.requires_principal !== true) {

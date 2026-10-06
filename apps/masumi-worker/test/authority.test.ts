@@ -137,6 +137,8 @@ describe('authority client refuses authorizations it cannot verify', () => {
     ['an authorization for a request sent without an agent signature', UNSIGNED_INPUT, authorityResponse()],
     ['an authorization for a plain-English request', TEXT_INPUT, authorityResponse()],
     ['a signed evaluation for a request sent without an agent signature', UNSIGNED_INPUT, authorityResponse({ authorization: null })],
+    ['a decision_hash that does not match the evaluation', SIGNED_INPUT, { ...authorityResponse(), decision_hash: '00'.repeat(32) }],
+    ['a signed ALLOW without an authorization record', SIGNED_INPUT, authorityResponse({ authorization: null })],
   ];
   it.each(cases)('%s', async (_label, request, json) => {
     const api = await startFakeAuthority(() => ({ status: 200, json }));
@@ -181,6 +183,7 @@ describe('buildOutput (the sold result)', () => {
     ['REQUIRE_APPROVAL authorization without the principal flag', { outcome: 'REQUIRE_APPROVAL' as const, authorization: authorizationRecord(false) }],
     ['authorization for another action', { authorization: authorizationRecord(false, { actionHash: '0d'.repeat(32) }) }],
     ['authorization under another mandate', { authorization: authorizationRecord(false, { mandateHash: '0c'.repeat(32) }) }],
+    ['signed ALLOW without an authorization record', { authorization: null }],
   ])('refuses to sell %s', (_label, o) => {
     expect(() => buildOutput(authorityResponse(o) as never, WEB)).toThrow(AuthorityContractError);
   });
