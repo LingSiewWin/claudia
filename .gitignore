@@ -29,3 +29,6 @@ cre/
 
 # Browser automation artifacts
 .playwright-mcp/
+
+# Masumi worker journals
+apps/masumi-worker/.state/
