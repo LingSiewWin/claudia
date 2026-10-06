@@ -29,3 +29,4 @@ cre/
 
 # Browser automation artifacts
 .playwright-mcp/
+.vitest/
