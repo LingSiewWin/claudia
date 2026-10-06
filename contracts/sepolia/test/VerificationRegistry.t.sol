@@ -113,8 +113,19 @@ contract VerificationRegistryTest is Test {
 
     function test_supportsReceiverInterfaces() public view {
         assertTrue(registry.supportsInterface(type(IReceiver).interfaceId));
+        // onReport(bytes,bytes) selector: the id the Keystone forwarder's ERC-165 check asks for
+        assertTrue(registry.supportsInterface(0x805f2132));
         assertTrue(registry.supportsInterface(type(IERC165).interfaceId));
         assertFalse(registry.supportsInterface(0xffffffff));
+    }
+
+    function test_constructorRejectsOpenConfig() public {
+        vm.expectRevert(VerificationRegistry.ZeroForwarder.selector);
+        new VerificationRegistry(address(0), OPERATOR, address(0));
+
+        // Neither an origin nor a workflow-owner pin: anyone could write through a permissionless forwarder.
+        vm.expectRevert(VerificationRegistry.NoReportAuthentication.selector);
+        new VerificationRegistry(FORWARDER, address(0), address(0));
     }
 
     function test_workflowOwnerCheckForDonForwarder() public {

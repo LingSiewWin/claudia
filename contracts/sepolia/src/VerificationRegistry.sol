@@ -31,6 +31,7 @@ contract VerificationRegistry is IReceiver {
     /// MockKeystoneForwarder is permissionless). address(0) disables the check.
     address public immutable REQUIRED_ORIGIN;
     /// Required workflow owner from the forwarder metadata (bytes 42..62). address(0) disables.
+    /// At least one of REQUIRED_ORIGIN and REQUIRED_WORKFLOW_OWNER must be set.
     address public immutable REQUIRED_WORKFLOW_OWNER;
 
     mapping(bytes32 reportHash => Stored) private reports;
@@ -44,8 +45,12 @@ contract VerificationRegistry is IReceiver {
     error EmptyReportHash();
     error ReportExists(bytes32 reportHash);
     error UnknownReport(bytes32 key);
+    error ZeroForwarder();
+    error NoReportAuthentication();
 
     constructor(address forwarder_, address requiredOrigin_, address requiredWorkflowOwner_) {
+        if (forwarder_ == address(0)) revert ZeroForwarder();
+        if (requiredOrigin_ == address(0) && requiredWorkflowOwner_ == address(0)) revert NoReportAuthentication();
         FORWARDER = forwarder_;
         REQUIRED_ORIGIN = requiredOrigin_;
         REQUIRED_WORKFLOW_OWNER = requiredWorkflowOwner_;
