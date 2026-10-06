@@ -15,8 +15,8 @@ const APPLY = {
   chainTag: '00',
   vaultSeed: 'd8799f5820' + 'b5'.repeat(32) + '01ff',
   anchorPolicy: 'c17f6b5eb72bc5c4484ad9a0f1bf8629046291e32630b1a10798af61',
-  vaultPolicy: '645957bce8339c7ed6d833b95f67b63e0b299c75ac2f5448ca911334',
-  vaultAddress: 'addr_test1wpj9j4auaqeeclkkmqemjhm8kclqk2vuwkkz74zge2g3xdqmfyjtj',
+  vaultPolicy: 'bdfb6dd3c14913744541b3c21e0ce69aa0ef54cf5cc26cfc6c20eb56',
+  vaultAddress: 'addr_test1wz7lkmwnc9y3xaz9gxeuy8svu6d2pm65eawvym8udsswk4sgxfyuz',
 };
 
 const BASELINE = {
@@ -28,8 +28,8 @@ const BASELINE = {
     label: 'm1 ? False',
   },
   'vault.vault': {
-    bytes: 5487,
-    hash: '0d0424d785d6cafe8805b9f70403a7441fe363fa62d166c01842b183',
+    bytes: 5990,
+    hash: 'ea55be3d25b64cb1560b2b803e7b018805efc1a6a0d34a29c0196764',
     params: 'anchor_ref,chain_tag,seed',
     label: 'r16 ? False',
   },
