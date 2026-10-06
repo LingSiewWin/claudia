@@ -75,10 +75,22 @@ export function checkConstraint(c: Constraint, ctx: ConstraintContext): Constrai
     case 'verified_facts': {
       const v = ctx.verification;
       if (v === null) throw new Error('verified_facts checked without a verification report');
-      const detail: Detail = { report_hash: v.report_hash, invoice_id: v.report.invoice_id, result: v.report.result };
+      const detail: Detail = {
+        report_hash: v.report_hash,
+        invoice_id: v.report.invoice_id,
+        result: v.report.result,
+        verified_recipient: v.report.verified_recipient,
+        verified_amount: v.report.verified_amount,
+      };
       if (v.report.result !== 'VERIFIED') return fail(v.report.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
       const broken = FACT_REASONS.find(([fact]) => !v.report.facts[fact]);
-      return broken ? fail(broken[1], detail) : pass(detail);
+      if (broken) return fail(broken[1], detail);
+      // The facts are computed from the trigger request, so compare the verified values with the action itself.
+      if (v.report.verified_recipient !== action.recipient.address) return fail('RECIPIENT_MISMATCH', detail);
+      if (v.report.verified_amount !== action.amount.value) return fail('AMOUNT_MISMATCH', detail);
+      // An action without an invoice reference never matches, so it can never pass verification.
+      if (v.report.invoice_id !== action.reference?.invoice_id) return fail('INVOICE_NOT_FOUND', detail);
+      return pass(detail);
     }
   }
 }

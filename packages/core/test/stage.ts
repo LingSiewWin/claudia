@@ -1,5 +1,5 @@
 import { evaluate } from '../src/engine';
-import type { ActionIR } from '../src/schemas';
+import { type ActionIR, FactReasonSchema } from '../src/schemas';
 import { ATTACKER_ADDR, GLOBEX_ADDR, M001, NFT_ADDR, NOW, action, propose, state, verified } from './fixtures';
 
 export interface StageRow {
@@ -22,11 +22,11 @@ export function runStage(): StageRow[] {
   const step = (n: number, label: string, a: ActionIR, mismatch: boolean, human: Human) => {
     const input = { mandate: M001, proposal: propose(a), state: state(0, 0, { vault_balance: balance.toString(), spent_today: spent.toString() }), nowMs: NOW };
     let e = evaluate({ ...input, verification: null });
-    let cre: StageRow['cre'] = null;
     if (e.outcome === 'NEEDS_VERIFICATION') {
-      cre = mismatch ? 'MISMATCH' : 'VERIFIED';
       e = evaluate({ ...input, verification: mismatch ? verified(a, 'MISMATCH', 'RECIPIENT_MISMATCH') : verified(a) });
     }
+    const facts = e.checks.find((c) => c.kind === 'verified_facts');
+    const cre: StageRow['cre'] = facts?.result === 'pass' ? 'VERIFIED' : FactReasonSchema.safeParse(facts?.reason).success ? 'MISMATCH' : null;
     const amount = BigInt(a.amount.value);
     const settles = e.outcome === 'ALLOW' || (e.outcome === 'REQUIRE_APPROVAL' && human === 'approve');
     if (settles) {
