@@ -1,0 +1,15 @@
+name = "authority/cardano"
+version = "0.1.0"
+compiler = "v1.1.24"
+plutus = "v3"
+description = "Mandate anchor and treasury vault validators"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v4.0.0"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "v3.0.0"
+source = "github"
