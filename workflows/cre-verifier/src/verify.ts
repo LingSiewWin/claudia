@@ -71,12 +71,12 @@ export function compareFacts(t: InvoiceTuple, req: TriggerRequest): Verification
   const exists = t.id !== null && t.id === req.invoice_id;
   return {
     exists,
-    customer_match: exists && t.customer === req.customer_id,
+    customer_match: exists && t.customer !== null && t.customer === req.customer_id,
     status_open: exists && t.status === 'open',
     amount_match:
       exists && t.amount_due !== null && BigInt(t.amount_due) * USDM_UNITS_PER_CENT === BigInt(req.requested_amount),
     currency_match: exists && t.currency === req.requested_currency,
-    recipient_match: exists && t.payout_address === req.requested_recipient,
+    recipient_match: exists && t.payout_address !== null && t.payout_address === req.requested_recipient,
   };
 }
 

@@ -63,6 +63,26 @@ describe('buildReport (each fact compared exactly)', () => {
     expect(VerificationReportSchema.safeParse(r).success).toBe(true);
   });
 
+  it.each([
+    ['customer', { customer: null }, { customer_id: null }, 'CUSTOMER_MISMATCH', 'customer_match'],
+    ['recipient', { payout_address: null }, { requested_recipient: null }, 'RECIPIENT_MISMATCH', 'recipient_match'],
+  ] as const)('never matches a null %s against a null request field', (_label, tuple, patch, reason, fact) => {
+    const t = { ...normalizeInvoice(200, invoice()), ...tuple };
+    const r = buildReport(t, { ...request(), ...patch } as unknown as TriggerRequest).report;
+    expect(r.facts[fact]).toBe(false);
+    expect(r.result).toBe('MISMATCH');
+    expect(r.reason).toBe(reason);
+  });
+
+  it('reports an amount whose USDM value overflows u64 as unverified, not as a match', () => {
+    const r = report(200, invoice({ amount_due: 2_000_000_000_000_000 }));
+    expect(r.verified_amount).toBeNull();
+    expect(r.facts.amount_match).toBe(false);
+    expect(r.result).toBe('MISMATCH');
+    expect(r.reason).toBe('AMOUNT_MISMATCH');
+    expect(VerificationReportSchema.safeParse(r).success).toBe(true);
+  });
+
   it('reports the first failing fact in spec order', () => {
     const r = report(200, invoice({ status: 'paid' }), request({ requested_recipient: ATTACKER }));
     expect(r.facts.recipient_match).toBe(false);

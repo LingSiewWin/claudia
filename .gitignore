@@ -24,6 +24,9 @@ skills-lock.json
 # CRE onboarding scaffold
 cre/
 
+# CRE compile temp file
+workflows/*/.cre_build_tmp.js
+
 # Local agent execution workspace
 .superpowers/
 

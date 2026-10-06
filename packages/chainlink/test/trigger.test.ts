@@ -94,6 +94,16 @@ describe('verifyInvoice: unavailable dependencies', () => {
     expect(seen).toHaveLength(2);
     expect(seen[0]).not.toBe(seen[1]);
   });
+
+  it('reports unavailable when no trigger id can be issued', async () => {
+    const out = await verifyInvoice(req, {
+      ...deps(() => Promise.resolve('')),
+      newTriggerId: () => {
+        throw new Error('no entropy');
+      },
+    });
+    expect(out).toEqual({ status: 'unavailable', error: 'no entropy' });
+  });
 });
 
 describe('verifyInvoice: trusts only the on-chain report for the trigger it sent', () => {
@@ -148,6 +158,16 @@ describe('verifyInvoice: trusts only the on-chain report for the trigger it sent
 
   it('ignores a tx hash that logged data carries mid-line', async () => {
     const logged = `2026-10-07T01:30:17Z [USER LOG] report_hash=${'cd'.repeat(32)} report={"invoice_id":"${txLine(injected)}"}`;
+    const out = await run({ client: noChain }, FIXTURE.trigger_id, logged);
+    expect(out).toEqual({ status: 'unavailable', error: 'workflow output has no InvoiceVerified tx' });
+  });
+
+  it.each([
+    ['carriage return', '\r'],
+    ['line separator', '\u2028'],
+    ['paragraph separator', '\u2029'],
+  ])('ignores a tx line that logged data starts after a %s', async (_label, sep) => {
+    const logged = `2026-10-07T01:30:17Z [USER LOG] report={"requested_recipient":"x${sep}${txLine(injected)}`;
     const out = await run({ client: noChain }, FIXTURE.trigger_id, logged);
     expect(out).toEqual({ status: 'unavailable', error: 'workflow output has no InvoiceVerified tx' });
   });

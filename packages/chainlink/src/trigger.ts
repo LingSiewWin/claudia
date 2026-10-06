@@ -62,19 +62,23 @@ export function simulateBroadcast(opts: { workflowsDir: string; envFile: string;
 }
 
 // The workflow's own log line, matched as a whole line so logged data cannot inject a tx hash.
-const TX_LINE = /^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z )?\[USER LOG\] InvoiceVerified tx=(0x[0-9a-f]{64}) report_hash=[0-9a-f]{64}$/gm;
+// Lines are split on "\n" only: without the `m` flag, \r, U+2028 and U+2029 in logged data are not line starts.
+const TX_LINE = /^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z )?\[USER LOG\] InvoiceVerified tx=(0x[0-9a-f]{64}) report_hash=[0-9a-f]{64}$/;
 
 // Never returns a report the chain does not hold: the workflow output is used only to find the tx.
 export async function verifyInvoice(
   req: VerificationRequest,
   deps: { trigger: Trigger; client: PublicClient; registry: Address; newTriggerId?: () => string },
 ): Promise<VerificationOutcome> {
-  // The id is issued here and set last, so nothing in req can replace it.
-  const triggerId = (deps.newTriggerId ?? randomUUID)();
-  const payload: TriggerPayload = { ...req, trigger_id: triggerId };
   try {
+    // The id is issued here and set last, so nothing in req can replace it.
+    const triggerId = (deps.newTriggerId ?? randomUUID)();
+    const payload: TriggerPayload = { ...req, trigger_id: triggerId };
     const output = await deps.trigger(payload);
-    const txs = Array.from(output.matchAll(TX_LINE), (m) => m[1] as Hex);
+    const txs = output.split('\n').flatMap((line) => {
+      const m = TX_LINE.exec(line);
+      return m ? [m[1] as Hex] : [];
+    });
     if (txs.length === 0) throw new Error('workflow output has no InvoiceVerified tx');
     if (txs.length > 1) throw new Error('workflow output has more than one InvoiceVerified tx');
     const tx = txs[0]!;

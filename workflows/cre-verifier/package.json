@@ -10,6 +10,8 @@
   "dependencies": {
     "@authority/chainlink": "workspace:*",
     "@authority/core": "workspace:*",
+    "@chainlink/cre-sdk": "1.23.0",
+    "@chainlink/cre-sdk-javy-plugin": "1.7.0",
     "zod": "4.6.5"
   },
   "devDependencies": {

@@ -4,3 +4,7 @@ packages:
   - "workflows/*"
 allowBuilds:
   esbuild: false
+packageExtensions:
+  "@chainlink/cre-sdk":
+    dependencies:
+      typescript: 5.9.3
