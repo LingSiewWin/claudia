@@ -5,6 +5,7 @@
 use aiken/collection/list
 use aiken/interval
 use authority/fixtures.{Signed}
+use authority/message
 use authority/types.{
   Active, AnchorDatum, VaultDatum, anchor_token_name, day_ms, vault_token_name,
 }
@@ -211,8 +212,8 @@ pub fn release_case(signed: Signed) -> ReleaseCase {
   }
 }
 
-/// The release an honest executor builds for `c`: recipient output,
-/// vault continuing output, fee-wallet change.
+/// The release an honest executor builds for `c`: recipient output tagged
+/// with the authorization digest, vault continuing output, fee-wallet change.
 pub fn release_tx(c: ReleaseCase) -> Transaction {
   let amount = c.signed.auth.amount
   let day = c.lower / day_ms
@@ -229,7 +230,7 @@ pub fn release_tx(c: ReleaseCase) -> Transaction {
       Output {
         address: c.pay_to,
         value: assets.merge(assets.from_lovelace(2_000_000), usdm(amount)),
-        datum: NoDatum,
+        datum: InlineDatum(message.digest(c.signed.auth)),
         reference_script: None,
       },
       vault_output(
