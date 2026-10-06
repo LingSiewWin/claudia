@@ -9,6 +9,7 @@ import {
   type Outcome,
   type ReasonCode,
   type State,
+  StateSchema,
   VerificationReportSchema,
   type VerifiedReport,
 } from './schemas';
@@ -65,8 +66,10 @@ function usableReport(v: VerifiedReport | null, actionHash: string, nowMs: numbe
 }
 
 export function evaluate(input: EvaluateInput): Evaluation {
-  const { mandate, state, nowMs } = input;
+  const { mandate, nowMs } = input;
   if (!Number.isSafeInteger(nowMs)) throw new TypeError('evaluate: nowMs must be a safe integer');
+  // Chain state crosses a trust boundary: malformed amounts must throw, never read as 0 or a wider cap.
+  const state = StateSchema.parse(input.state);
   const checks: Check[] = [
     { id: 'proposal', kind: 'integrity', result: 'not_evaluated', reason: null, detail: {} },
     { id: 'mandate', kind: 'validity', result: 'not_evaluated', reason: null, detail: {} },

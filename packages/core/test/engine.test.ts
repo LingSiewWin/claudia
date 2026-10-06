@@ -52,6 +52,19 @@ describe('evaluate: mandate validity', () => {
   });
 });
 
+describe('evaluate: state validation', () => {
+  // 45 already spent + 9 is over the 50 cap; a malformed state must not reset or widen it.
+  it.each([
+    ['spent_today empty', state(135, 45, { spent_today: '' })],
+    ['spent_today negative', state(135, 45, { spent_today: '-41000000' })],
+    ['spent_today -1', state(135, 45, { spent_today: '-1' })],
+    ['vault_balance hex', state(135, 0, { vault_balance: '0x8000000' })],
+    ['last_nonce hex', state(135, 0, { last_nonce: '0x1' })],
+  ])('%s throws instead of evaluating', (_label, s) => {
+    expect(() => run(action({ id: 'A-1', amount: 9 }), { s })).toThrow();
+  });
+});
+
 describe('evaluate: algorithm', () => {
   it('short-circuits on the first DENY', () => {
     const e = run(action({ id: 'A-5', amount: 2, type: 'purchase', purpose: 'digital_collectibles', counterparty: 'nft-marketplace', invoice: null }), { v: null });

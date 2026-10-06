@@ -83,10 +83,11 @@ describe('issueAuthorization (gate)', () => {
     expect(refusal({ ...input, chain: { ...CHAIN, chainTag: 1 } })).toBe('RECIPIENT_UNENCODABLE');
   });
 
-  it('throws on a non-integer nowMs', () => {
+  it('throws on a non-integer nowMs or malformed state', () => {
     const input = prepared(action({ id: 'A-1', amount: 8.42 }));
     expect(() => issueAuthorization({ ...input, nowMs: Number.NaN })).toThrow(TypeError);
     expect(() => issueAuthorization({ ...input, nowMs: Number.NaN })).toThrow(/nowMs must be a safe integer/);
+    expect(() => issueAuthorization({ ...input, state: state(135, 45, { spent_today: '' }) })).toThrow();
   });
 });
 
