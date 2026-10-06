@@ -7,6 +7,7 @@ import { ActionIRSchema } from './schemas';
 
 export const AUTHORIZATION_TTL_MS = 600_000;
 export const APPROVAL_MAX_AGE_MS = 60_000;
+const U64 = 1n << 64n;
 
 export type IssuanceRefusal =
   | 'UNSIGNED_PROPOSAL'
@@ -45,7 +46,8 @@ export interface Approval {
  * The only public signing path. It takes evaluate()'s inputs, never an Evaluation: it runs evaluate() itself
  * at nowMs, so report freshness is measured at signing time, and signs only what that evaluation allows.
  * ALLOW signs with requires_principal = 0. REQUIRE_APPROVAL needs a fresh approval from the mandate's approver
- * for this exact action_hash and signs with requires_principal = 1. Everything else throws IssuanceRefused.
+ * for this exact action_hash and signs with requires_principal = 1. nonce must exceed state.last_nonce and fit
+ * in u64. Everything else throws IssuanceRefused.
  */
 export interface IssueInput extends EvaluateInput {
   approval: Approval | null;
@@ -98,7 +100,8 @@ export function issueAuthorization(input: IssueInput): AuthorizationRecord {
   if (hardCap === null || amount > hardCap) refuse('ABOVE_HARD_CAP');
   if (action.amount.asset !== mandate.asset.symbol || chain.assetSymbol !== mandate.asset.symbol) refuse('ASSET_MISMATCH');
   if (action.type !== 'pay_invoice') refuse('UNSUPPORTED_ACTION_TYPE');
-  if (input.nonce < 1n) refuse('INVALID_NONCE');
+  // The vault accepts only nonce > last_nonce, encoded as u64.
+  if (input.nonce <= BigInt(input.state.last_nonce) || input.nonce >= U64) refuse('INVALID_NONCE');
   if (parseShelleyAddress(action.recipient.address).network !== chain.chainTag) refuse('RECIPIENT_UNENCODABLE');
 
   // evaluate() denies unless nowMs < expires_at, so validUntil > nowMs.

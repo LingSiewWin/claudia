@@ -84,6 +84,15 @@ describe('issueAuthorization (gate)', () => {
     expect(refusal({ ...input, chain: { ...CHAIN, chainTag: 1 } })).toBe('RECIPIENT_UNENCODABLE');
   });
 
+  it('refuses a nonce at or below the chain last_nonce, and one above u64 max', () => {
+    const input = { ...prepared(action({ id: 'A-1', amount: 8.42 })), state: state(135, 0, { last_nonce: '5' }) };
+    expect(refusal({ ...input, nonce: 3n })).toBe('INVALID_NONCE');
+    expect(refusal({ ...input, nonce: 5n })).toBe('INVALID_NONCE');
+    expect(issueAuthorization({ ...input, nonce: 6n }).fields.nonce).toBe('6');
+    expect(refusal({ ...input, nonce: 1n << 64n })).toBe('INVALID_NONCE');
+    expect(issueAuthorization({ ...input, nonce: (1n << 64n) - 1n }).fields.nonce).toBe('18446744073709551615');
+  });
+
   it('throws on a non-integer nowMs or malformed state', () => {
     const input = prepared(action({ id: 'A-1', amount: 8.42 }));
     expect(() => issueAuthorization({ ...input, nowMs: Number.NaN })).toThrow(TypeError);
