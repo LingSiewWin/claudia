@@ -13,6 +13,9 @@ importers:
       '@authority/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       next:
         specifier: 16.3.8
         version: 16.3.8(@playwright/test@1.63.0)(@types/node@26.6.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

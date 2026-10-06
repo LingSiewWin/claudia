@@ -1,5 +1,4 @@
 import {
-  blake2b256,
   bytesToHex,
   canonicalHash,
   canonicalJson,
@@ -14,6 +13,7 @@ import {
 } from '@authority/core';
 import { describe, expect, it } from 'vitest';
 import { CREATED_AT_FORMAT } from '../lib/contract';
+import { keyHash } from '../lib/keyhash';
 import { formatUnits } from '../lib/format';
 import { recorded, stage } from './load';
 
@@ -94,7 +94,7 @@ describe('recorded fixtures', () => {
   });
 
   it('name the TEST-derived key hash as the approver everywhere', () => {
-    const cfo = bytesToHex(blake2b256(publicKeyFromSecret(new Uint8Array(32).fill(7))).slice(0, 28));
+    const cfo = keyHash(bytesToHex(publicKeyFromSecret(new Uint8Array(32).fill(7))));
     for (const v of Object.values(recorded.mandates)) expect(v.mandate.approvers.map((a) => a.cardano_key_hash)).toEqual([cfo]);
     for (const b of Object.values(recorded.bundles)) {
       expect(b.mandate.approvers.map((a) => a.cardano_key_hash)).toEqual([cfo]);

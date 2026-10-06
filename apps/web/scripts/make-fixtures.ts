@@ -9,7 +9,6 @@ import {
   type Mandate,
   type ReasonCode,
   type VerificationReport,
-  blake2b256,
   bytesToHex,
   canonicalHash,
   canonicalJson,
@@ -42,6 +41,7 @@ import type {
   RunSummary,
 } from '../lib/contract';
 import { parseUnits } from '../lib/format';
+import { keyHash } from '../lib/keyhash';
 
 const DAY_MS = 86_400_000;
 const T0 = Date.parse('2026-10-07T03:00:00.000Z');
@@ -120,8 +120,8 @@ const MREV: Setup = {
 };
 
 const pk = (sk: Uint8Array) => bytesToHex(publicKeyFromSecret(sk));
-// Fixture approver: a key hash derived from a fixed TEST seed (28 bytes of blake2b-256 over the public key), not any real wallet.
-const CFO_TEST = bytesToHex(blake2b256(publicKeyFromSecret(new Uint8Array(32).fill(7))).slice(0, 28));
+// Fixture approver: the real Cardano key hash (blake2b-224) of a fixed TEST public key, not any real wallet.
+const CFO_TEST = keyHash(pk(new Uint8Array(32).fill(7)));
 
 function buildMandate(s: Setup, version = s.version): Mandate {
   const l = s.limits;
