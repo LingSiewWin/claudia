@@ -32,6 +32,9 @@ fn stake_bytes(tag: Int, hash: ByteArray) -> ByteArray {
   }
 }
 
+/// Checks shape only: field widths, tag and flag ranges, unsigned ints that
+/// fit their width. Semantic rules (amount > 0, chain_tag in {0, 1},
+/// action_type = 1, mandate_version >= 1, nonce >= 1) are enforced by the vault.
 pub fn encode(a: Authorization) -> ByteArray {
   expect a.recipient_pay_tag == 0 || a.recipient_pay_tag == 1
   expect a.requires_principal == 0 || a.requires_principal == 1
@@ -66,6 +69,8 @@ pub fn digest(a: Authorization) -> ByteArray {
 }
 
 /// The Plutus address the authorization pays (fields 13-16).
+/// Precondition: the same value went through `digest`, which validated the
+/// tags and hash lengths. This function does not re-check hash lengths.
 pub fn recipient_address(a: Authorization) -> Address {
   let payment = when a.recipient_pay_tag is {
     0 -> VerificationKey(a.recipient_pay_hash)
