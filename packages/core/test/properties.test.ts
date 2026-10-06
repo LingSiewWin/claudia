@@ -176,14 +176,26 @@ describe('engine invariants', () => {
     const tamper = fc.oneof(
       fc.record({ field: fc.constant('verified_recipient' as const), value: fc.constantFrom<string | null>(ATTACKER_ADDR, null) }),
       fc.record({ field: fc.constant('verified_amount' as const), value: fc.option(fc.bigInt({ min: 1n, max: 10n ** 9n }), { nil: null }) }),
-      fc.record({ field: fc.constant('invoice_id' as const), value: fc.constantFrom('in_other', 'in_A-P0') }),
+      // Suffix appended to the action's own invoice id, so the tampered id always differs.
+      fc.record({ field: fc.constant('invoice_id' as const), value: fc.constantFrom('-x', '0') }),
+      fc.record({ field: fc.constant('verified_currency' as const), value: fc.constantFrom<string | null>('eur', null) }),
     );
-    const CODE = { verified_recipient: 'RECIPIENT_MISMATCH', verified_amount: 'AMOUNT_MISMATCH', invoice_id: 'INVOICE_NOT_FOUND' };
+    const CODE = {
+      verified_recipient: 'RECIPIENT_MISMATCH',
+      verified_amount: 'AMOUNT_MISMATCH',
+      invoice_id: 'INVOICE_NOT_FOUND',
+      verified_currency: 'CURRENCY_MISMATCH',
+    };
     fc.assert(
       fc.property(nearly, tamper, (s, t) => {
         const { a, input } = build(s);
         const v = input.verification!;
-        const value = t.field === 'verified_amount' && t.value !== null ? (BigInt(a.amount.value) + t.value).toString() : t.value;
+        const value =
+          t.field === 'verified_amount' && t.value !== null
+            ? (BigInt(a.amount.value) + t.value).toString()
+            : t.field === 'invoice_id'
+              ? `${a.reference?.invoice_id}${t.value}`
+              : t.value;
         const report = { ...v.report, [t.field]: value };
         const before = evaluate(input);
         const after = evaluate({ ...input, verification: { ...v, report, report_hash: canonicalHash(report) } });
