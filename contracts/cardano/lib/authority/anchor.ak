@@ -25,16 +25,31 @@ pub fn valid_datum(d: AnchorDatum) -> Bool {
 }
 
 /// R2: exactly one reference input holds the anchor NFT, it sits at the
-/// anchor script address, and it carries an inline AnchorDatum.
+/// anchor script address, and it carries an inline AnchorDatum. Each failure
+/// has its own `r2 ?` label so a rejection names the broken part.
 pub fn read(reference_inputs: List<Input>, anchor_ref: ByteArray) -> AnchorDatum {
-  expect [anchor] = list.filter(
-    reference_inputs,
-    fn(i) {
-      assets.quantity_of(i.output.value, anchor_ref, anchor_token_name) > 0
-    },
-  )
-  expect anchor.output.address.payment_credential == Script(anchor_ref)
-  expect InlineDatum(data) = anchor.output.datum
-  expect d: AnchorDatum = data
-  d
+  when
+    list.filter(
+      reference_inputs,
+      fn(i) {
+        assets.quantity_of(i.output.value, anchor_ref, anchor_token_name) > 0
+      },
+    )
+  is {
+    [anchor] ->
+      if anchor.output.address.payment_credential == Script(anchor_ref) {
+        when anchor.output.datum is {
+          InlineDatum(data) ->
+            if data is d: AnchorDatum {
+              d
+            } else {
+              fail @"r2 ? anchor datum is not an AnchorDatum"
+            }
+          _ -> fail @"r2 ? anchor datum is not inline"
+        }
+      } else {
+        fail @"r2 ? anchor NFT is not at the anchor script"
+      }
+    _ -> fail @"r2 ? need exactly one anchor reference input"
+  }
 }

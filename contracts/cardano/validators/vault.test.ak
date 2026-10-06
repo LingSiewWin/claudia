@@ -222,6 +222,50 @@ test r2_anchor_spent_instead_of_referenced() fail {
   )
 }
 
+test r2_two_anchor_inputs() fail {
+  let c = release_case(release_base)
+  let tx = release_tx(c)
+  release(
+    c,
+    Transaction {
+      ..tx,
+      reference_inputs: list.concat(tx.reference_inputs, tx.reference_inputs),
+    },
+  )
+}
+
+test r2_anchor_datum_by_hash() fail {
+  let c = release_case(release_base)
+  let moved = Input {
+    ..anchor_input(mandate),
+    output: Output { ..testkit.anchor_output(mandate), datum: DatumHash(#"00") },
+  }
+  release(c, Transaction { ..release_tx(c), reference_inputs: [moved] })
+}
+
+test r2_anchor_datum_wrong_type() fail {
+  let c = release_case(release_base)
+  let moved = Input {
+    ..anchor_input(mandate),
+    output: Output { ..testkit.anchor_output(mandate), datum: InlineDatum(42) },
+  }
+  release(c, Transaction { ..release_tx(c), reference_inputs: [moved] })
+}
+
+test r2_anchor_datum_wrong_fields() fail {
+  let c = release_case(release_base)
+  let moved = Input {
+    ..anchor_input(mandate),
+    output: Output {
+      ..testkit.anchor_output(mandate),
+      datum: InlineDatum(
+        VaultDatum { last_nonce: 0, day_index: 0, spent_today: 0 },
+      ),
+    },
+  }
+  release(c, Transaction { ..release_tx(c), reference_inputs: [moved] })
+}
+
 // ## R3: anchor active
 
 test r3_revoked_anchor() {

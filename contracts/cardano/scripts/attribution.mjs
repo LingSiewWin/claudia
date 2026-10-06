@@ -38,7 +38,7 @@ for (const { name, tests } of report.modules) {
       continue;
     }
     console.log(`${t.title.padEnd(52)} ${trace.split('\n')[0]}`);
-    if (failTest) continue; // `fail` tests: structural rejection
+    if (failTest && id !== 'r2') continue; // other `fail` tests: structural rejection
     const want = prefixFor[id] ?? `${id} ?`;
     if (!trace.startsWith(want)) problems.push(`${t.title}: rejected by "${trace}", expected ${want}`);
   }
