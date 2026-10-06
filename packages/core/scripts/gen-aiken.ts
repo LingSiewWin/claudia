@@ -141,6 +141,7 @@ export function fixtureCases(): Array<[string, { fields: AuthorizationFields; si
     ['release_at_hard_cap', signed({ ...base, amount: 50_000_000n, requiresPrincipal: true })],
     ['release_above_hard_cap', signed({ ...base, amount: 50_000_001n, requiresPrincipal: true })],
     ['release_old_version', signed({ ...base, mandateVersion: 2 })],
+    ['release_version_cap', signed({ ...base, mandateVersion: 4_294_967_295 })],
     ['release_other_mandate_hash', signed({ ...base, mandateHash: 'cd'.repeat(32) })],
     ['release_other_mandate_ref', signed({ ...base, mandateRef: 'bc'.repeat(28) })],
     ['release_mainnet', signed({ ...base, chainTag: 1, recipient: buildAddress(0x61, new Uint8Array(28).fill(0x11)) })],

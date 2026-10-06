@@ -210,6 +210,31 @@ pub const release_old_version: Signed =
     signature: #"4faf6b62b5b05b66e2a9537aa10091d3f35c15d89dd0b88e936eb44c41b7ba75e7e35628d9e95adf2cf0699e4e584ed964e9fd5888915c3838db83d872e3850d",
   }
 
+pub const release_version_cap: Signed =
+  Signed {
+    auth: Authorization {
+      chain_tag: 0,
+      vault_hash: #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      mandate_ref: #"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      mandate_hash: #"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      mandate_version: 4294967295,
+      action_hash: #"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      action_type: 1,
+      asset_policy: #"16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde",
+      asset_name: #"0014df10745553444d",
+      amount: 8420000,
+      recipient_pay_tag: 0,
+      recipient_pay_hash: #"11111111111111111111111111111111111111111111111111111111",
+      recipient_stake_tag: 0,
+      recipient_stake_hash: #"",
+      nonce: 1,
+      valid_until: 1800000000000,
+      requires_principal: 0,
+      verification_ref: #"f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+    },
+    signature: #"d8aa35cd319961339d77ba6d99908d5e34a8ed52fd90bb2553b246ff5ec339fc91f362bbf2e1cf35f574241b60cd68b02aea5e2a90ef04174324afb161baa902",
+  }
+
 pub const release_other_mandate_hash: Signed =
   Signed {
     auth: Authorization {
