@@ -59,13 +59,14 @@ function usableReport(v: VerifiedReport | null, actionHash: string, nowMs: numbe
   if (!VerificationReportSchema.safeParse(v.report).success) return null;
   if (v.report.action_hash !== actionHash) return null;
   if (canonicalHash(v.report) !== v.report_hash) return null;
-  if (nowMs - v.block_time_ms > REPORT_MAX_AGE_MS) return null;
-  if (v.block_time_ms - nowMs > REPORT_MAX_FUTURE_SKEW_MS) return null;
+  if (!(nowMs - v.block_time_ms <= REPORT_MAX_AGE_MS)) return null;
+  if (!(v.block_time_ms - nowMs <= REPORT_MAX_FUTURE_SKEW_MS)) return null;
   return v;
 }
 
 export function evaluate(input: EvaluateInput): Evaluation {
   const { mandate, state, nowMs } = input;
+  if (!Number.isSafeInteger(nowMs)) throw new TypeError('evaluate: nowMs must be a safe integer');
   const checks: Check[] = [
     { id: 'proposal', kind: 'integrity', result: 'not_evaluated', reason: null, detail: {} },
     { id: 'mandate', kind: 'validity', result: 'not_evaluated', reason: null, detail: {} },
@@ -113,12 +114,12 @@ export function evaluate(input: EvaluateInput): Evaluation {
   set(0, 'pass', null, { signed, action_hash: actionHash });
 
   // 2. Mandate validity
-  if (mandate.status === 'revoked' || state.anchor_status === 'revoked') return deny(1, 'MANDATE_REVOKED');
+  if (mandate.status !== 'active' || state.anchor_status !== 'active') return deny(1, 'MANDATE_REVOKED');
   if (state.anchor_version !== mandate.version) {
     return deny(1, 'MANDATE_VERSION_MISMATCH', { mandate_version: mandate.version, anchor_version: state.anchor_version });
   }
-  if (nowMs < Date.parse(mandate.validity.starts_at)) return deny(1, 'MANDATE_NOT_STARTED');
-  if (nowMs >= Date.parse(mandate.validity.expires_at)) return deny(1, 'MANDATE_EXPIRED');
+  if (!(nowMs >= Date.parse(mandate.validity.starts_at))) return deny(1, 'MANDATE_NOT_STARTED');
+  if (!(nowMs < Date.parse(mandate.validity.expires_at))) return deny(1, 'MANDATE_EXPIRED');
   set(1, 'pass', null, { version: mandate.version });
 
   // 3. Constraints, in mandate order
@@ -143,7 +144,8 @@ export function evaluate(input: EvaluateInput): Evaluation {
     const reason = out.reason ?? 'VERIFICATION_UNAVAILABLE';
     if (constraint.on_violation === 'DENY') return deny(index, reason, out.detail);
     set(index, 'approval', reason, out.detail);
-    approvals.push({ constraint: constraint.id, approver: constraint.approver ?? 'unknown', reason });
+    if (constraint.approver === undefined) throw new Error(`evaluate: constraint ${constraint.id} has no approver`);
+    approvals.push({ constraint: constraint.id, approver: constraint.approver, reason });
   }
   return finish(approvals.length > 0 ? 'REQUIRE_APPROVAL' : 'ALLOW', null);
 }

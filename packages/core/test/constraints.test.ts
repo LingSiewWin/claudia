@@ -55,6 +55,13 @@ describe('checkConstraint', () => {
     expect(checkConstraint(c('invoice_facts'), bad)).toMatchObject({ violated: true, reason: 'INVOICE_NOT_OPEN' });
   });
 
+  it('verified_facts fails a VERIFIED report with a false fact, first false fact wins', () => {
+    const a = action({ id: 'A-1', amount: 1 });
+    const v = verified(a);
+    const report = { ...v.report, facts: { ...v.report.facts, status_open: false, amount_match: false } };
+    expect(checkConstraint(c('invoice_facts'), { ...ctx(1), action: a, verification: { ...v, report } })).toMatchObject({ violated: true, reason: 'INVOICE_NOT_OPEN' });
+  });
+
   it('details contain no bigint (canonical-JSON safe)', () => {
     const out = checkConstraint(c('treasury_floor'), ctx(9, 108.58));
     expect(Object.values(out.detail).every((v) => typeof v !== 'bigint')).toBe(true);

@@ -1,4 +1,4 @@
-import type { ActionIR, Constraint, ReasonCode, State, VerifiedReport } from './schemas';
+import type { ActionIR, Constraint, ReasonCode, State, VerificationReport, VerifiedReport } from './schemas';
 
 export interface ConstraintContext {
   action: ActionIR;
@@ -15,6 +15,15 @@ export interface ConstraintOutcome {
   reason: ReasonCode | null;
   detail: Detail;
 }
+
+const FACT_REASONS: [keyof VerificationReport['facts'], ReasonCode][] = [
+  ['exists', 'INVOICE_NOT_FOUND'],
+  ['customer_match', 'CUSTOMER_MISMATCH'],
+  ['status_open', 'INVOICE_NOT_OPEN'],
+  ['amount_match', 'AMOUNT_MISMATCH'],
+  ['currency_match', 'CURRENCY_MISMATCH'],
+  ['recipient_match', 'RECIPIENT_MISMATCH'],
+];
 
 const pass = (detail: Detail): ConstraintOutcome => ({ violated: false, reason: null, detail });
 const fail = (reason: ReasonCode, detail: Detail): ConstraintOutcome => ({ violated: true, reason, detail });
@@ -61,7 +70,9 @@ export function checkConstraint(c: Constraint, ctx: ConstraintContext): Constrai
       const v = ctx.verification;
       if (v === null) throw new Error('verified_facts checked without a verification report');
       const detail: Detail = { report_hash: v.report_hash, invoice_id: v.report.invoice_id, result: v.report.result };
-      return v.report.result === 'VERIFIED' ? pass(detail) : fail(v.report.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
+      if (v.report.result !== 'VERIFIED') return fail(v.report.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
+      const broken = FACT_REASONS.find(([fact]) => !v.report.facts[fact]);
+      return broken ? fail(broken[1], detail) : pass(detail);
     }
   }
 }

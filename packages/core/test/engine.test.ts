@@ -42,6 +42,14 @@ describe('evaluate: mandate validity', () => {
   ] as const)('%s', (_label, opts, reason) => {
     expect(run(action({ id: 'A-1', amount: 1 }), opts)).toMatchObject({ outcome: 'DENY', reason });
   });
+
+  it('revoked mandate status', () => {
+    expect(run(action({ id: 'A-1', amount: 1 }), { m: { ...M001, status: 'revoked' } })).toMatchObject({ outcome: 'DENY', reason: 'MANDATE_REVOKED' });
+  });
+
+  it('throws when nowMs is not a safe integer', () => {
+    expect(() => run(action({ id: 'A-1', amount: 1 }), { now: Number.NaN })).toThrow(TypeError);
+  });
 });
 
 describe('evaluate: algorithm', () => {
@@ -65,7 +73,7 @@ describe('evaluate: algorithm', () => {
     expect(e.checks.find((c) => c.id === 'invoice_facts')?.result).toBe('pending');
   });
 
-  it('never asks for verification when a DENY already fired (E3)', () => {
+  it('never asks for verification when a DENY already fired', () => {
     const e = run(action({ id: 'A-7', amount: 9 }), { s: state(108.58, 26.42), v: null });
     expect(e).toMatchObject({ outcome: 'DENY', reason: 'TREASURY_FLOOR_VIOLATION' });
   });
@@ -75,9 +83,27 @@ describe('evaluate: algorithm', () => {
     const v = verified(a);
     expect(run(a, { v }).verification_hash).toBe(v.report_hash);
   });
+
+  it('above the autonomous limit with a verified report needs approval', () => {
+    const e = run(action({ id: 'A-2', amount: 18 }));
+    expect(e).toMatchObject({ outcome: 'REQUIRE_APPROVAL', reason: null });
+    expect(e.approvals_required.map((r) => r.reason)).toEqual(['ABOVE_AUTONOMOUS_LIMIT']);
+  });
+
+  it('a MISMATCH report denies with its reason', () => {
+    const a = action({ id: 'A-1', amount: 8.42 });
+    expect(run(a, { v: verified(a, 'MISMATCH', 'RECIPIENT_MISMATCH') })).toMatchObject({ outcome: 'DENY', reason: 'RECIPIENT_MISMATCH' });
+  });
+
+  it('a VERIFIED report with a false fact denies with that fact', () => {
+    const a = action({ id: 'A-1', amount: 8.42 });
+    const v = verified(a);
+    const report = { ...v.report, facts: { ...v.report.facts, amount_match: false } };
+    expect(run(a, { v: { ...v, report, report_hash: canonicalHash(report) } })).toMatchObject({ outcome: 'DENY', reason: 'AMOUNT_MISMATCH' });
+  });
 });
 
-describe('evaluate: report usability (Review Focus 2)', () => {
+describe('evaluate: report usability', () => {
   const a = action({ id: 'A-1', amount: 8.42 });
 
   it('accepts a report exactly REPORT_MAX_AGE_MS old and rejects 1 ms older', () => {
@@ -97,5 +123,13 @@ describe('evaluate: report usability (Review Focus 2)', () => {
 
   it('ignores a report from too far in the future', () => {
     expect(run(a, { v: verified(a, 'VERIFIED', undefined, NOW + 60_001) }).outcome).toBe('NEEDS_VERIFICATION');
+  });
+
+  it('accepts a report exactly 60,000 ms in the future', () => {
+    expect(run(a, { v: verified(a, 'VERIFIED', undefined, NOW + 60_000) }).outcome).toBe('ALLOW');
+  });
+
+  it('ignores a report whose block time is NaN', () => {
+    expect(run(a, { v: { ...verified(a), block_time_ms: Number.NaN } }).outcome).toBe('NEEDS_VERIFICATION');
   });
 });
