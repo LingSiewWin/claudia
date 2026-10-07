@@ -324,6 +324,44 @@ describe('REPLAY anchor read from Cardano', () => {
       head: built.payload.log_head.hash,
     });
   });
+  it('does not treat a decoy mandate-named token on another policy as the closing anchor', async () => {
+    const events = stage();
+    const { built } = settlement(events, 'last');
+    const last = events[events.length - 1]!;
+    const settlementHead = { seq: built.payload.log_head.seq, head: built.payload.log_head.hash };
+    const closingHead = { seq: last.seq, head: last.hash };
+    const otherPolicy = 'cc'.repeat(28);
+    // Datum key stays the real engine key, so a name-only match would still verify this token.
+    const decoyOnly = async (h: string): Promise<KoiosTx | null> => {
+      const tx = structuredClone(recorded.koios[h] ?? null);
+      if (tx && h === closingTx()) {
+        tx.reference_inputs = tx.reference_inputs.map((u) => ({
+          ...u,
+          asset_list: u.asset_list.map((a) => ({ ...a, policy_id: otherPolicy })),
+        }));
+      }
+      return tx;
+    };
+    expect(await readAnchor(events, decoyOnly, closingTx())).toEqual(settlementHead);
+    // The decoy is listed first and carries a different key. The run's own mandate token is still there.
+    const decoyFirst = async (h: string): Promise<KoiosTx | null> => {
+      const tx = structuredClone(recorded.koios[h] ?? null);
+      if (tx && h === closingTx()) {
+        const real = tx.reference_inputs.find((u) => u.asset_list.some((a) => a.policy_id !== otherPolicy));
+        if (!real) return tx;
+        const decoy = structuredClone(real);
+        decoy.asset_list = decoy.asset_list.map((a) => ({ ...a, policy_id: otherPolicy }));
+        const datum = decoy.inline_datum?.value;
+        if (datum && 'fields' in datum) {
+          const key = datum.fields[3];
+          if (key && 'bytes' in key) key.bytes = '11'.repeat(32);
+        }
+        tx.reference_inputs = [decoy, ...tx.reference_inputs];
+      }
+      return tx;
+    };
+    expect(await readAnchor(events, decoyFirst, closingTx())).toEqual(closingHead);
+  });
   it('treats a bare hash as no anchor', async () => {
     const events = stage();
     const { tx, built } = settlement(events, 'last');
