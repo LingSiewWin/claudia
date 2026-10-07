@@ -9,7 +9,7 @@ import {
   unixTimeToEnclosingSlot,
 } from '@meshsdk/core';
 
-const BLOCKFROST = 'https://cardano-preprod.blockfrost.io/api/v0';
+export const BLOCKFROST = 'https://cardano-preprod.blockfrost.io/api/v0';
 const SLOTS = SLOT_CONFIG_NETWORK.preprod;
 
 /** POSIX ms <-> preprod slot (1 s slots). `slotAt` rounds down, so msAt(slotAt(t)) <= t. */
@@ -74,13 +74,21 @@ export async function submit(chain: Chain, txHex: string): Promise<string> {
   return JSON.parse(r.body) as string;
 }
 
+/** GET /txs/{hash}: block height if the tx is on chain, otherwise null (404). */
+export async function txOnChain(chain: Chain, txHash: string): Promise<{ block_height: number } | null> {
+  const res = await fetch(`${BLOCKFROST}/txs/${txHash}`, { headers: { project_id: chain.projectId } });
+  if (res.status === 404) return null;
+  if (res.status !== 200) throw new Error(`txOnChain ${txHash}: ${res.status} ${await res.text()}`);
+  const body = JSON.parse(await res.text()) as { block_height?: number };
+  return { block_height: Number(body.block_height) };
+}
+
 /** Polls GET /txs/{hash} until the tx is in a block. */
 export async function awaitTx(chain: Chain, txHash: string, timeoutMs = 600_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const res = await fetch(`${BLOCKFROST}/txs/${txHash}`, { headers: { project_id: chain.projectId } });
-    if (res.status === 200) return;
-    if (res.status !== 404) throw new Error(`awaitTx ${txHash}: ${res.status} ${await res.text()}`);
+    const info = await txOnChain(chain, txHash);
+    if (info) return;
     if (Date.now() > deadline) throw new Error(`awaitTx ${txHash}: not in a block after ${timeoutMs} ms`);
     await new Promise((r) => setTimeout(r, 5_000));
   }
