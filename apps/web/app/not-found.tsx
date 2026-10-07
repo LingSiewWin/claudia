@@ -3,7 +3,7 @@ import { SiteFooter, SiteHeader } from '../components/site-nav';
 
 export default function NotFound() {
   return (
-    <main className="mx-auto max-w-3xl px-5 py-8">
+    <main className="shell py-8">
       <SiteHeader />
       <h1 className="mt-10 text-3xl font-extrabold tracking-tight">Not found</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-muted">There is no page at this address. Receipts and mandates live under their own ids.</p>

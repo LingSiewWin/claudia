@@ -14,7 +14,7 @@ export function SiteHeader({ current }: { current?: 'protocol' }) {
           <ModeSwitch />
         </Suspense>
       </span>
-      <nav aria-label="Site" className="flex flex-wrap gap-x-5 gap-y-1 font-semibold">
+      <nav aria-label="Site" className="flex flex-wrap gap-x-5 font-semibold [&>a]:py-2.5">
         <Link href="/live?mode=replay">Replay</Link>
         <Link href="/console">Console</Link>
         <Link href="/mandate/M-001">Mandate</Link>
@@ -31,7 +31,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-24 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-line pt-4 text-sm text-muted">
       <p>Claudia, the human authority layer for AI agents. Cardano preprod, Sepolia. No funds are held by the service.</p>
-      <p className="flex flex-wrap gap-x-4 font-semibold">
+      <p className="flex flex-wrap gap-x-4 font-semibold [&>a]:py-2">
         <a href="https://github.com/LingSiewWin/claudia" rel="noreferrer">
           GitHub
         </a>

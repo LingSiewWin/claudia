@@ -67,6 +67,15 @@ body {
   }
 }
 
+/* The one page container: every page, its nav, content and footer share this edge. 96rem cap keeps ultra-wide screens
+   from stretching lines; padding scales with the viewport. Reading measures are capped per paragraph, not per page. */
+.shell {
+  width: 100%;
+  max-width: 96rem;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 4rem);
+}
+
 /* Outside the floor, the only motion in the product: the action's marker slides along the boundary rail. */
 .rail-marker {
   transition: left 400ms var(--ease-settle);
@@ -133,7 +142,7 @@ body {
 
 /* Rendered protocol document (lib/markdown.ts). Dense, mono for every shape, one measure. */
 .doc {
-  max-width: 46rem;
+  max-width: 52rem;
   font-size: 17px;
   line-height: 1.6;
 }

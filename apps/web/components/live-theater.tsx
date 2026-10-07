@@ -116,7 +116,7 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
 
   return (
     <div data-mode={mode} className="live min-h-dvh">
-      <div className="mx-auto max-w-7xl px-5">
+      <div className="shell">
         <header className="live-head">
           <div role="radiogroup" aria-label="Mode" className="seg">
             {(['live', 'replay'] as const).map((m) => (
@@ -183,7 +183,7 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
         ) : null}
       </div>
 
-      <div className="mx-auto grid max-w-7xl gap-8 px-5 pb-16 pt-10 lg:grid-cols-12">
+      <div className="shell grid gap-8 pb-16 pt-10 lg:grid-cols-12">
         <section aria-label="Agent actions" className="min-w-0 lg:col-span-7">
           <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">Log</h2>
           {authority ? <AuthorityHeader a={authority} /> : null}

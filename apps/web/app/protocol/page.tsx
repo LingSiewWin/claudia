@@ -14,9 +14,9 @@ export default function ProtocolPage() {
   const { html, headings } = render(protocolMarkdown());
   const sections = headings.filter((h) => h.level === 2);
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
+    <main className="shell py-8">
       <SiteHeader current="protocol" />
-      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[15rem_minmax(0,52rem)] lg:justify-center lg:gap-16">
         <aside className="lg:sticky lg:top-8 lg:self-start">
           <p className="text-sm font-extrabold tracking-wide">CONTENTS</p>
           <ol className="mt-3 space-y-1.5 text-[15px]">

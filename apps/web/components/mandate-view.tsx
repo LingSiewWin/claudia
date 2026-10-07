@@ -25,8 +25,8 @@ export function MandateView({ id }: { id: string }) {
   const vendors = mandate.constraints.flatMap((c) => (c.kind === 'counterparty_in' ? c.values : []));
 
   return (
-    <article data-testid="mandate" className="space-y-10">
-      <header>
+    <article data-testid="mandate" className="grid gap-10 lg:grid-cols-2 lg:gap-x-16">
+      <header className="lg:col-span-2">
         <p className="text-sm text-muted">Mandate {mandate.id}</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
           {mandate.principal.name} delegated to {mandate.delegate.id}
@@ -40,12 +40,12 @@ export function MandateView({ id }: { id: string }) {
         </p>
       </header>
 
-      <section aria-label="Authority boundary">
+      <section aria-label="Authority boundary" className="lg:col-span-2">
         <h2 className="mb-3 text-lg font-bold">Who can move how much, per payment</h2>
         <BoundaryRail limits={limits} amount={null} placed={false} revoked={revoked} full />
       </section>
 
-      <section aria-label="Today" className="grid gap-8 sm:grid-cols-2">
+      <section aria-label="Today" className="grid gap-8 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-3">
         <Meter
           title="Daily spend"
           value={`${usd(spent)} / ${usd(dayCap)}`}
@@ -85,7 +85,7 @@ export function MandateView({ id }: { id: string }) {
         ) : null}
       </section>
 
-      <section aria-label="On-chain anchor" className="text-sm">
+      <section aria-label="On-chain anchor" className="min-w-0 text-sm lg:col-span-2">
         <h2 className="mb-2 text-lg font-bold">Enforced on Cardano</h2>
         <p data-testid="anchor-status" className="text-fg">
           <span aria-hidden className={`mr-1.5 inline-block size-2 rounded-full ${revoked ? 'bg-forbid' : 'bg-permit'}`} />

@@ -44,14 +44,18 @@ export function ConsoleView({ mandateId }: { mandateId: string }) {
   const isAdmin = holds(wallet, admin);
 
   return (
-    <div className="space-y-12">
-      <MandateSummary m={mandate.data} error={mandate.error} />
-      <WalletPanel wallet={wallet} onConnect={setWallet} approver={approver} admin={admin} isApprover={isApprover} isAdmin={isAdmin} />
-      <Approvals wallet={isApprover ? wallet : null} approver={approver} />
-      <Receipts mandateId={mandateId} />
-      {mandate.data ? (
-        <MandateControls m={mandate.data} wallet={isAdmin ? wallet : null} note={controlsNote(isAdmin, admin, wallet !== null)} onDone={mandate.reload} />
-      ) : null}
+    <div className="grid gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:items-start xl:gap-16">
+      <div className="min-w-0 space-y-12">
+        <MandateSummary m={mandate.data} error={mandate.error} />
+        <WalletPanel wallet={wallet} onConnect={setWallet} approver={approver} admin={admin} isApprover={isApprover} isAdmin={isAdmin} />
+        <Approvals wallet={isApprover ? wallet : null} approver={approver} />
+      </div>
+      <div className="min-w-0 space-y-12">
+        <Receipts mandateId={mandateId} />
+        {mandate.data ? (
+          <MandateControls m={mandate.data} wallet={isAdmin ? wallet : null} note={controlsNote(isAdmin, admin, wallet !== null)} onDone={mandate.reload} />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -434,7 +438,7 @@ function MandateControls({
         )}
       </div>
       <form
-        className="mt-6 grid max-w-md grid-cols-2 gap-3"
+        className="mt-6 grid max-w-md grid-cols-1 gap-3 min-[420px]:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
           void update();

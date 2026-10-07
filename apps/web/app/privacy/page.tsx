@@ -32,16 +32,22 @@ const sections: Array<[string, string]> = [
 
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-3xl px-5 py-8">
+    <main className="shell py-8">
       <SiteHeader />
-      <h1 className="mt-10 text-3xl font-extrabold tracking-tight">Privacy policy</h1>
+      <div className="mt-10 grid gap-x-16 gap-y-2 lg:grid-cols-[minmax(0,18rem)_minmax(0,46rem)] lg:justify-center">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Privacy policy</h1>
       <p className="mt-2 text-sm text-muted">Last updated 7 October 2026.</p>
-      {sections.map(([h, body]) => (
+        </div>
+        <div className="[&>section:first-child]:mt-0">
+          {sections.map(([h, body]) => (
         <section key={h} className="mt-8">
           <h2 className="text-lg font-bold">{h}</h2>
           <p className="mt-2 text-[15px] leading-relaxed">{body}</p>
         </section>
       ))}
+        </div>
+      </div>
       <SiteFooter />
     </main>
   );

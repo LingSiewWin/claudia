@@ -15,8 +15,8 @@ export function AuthorityView({ role, mandateId }: { role: string; mandateId: st
   const open = data.availability === 'open';
   const left = Math.max(0, data.interrupt_budget.per_day - data.interrupt_budget.used);
   return (
-    <article data-testid="authority-page" data-availability={data.availability} className="space-y-10">
-      <header>
+    <article data-testid="authority-page" data-availability={data.availability} className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-x-16">
+      <header className="lg:col-start-1">
         <p className="text-sm text-muted">Human authority endpoint</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
           {data.approver} for Mandate {data.mandate_id}
@@ -27,7 +27,7 @@ export function AuthorityView({ role, mandateId }: { role: string; mandateId: st
         </p>
       </header>
 
-      <dl className="grid gap-8 sm:grid-cols-3">
+      <dl className="grid gap-8 sm:grid-cols-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:grid-cols-1 lg:content-start">
         <div>
           <dt className="text-sm text-muted">Price of an interruption</dt>
           <dd data-testid="authority-price" className="text-2xl font-extrabold tabular-nums">
@@ -52,7 +52,7 @@ export function AuthorityView({ role, mandateId }: { role: string; mandateId: st
         </div>
       </dl>
 
-      <section aria-label="How to reach this authority" className="text-[15px]">
+      <section aria-label="How to reach this authority" className="text-[15px] lg:col-start-1">
         <h2 className="text-sm font-extrabold tracking-wide">HOW AN AGENT GETS HERE</h2>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>

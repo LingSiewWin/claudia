@@ -64,8 +64,8 @@ export function ReceiptView({ id }: { id: string }) {
   };
 
   return (
-    <article data-testid="receipt" className="space-y-10">
-      <header>
+    <article data-testid="receipt" className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-start lg:gap-x-16">
+      <header className="lg:col-span-2">
         <p className="font-mono text-[13px] text-muted">Receipt {id}</p>
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-6">
           <h1 className="text-3xl font-extrabold tracking-tight">{actionTitle(ir)}</h1>
@@ -79,7 +79,7 @@ export function ReceiptView({ id }: { id: string }) {
         </p>
       </header>
 
-      <ol className="space-y-4 border-l-[3px] border-fg pl-5">
+      <ol className="min-w-0 space-y-4 border-l-[3px] border-fg pl-5">
         <Evidence title="Invoice">
           <span className="font-mono text-[13px]">{ir.reference?.invoice_number ?? 'no invoice'}</span> from{' '}
           {ir.counterparty.display}, at the configured Stripe source
@@ -142,6 +142,7 @@ export function ReceiptView({ id }: { id: string }) {
         <Evidence title="Masumi record">{r.masumi ? 'Recorded' : 'Not sold through Masumi'}</Evidence>
       </ol>
 
+      <div className="min-w-0 space-y-10">
       <section aria-label="Cardano settlement" data-testid="settlement">
         <h2 className="text-sm font-extrabold tracking-wide">CARDANO SETTLEMENT</h2>
         <p className="mt-1 font-mono text-[13px]">tx {shortHex(tx, 4, 4)}</p>
@@ -198,6 +199,7 @@ export function ReceiptView({ id }: { id: string }) {
           </details>
         </section>
       ) : null}
+      </div>
     </article>
   );
 }

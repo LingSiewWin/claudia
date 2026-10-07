@@ -27,7 +27,7 @@ const ATTACKS = ['Above hard cap', 'Wrong asset', 'Approver bypass', 'Withdraw b
 export default async function Home({ searchParams }: { searchParams: Promise<{ mode?: string | string[] }> }) {
   const mode = modeFrom((await searchParams).mode);
   return (
-    <main data-reader={mode} className="mx-auto max-w-6xl px-5 py-8">
+    <main data-reader={mode} className="shell py-8">
       <SiteHeader />
       {mode === 'agent' ? <AgentSurface /> : <HumanHome />}
       <SiteFooter />
@@ -39,10 +39,10 @@ function HumanHome() {
   return (
     <>
       <section aria-label="Thesis" className="mt-16">
-        <h1 className="font-serif text-[3.1rem] leading-[0.98] tracking-[-0.02em] sm:text-7xl lg:text-[5.6rem]">
+        <h1 className="font-serif text-[clamp(2.6rem,7.5vw,7rem)] leading-[0.98] tracking-[-0.02em]">
           Give your agents an allowance, <em className="text-muted">not your keys.</em>
         </h1>
-        <p className="mt-8 max-w-3xl text-xl leading-snug sm:text-2xl">
+        <p className="mt-8 max-w-3xl text-xl leading-snug sm:text-2xl 2xl:max-w-4xl 2xl:text-3xl">
           Each agent gets its own wallet and a daily allowance. Above the limit it pays a bond to ask you, and only your signature moves
           the money.
         </p>
