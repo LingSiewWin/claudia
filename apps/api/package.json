@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@authority/cardano": "workspace:*",
     "@authority/chainlink": "workspace:*",
     "@authority/core": "workspace:*",
     "@authority/db": "workspace:*",

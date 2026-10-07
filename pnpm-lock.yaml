@@ -17,6 +17,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@authority/cardano':
+        specifier: workspace:*
+        version: link:../../packages/cardano
       '@authority/chainlink':
         specifier: workspace:*
         version: link:../../packages/chainlink
