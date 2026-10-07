@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 
 const root = new URL('../', import.meta.url);
 // The floor (components/floor) moves on reducer state changes and is covered by test/floor.test.ts. The /live stage
-// (components/live.css) lets a card recede when another takes the stage; everything else is still.
+// (components/live.css) lets a card recede when another takes the stage. The home page adds scroll-driven sections
+// (SCROLL_MOTION below); everything else is still.
 const css = readFileSync(new URL('app/globals.css', root), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import[^\n]*floor\.css[^\n]*\n/, '');
+/** Home-page sections whose motion is the point: scroll-pinned and scroll-in sections, and the decision wall. */
+const SCROLL_MOTION = ['components/ui/container-scroll-animation.tsx', 'components/audience-scroll.tsx', 'components/outcomes.tsx', 'components/ui/marquee.tsx'];
 const sources = ['app', 'components'].flatMap((dir) =>
   readdirSync(new URL(`${dir}/`, root), { recursive: true, encoding: 'utf8' })
     .filter((f) => /\.tsx?$/.test(f) && !/^floor(3d)?\//.test(f))
@@ -19,7 +22,9 @@ describe('one motion outside the floor', () => {
   it('animates only the rail marker', () => {
     const moving = rules.filter((r) => /\btransition\s*:/.test(r.body) && !/\btransition\s*:\s*none/.test(r.body));
     expect(moving.map((r) => r.selector)).toEqual(['.rail-marker']);
-    expect(css).not.toMatch(/@keyframes|\banimation\s*:/);
+    // The only keyframes are the decision wall's two lanes; nothing else in the stylesheet animates.
+    expect([...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1])).toEqual(['marquee', 'marquee-vertical']);
+    expect(css.replace(/@keyframes[^{]+\{[\s\S]*?\}\s*\}/g, '')).not.toMatch(/\banimation\s*:/);
   });
 
   it('turns the marker motion off for reduced motion', () => {
@@ -36,6 +41,6 @@ describe('one motion outside the floor', () => {
 
   it('uses no animation or transition utilities in any page or component', () => {
     expect(sources.length).toBeGreaterThan(0);
-    for (const { file, text } of sources) expect(text, file).not.toMatch(/\banimate-|\btransition\b|\btransition-|\bduration-|@keyframes/);
+    for (const { file, text } of sources.filter((x) => !SCROLL_MOTION.includes(x.file))) expect(text, file).not.toMatch(/\banimate-|\btransition\b|\btransition-|\bduration-|@keyframes/);
   });
 });
