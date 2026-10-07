@@ -17,24 +17,26 @@ import type { SceneProps } from './types';
 // ponytail: one mesh per crate; a run has under ten. Instance them if a floor ever shows more than ~40.
 
 const ISO = new THREE.Vector3(14, 14, 14);
-const TARGET: [number, number, number] = [0, 0.8, 1.2];
+const TARGET: [number, number, number] = [0.4, 2.6, 1.2];
 /** World units across the fitted view; the seven stations span about 20. */
-const VIEW_UNITS = 27;
+const VIEW_UNITS = 31;
 const AZIMUTH = Math.PI / 4;
 const POLAR = Math.acos(1 / Math.sqrt(3));
 const TILT = THREE.MathUtils.degToRad(15);
 
-/** Station i stands at (3i, 0, -i) centred on the escrow: a gentle diagonal on screen, like the SVG floor. */
+/** Station i stands at (3.8i, 0, -1.2i) centred on the escrow: a gentle diagonal on screen, like the SVG floor. */
 const AT: Record<Exclude<Station, 'sink'>, [number, number]> = {
-  agent: [-9, 3],
-  gate: [-6, 2],
-  tower: [-3, 1],
+  agent: [-11.4, 3.6],
+  gate: [-7.6, 2.4],
+  tower: [-3.8, 1.2],
   escrow: [0, 0],
-  desk: [3, -1],
-  vault: [6, -2],
-  ledger: [9, -3],
+  desk: [3.8, -1.2],
+  vault: [7.6, -2.4],
+  ledger: [11.4, -3.6],
 };
-const SINK: [number, number] = [0.9, 3.4];
+const SINK: [number, number] = [2.4, 4.6];
+const DOCK_Z = 2.3;
+const DOCK_Z_PIN = DOCK_Z;
 const LABEL: Record<Station, string> = {
   agent: 'Agent',
   gate: 'Authority Engine',
@@ -45,8 +47,18 @@ const LABEL: Record<Station, string> = {
   ledger: 'Receipts',
   sink: 'Sink',
 };
+/** Where each station's label pin floats: above the roof, staggered so neighbours on the diagonal never overlap. */
+const PIN_AT: Record<Station, [number, number, number]> = {
+  agent: [AT.agent[0] - 1.6, 2.2, AT.agent[1] + 1.6],
+  gate: [AT.gate[0], 4.3, AT.gate[1] + DOCK_Z_PIN],
+  tower: [AT.tower[0], 5.6, AT.tower[1]],
+  escrow: [AT.escrow[0], 2.9, AT.escrow[1]],
+  sink: [SINK[0] + 1.2, 1.9, SINK[1] + 1.2],
+  desk: [AT.desk[0], 2.6, AT.desk[1]],
+  vault: [AT.vault[0], 3.9, AT.vault[1]],
+  ledger: [AT.ledger[0], 2.6, AT.ledger[1]],
+};
 /** Crates rest in front of their building (toward the viewer); the lane runs through the gate's arch. */
-const DOCK_Z = 2.3;
 const CRATE = 0.9;
 
 function dockOf(c: Crate): [number, number] {
@@ -148,8 +160,8 @@ function Lights({ pal }: { pal: Palette }) {
       <hemisphereLight args={['#ffffff', pal.warm2, 1.15]} />
       <directionalLight
         color="#fff3e2"
-        intensity={2.3}
-        position={[7, 13, 9]}
+        intensity={2.6}
+        position={[6, 11, 10]}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0004}
@@ -175,12 +187,12 @@ function Ground({ pal }: { pal: Palette }) {
   const sinkLane = useMemo(() => [new THREE.Vector3(AT.escrow[0], 0.02, AT.escrow[1] + DOCK_Z), new THREE.Vector3(SINK[0], 0.02, SINK[1])], []);
   return (
     <group>
-      <RoundedBox args={[32, 0.5, 16]} radius={0.18} smoothness={3} position={[0, -0.25, 0.4]} receiveShadow>
+      <RoundedBox args={[32, 0.5, 15]} radius={0.18} smoothness={3} position={[0, -0.25, 0.9]} receiveShadow>
         <meshStandardMaterial color={pal.paper} roughness={1} />
       </RoundedBox>
       <Grid
-        position={[0, 0.003, 0.4]}
-        args={[32, 16]}
+        position={[0, 0.003, 0.9]}
+        args={[32, 15]}
         cellSize={1}
         cellThickness={0.7}
         cellColor={pal.grid}
@@ -217,8 +229,7 @@ function Block({
 }
 
 function Pin({ station, count, state, testid, children }: { station: Station; count?: number | string; state?: string; testid?: string; children?: React.ReactNode }) {
-  const [x, z] = station === 'sink' ? SINK : AT[station];
-  const y = station === 'tower' ? 5.3 : station === 'vault' ? 3.4 : station === 'gate' ? 3.9 : station === 'sink' ? 0.9 : 2.7;
+  const [x, y, z] = PIN_AT[station];
   return (
     <Html position={[x, y, z]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
       <span className="floor-pin" data-testid={testid} data-state={state}>
@@ -296,7 +307,7 @@ function Stations({ floor, pal }: { floor: Floor; pal: Palette }) {
       <Block size={[2.4, 0.16, 2.2]} at={[SINK[0], 0, SINK[1]]} color={pal.warm2} radius={0.06} />
       <mesh position={[SINK[0], 0.17, SINK[1]]} receiveShadow>
         <boxGeometry args={[1.8, 0.02, 1.6]} />
-        <meshStandardMaterial color={pal.captured} roughness={1} />
+        <meshStandardMaterial color={pal.ink} roughness={1} />
       </mesh>
       <Pin station="sink" count={st.escrow.captured} />
 
@@ -319,7 +330,7 @@ function Stations({ floor, pal }: { floor: Floor; pal: Palette }) {
       {/* receipts: the ledger grows a sheet per proven action */}
       <Block size={[2.4, 1.0, 2.2]} at={[lx, 0, lz]} color={pal.warm2} radius={0.12} />
       {Array.from({ length: Math.min(st.ledger, 8) }, (_, i) => (
-        <Block key={i} size={[1.5, 0.11, 1.2]} at={[lx, 1.0 + i * 0.13, lz]} color={pal.paper} radius={0.02} />
+        <Block key={i} size={[1.5, 0.11, 1.2]} at={[lx, 1.0 + i * 0.13, lz]} color="#ffffff" radius={0.02} />
       ))}
       <Pin station="ledger" count={st.ledger} />
     </group>
@@ -369,7 +380,7 @@ function Beam({ at, toward, color, active }: { at: [number, number, number]; tow
 
 function Lid({ at, size, color, closed }: { at: [number, number, number]; size: [number, number, number]; color: string; closed: boolean }) {
   const g = useRef<THREE.Group>(null);
-  const angle = useEase(closed ? 0 : -1.05, 6);
+  const angle = useEase(closed ? 0 : -0.8, 6);
   useFrame(() => {
     if (g.current) g.current.rotation.x = angle.current;
   });
