@@ -74,10 +74,9 @@ export function FloorStage({
           <Tile label="Bonds" id="metric-bonds" value={metrics ? String(metrics.bonds.locked) : '—'}>
             {metrics ? `${metrics.bonds.locked} locked · ${metrics.bonds.required} required · ${metrics.bonds.refunded} refunded · ${metrics.bonds.captured} captured` : null}
           </Tile>
-          <Tile label="Denied, nobody paged" id="metric-budget" value={metrics ? String(metrics.budget_exhausted) : '—'}>
-            {metrics?.median_decision_ms != null ? `Median human decision ${Math.round(metrics.median_decision_ms / 1000)}s` : null}
-          </Tile>
+          <Tile label="Denied, nobody paged" id="metric-budget" value={metrics ? String(metrics.budget_exhausted) : '—'} />
           <p className="col-span-2 px-1 text-[11px] text-muted lg:col-span-4">
+            {metrics?.median_decision_ms != null ? `Median human decision ${Math.round(metrics.median_decision_ms / 1000)}s. ` : ''}
             {source === 'api' ? 'Across every run of this mandate, from the evidence log.' : source === 'replay' ? 'This recorded run, counted from its events in your browser.' : 'Metrics unavailable.'}
           </p>
         </dl>
