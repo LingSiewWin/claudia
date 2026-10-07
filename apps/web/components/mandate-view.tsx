@@ -3,20 +3,17 @@ import { getMandate } from '../lib/api';
 import { cardanoTxUrl } from '../lib/config';
 import { money, shortHex } from '../lib/format';
 import { useLoad } from '../lib/hooks';
+import { readMandate, treasuryNote } from '../lib/mandate';
 import { BoundaryRail } from './boundary-rail';
 
 export function MandateView({ id }: { id: string }) {
-  const { data: m, error } = useLoad(() => getMandate(id), [id]);
+  const { data, error } = useLoad(() => getMandate(id).then(readMandate), [id]);
   if (error) return <p role="alert" className="text-forbid">{error}</p>;
-  if (!m) return <p className="text-muted">Loading mandate {id}…</p>;
-  const { limits, vault, anchor, mandate } = m;
+  if (!data) return <p className="text-muted">Loading mandate {id}…</p>;
+  const { limits, vault, anchor, mandate, balance, floor, spent, dayCap } = data;
   const d = limits.decimals;
   const usd = (v: string | bigint) => money(v, d);
   const revoked = anchor.status === 'revoked';
-  const balance = BigInt(vault.balance);
-  const floor = BigInt(limits.treasury_minimum);
-  const spent = BigInt(vault.spent_today);
-  const dayCap = BigInt(limits.daily_cap);
   const spentPct = Number((spent * 100n) / (dayCap === 0n ? 1n : dayCap));
   const floorPct = balance === 0n ? 100 : Math.min(100, Number((floor * 100n) / balance));
   const purposes = mandate.constraints.flatMap((c) => (c.kind === 'purpose_in' ? c.values : []));
@@ -54,7 +51,7 @@ export function MandateView({ id }: { id: string }) {
         <Meter
           title="Treasury"
           value={usd(balance)}
-          note={`minimum ${usd(floor)} · spendable ${usd(balance > floor ? balance - floor : 0n)}`}
+          note={treasuryNote(revoked, floor, balance, d)}
           fill={100}
           marker={floorPct}
           testId="treasury-meter"
@@ -77,7 +74,7 @@ export function MandateView({ id }: { id: string }) {
             vault state tx <span className="font-mono text-[13px]">{shortHex(vault.tx_hash)}</span>
           </a>
         </p>
-        <p className="mt-1 font-mono text-[13px] break-all text-muted">mandate hash {m.mandate_hash}</p>
+        <p className="mt-1 font-mono text-[13px] break-all text-muted">mandate hash {data.mandate_hash}</p>
       </section>
     </article>
   );
