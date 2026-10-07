@@ -1,5 +1,6 @@
 import { type AuthorizationRecord, bytesToHex, parseShelleyAddress } from '@authority/core';
 import { deserializeDatum } from '@meshsdk/core';
+import type { BondDatum } from './bond';
 
 /** Plutus data in Mesh's "JSON" form (constructor index + fields, bytes as hex, ints). */
 export type PlutusJson = { constructor: number; fields: PlutusJson[] } | { bytes: string } | { int: number | bigint };
@@ -91,6 +92,22 @@ export const MINT_REDEEMER: PlutusJson = con(0);
 /** R16: the recipient output carries the authorization digest as inline datum. */
 export const digestDatum = (r: AuthorizationRecord): PlutusJson => bytes(r.digest_hex);
 
+/** Escrow `BondDatum` (contracts/cardano/lib/authority/types.ak), `agent_stake` as Option. */
+export function bondDatumData(d: BondDatum): PlutusJson {
+  return con(0, [
+    bytes(d.approval_ref),
+    bytes(d.action_hash),
+    bytes(d.mandate_ref),
+    bytes(d.agent_pkh),
+    d.agent_stake === null ? con(1) : con(0, [bytes(d.agent_stake)]),
+    bytes(d.approver_pkh),
+    int(d.amount),
+    int(d.locked_until_ms),
+  ]);
+}
+export const BOND_REFUND: PlutusJson = con(0);
+export const BOND_CAPTURE: PlutusJson = con(1);
+
 interface Raw {
   constructor?: unknown;
   fields?: Raw[];
@@ -141,4 +158,21 @@ export function parseAnchorDatum(cbor: string): AnchorDatum {
 export function parseVaultDatum(cbor: string): VaultDatum {
   const f = constr(deserializeDatum<Raw>(cbor), 0, 3, 'VaultDatum');
   return { last_nonce: intOf(f[0], 'last_nonce'), day_index: intOf(f[1], 'day_index'), spent_today: intOf(f[2], 'spent_today') };
+}
+
+export function parseBondDatum(cbor: string): BondDatum {
+  const f = constr(deserializeDatum<Raw>(cbor), 0, 8, 'BondDatum');
+  const stake = f[4] ?? {};
+  const none = Number(stake.constructor) === 1;
+  const stakeFields = constr(stake, none ? 1 : 0, none ? 0 : 1, 'BondDatum.agent_stake');
+  return {
+    approval_ref: hexOf(f[0], 'approval_ref'),
+    action_hash: hexOf(f[1], 'action_hash'),
+    mandate_ref: hexOf(f[2], 'mandate_ref'),
+    agent_pkh: hexOf(f[3], 'agent_pkh'),
+    agent_stake: none ? null : hexOf(stakeFields[0], 'agent_stake'),
+    approver_pkh: hexOf(f[5], 'approver_pkh'),
+    amount: intOf(f[6], 'amount'),
+    locked_until_ms: Number(intOf(f[7], 'locked_until_ms')),
+  };
 }

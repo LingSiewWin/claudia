@@ -7,7 +7,8 @@
     "stripe": "tsx stripe-vendor.ts",
     "cardano": "tsx cardano.ts",
     "cardano:lab": "tsx cardano-lab.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "bond": "tsx bond-demo.ts"
   },
   "dependencies": {
     "@authority/cardano": "workspace:*",

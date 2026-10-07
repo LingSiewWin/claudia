@@ -35,9 +35,10 @@ export function compiledCode(title: string): string {
 export const outRefData = (r: OutRef) => ({ constructor: 0, fields: [{ bytes: r.txHash }, { int: r.outputIndex }] });
 
 // The only parameter-application path: every hash, policy id and address in this package comes from here.
-function applied(title: string, params: object[]): Script {
+// `networkId` is the chain tag: 0 preprod, 1 mainnet.
+function applied(title: string, params: object[], networkId: 0 | 1 = 0): Script {
   const cbor = applyParamsToScript(compiledCode(title), params, 'JSON');
-  const address = serializePlutusScript({ code: cbor, version: 'V3' }, undefined, 0).address as string;
+  const address = serializePlutusScript({ code: cbor, version: 'V3' }, undefined, networkId).address as string;
   return { cbor, hash: resolveScriptHash(cbor, 'V3'), address };
 }
 
@@ -47,3 +48,10 @@ export const anchorScript = (seed: OutRef): Script => applied('mandate_anchor.ma
 /** vault(anchor_ref, chain_tag, seed): policy id of the VAULT thread token == vault_hash. */
 export const vaultScript = (anchorRef: string, chainTag: 0 | 1, seed: OutRef): Script =>
   applied('vault.vault.spend', [{ bytes: anchorRef }, { int: chainTag }, outRefData(seed)]);
+
+/** always_fail: the bond sink. No parameters, so one fixed hash; only the address depends on the network. */
+export const sinkScript = (chainTag: 0 | 1 = 0): Script => applied('always_fail.always_fail.else', [], chainTag);
+
+/** escalation_bond(sink_hash, chain_tag): one escrow script per network. */
+export const escrowScript = (chainTag: 0 | 1): Script =>
+  applied('escalation_bond.escalation_bond.spend', [{ bytes: sinkScript(chainTag).hash }, { int: chainTag }], chainTag);

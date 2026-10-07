@@ -69,3 +69,22 @@ pub const vault_token_name: ByteArray = "VAULT"
 pub const day_ms: Int = 86_400_000
 
 pub const max_window_ms: Int = 600_000
+
+/// Escalation bond held in escrow while a human is interrupted
+/// (packages/cardano/src/bond.ts `BondDatum`, same field order).
+/// `approval_ref = sha256(utf8(approval_id))`; `locked_until` is POSIX ms.
+pub type BondDatum {
+  approval_ref: ByteArray,
+  action_hash: ByteArray,
+  mandate_ref: ByteArray,
+  agent_pkh: ByteArray,
+  agent_stake: Option<ByteArray>,
+  approver_pkh: ByteArray,
+  amount: Int,
+  locked_until: Int,
+}
+
+pub type BondRedeemer {
+  Refund
+  Capture
+}
