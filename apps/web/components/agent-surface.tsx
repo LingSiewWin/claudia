@@ -3,7 +3,7 @@ import { protocolMarkdown, summaryMarkdown } from '../lib/protocol';
 import { CopyButton } from './copy-button';
 
 const RAW = ['/llms.txt', '/llms-full.txt', '/.well-known/agent.json'];
-const CURL = 'curl -s https://claudiahq.vercel.app/llms.txt';
+const CURL = 'curl -s https://claudy.vercel.app/llms.txt';
 
 /**
  * The landing page for an agent: the two files this site serves to machines, rendered verbatim with a copy button per

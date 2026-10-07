@@ -43,7 +43,7 @@ test('the header switch opens the agent reader: the served files verbatim, raw l
   await expect(tabs.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true');
   const surface = page.getByTestId('agent-surface');
   for (const p of ['/llms.txt', '/llms-full.txt', '/.well-known/agent.json']) await expect(surface.getByRole('link', { name: p }).first()).toHaveAttribute('href', p);
-  await expect(surface).toContainText('curl -s https://claudiahq.vercel.app/llms.txt');
+  await expect(surface).toContainText('curl -s https://claudy.vercel.app/llms.txt');
   await expect(page.getByTestId('floor')).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Built with' })).toHaveCount(0);
