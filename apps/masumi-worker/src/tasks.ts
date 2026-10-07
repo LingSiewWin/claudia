@@ -27,7 +27,7 @@ const MINUTE = 60_000;
 const CREATE_ATTEMPTS = 8;
 const RETRY_BACKOFF_MS = 0;
 const TERMINAL_PAYMENT = new Set(['FundsOrDatumInvalid', 'RefundRequested']);
-export const PAYMENT_COMMENT = 'Payment requested: 1 tUSDM for one authority check.';
+export const PAYMENT_COMMENT = 'Payment requested: 1 tUSDM for one human authority check.';
 
 export type TaskStage =
   | 'start-pending'

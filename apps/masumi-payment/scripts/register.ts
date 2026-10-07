@@ -1,4 +1,4 @@
-// Masumi registration of the Authority Check agent on the local payment service (admin key, setup only).
+// Masumi registration of the Human Authority Endpoint on the local payment service (admin key, setup only).
 // Usage: pnpm --filter @authority/masumi-payment register <info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>
 // Writes public values to ../registration.preprod.json, local ids to ../registration.local.json, and the scoped worker key into the repo-root .env.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -9,7 +9,10 @@ const LOCAL_FILE = fileURLToPath(new URL('../registration.local.json', import.me
 const ENV_FILE = fileURLToPath(new URL('../../../.env', import.meta.url));
 const MPS_RELEASE = '0.29.0 (71455701ac22c3380c50da54089e1b7363f6825d)';
 const TEST_USDM_UNIT = '16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde0014df10745553444d';
-const LISTING = 'Before your agent spends money or performs a consequential action, ask whether that action is authorized.';
+const LISTING =
+  'Agents pay to interrupt a named human. Send the action your agent wants to take; get back ALLOW, ESCALATE or DENY with a decision brief ' +
+  '(what, why, verified facts, why a human, what will happen). On ESCALATE you get the exact bond price and endpoint to reach the human. ' +
+  'Reasonable asks are refunded; only the human signature moves funds.';
 
 const PUBLIC_KEYS = new Set([
   'network',
@@ -91,10 +94,10 @@ async function info(): Promise<void> {
 const metadata = (apiBaseUrl: string): Json => ({
   network: 'Preprod',
   ExampleOutputs: [],
-  Tags: ['authority', 'payments', 'agents'],
-  name: 'Authority Check',
+  Tags: ['human-authority', 'approvals', 'treasury', 'agents'],
+  name: 'Human Authority Endpoint',
   description: LISTING,
-  Capability: { name: 'authority-engine', version: '0.1.0' },
+  Capability: { name: 'human-authority', version: '0.2.0' },
   Author: { name: 'Authority Layer' },
   apiBaseUrl,
 });

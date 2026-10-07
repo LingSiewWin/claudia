@@ -337,7 +337,7 @@ export function createMip003Handler(deps: JobDeps, demoFile: string = DEMO_FILE)
   const route = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (req.method === 'GET' && url.pathname === '/availability') {
-      return send(res, 200, { status: 'available', type: 'masumi-agent', message: 'Authority Check is ready' });
+      return send(res, 200, { status: 'available', type: 'masumi-agent', message: 'Human Authority Endpoint is ready' });
     }
     if (req.method === 'GET' && url.pathname === '/input_schema') return send(res, 200, inputSchema(readDemo(demoFile)));
     if (req.method === 'GET' && url.pathname === '/demo') {
