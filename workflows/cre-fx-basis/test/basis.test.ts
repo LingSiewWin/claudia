@@ -40,7 +40,7 @@ describe('orientation and rounding', () => {
     expect(midFromFeed(20133201n, 8)).toBe(496692006n);
     expect(fromScaled(midFromFeed(20133201n, 8))).toBe('4.96692006');
     expect(midFromFeed(25_000_000n, 8)).toBe(4_00000000n);
-    expect(midFromFeed(2_500_000_000_000_000_000n, 18)).toBe(4_00000000n);
+    expect(midFromFeed(250_000_000_000_000_000n, 18)).toBe(4_00000000n);
   });
   it('rejects non-positive answers', () => {
     expect(() => midFromFeed(0n, 8)).toThrow(/not positive/);
