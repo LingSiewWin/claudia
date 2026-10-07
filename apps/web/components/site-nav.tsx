@@ -38,6 +38,13 @@ export function SiteFooter() {
         <a href="https://preprod.sokosumi.com/" rel="noreferrer">
           Sokosumi
         </a>
+        <a href="https://x.com/siewwwin" rel="noreferrer">
+          X
+        </a>
+        <a href="https://www.linkedin.com/in/ling-siew-win" rel="noreferrer">
+          LinkedIn
+        </a>
+        <a href="mailto:siewwwin@gmail.com">Email</a>
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
       </p>
