@@ -14,10 +14,9 @@ import {
 } from '@authority/core';
 import type { Sql } from '@authority/db';
 import * as z from 'zod';
-import type { Engine } from './check';
 import type { Reply } from './http';
 import type { MandateRow } from './mandates';
-import type { BondUtxo } from './ports';
+import type { BondUtxo, CardanoPort } from './ports';
 
 /*
  * x402 escalation: an ESCALATE that wants execution is priced before any human sees it. The price is a bond the
@@ -27,7 +26,6 @@ import type { BondUtxo } from './ports';
  */
 
 export const BOND_LOCK_MS = 3_600_000;
-export const DEFAULT_BOND_LOVELACE = '5000000';
 export const BOND_ASSET = 'ADA';
 
 /** Escalations that consumed human attention (bond locked) under this mandate on this UTC day, except `excludeId`. */
@@ -46,7 +44,7 @@ export async function withBudget(q: Sql, mandateId: string, state: State, nowMs:
 }
 
 export function priceFor(
-  eng: Pick<Engine, 'bondLovelace' | 'cardano' | 'now'>,
+  eng: { bondLovelace: string; cardano: Pick<CardanoPort, 'bondAddresses'>; now: () => number },
   row: MandateRow,
   o: { approvalId: string; actionHash: string; approverPkh: string; used: number },
 ): EscalationPrice {
