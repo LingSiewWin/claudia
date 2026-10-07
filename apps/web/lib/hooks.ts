@@ -86,8 +86,9 @@ export function useReplay(runId: string | null): ReplayState {
       const { events, anchor: ref } = await runLog(runId);
       if (cancelled) return;
       const closingTx = typeof ref?.tx_hash === 'string' && TX_HASH.test(ref.tx_hash) ? ref.tx_hash : null;
+      const mandatePolicy = typeof ref?.mandate_ref === 'string' ? ref.mandate_ref : null;
       const anchor = await Promise.race([
-        readAnchor(events, koiosTx, closingTx),
+        readAnchor(events, koiosTx, closingTx, mandatePolicy),
         new Promise<null>((resolve) => {
           anchorTimer = setTimeout(() => resolve(null), ANCHOR_TIMEOUT_MS);
         }),

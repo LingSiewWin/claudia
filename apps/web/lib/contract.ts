@@ -92,10 +92,12 @@ export interface LogHead {
 
 /**
  * The run's closing anchor as the API reports it on GET /v1/runs/{id}/log: a transaction whose metadata 1694 commits
- * the head at the run's last event. Only `tx_hash` is used, as a pointer; the head itself is read from chain data.
+ * the head at the run's last event. `tx_hash` is only a pointer; the head itself is read from chain data.
+ * `mandate_ref` is the mandate policy id, used when the log never issued an authorization that already names it.
  */
 export interface LogAnchorRef extends LogHead {
   tx_hash: string;
+  mandate_ref?: string;
 }
 
 export interface RunSummary {

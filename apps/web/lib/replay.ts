@@ -94,8 +94,39 @@ function namedHead(head: unknown): LogAnchor | null {
     : null;
 }
 
-function engineVkey(tx: KoiosTx): string | null {
-  const utxo = tx.reference_inputs.find((u) => u.asset_list.some((x) => x.asset_name === MANDATE_TOKEN_HEX));
+const POLICY_ID = /^[0-9a-fA-F]{56}$/;
+
+function normalizePolicy(value: unknown): string | null {
+  return typeof value === 'string' && POLICY_ID.test(value) ? value.toLowerCase() : null;
+}
+
+/**
+ * Policy id of the mandate this run is bound to. Authorizations name it (the same id receipt Verify
+ * matches on the mandate NFT). When the run never issued one, `hinted` is that policy from the log response.
+ * Disagreeing ids are no policy: a closing anchor must not pick between them.
+ */
+function resolveMandatePolicy(events: RunEvent[], hinted: string | null): string | null {
+  const issued = new Set<string>();
+  for (const event of events) {
+    if (event.type !== 'AuthorizationIssued') continue;
+    const ref = normalizePolicy(event.payload.authorization?.fields?.mandate_ref);
+    if (!ref) return null;
+    issued.add(ref);
+  }
+  if (issued.size > 1) return null;
+  const named = issued.size === 1 ? [...issued][0]! : null;
+  const hint = normalizePolicy(hinted);
+  if (named && hint && named !== hint) return null;
+  return named ?? hint;
+}
+
+/** engine_vkey from the mandate NFT of `policyId`. Same policy and asset match as receipt Verify. */
+function engineVkey(tx: KoiosTx, policyId: string): string | null {
+  const utxo = tx.reference_inputs.find((u) =>
+    u.asset_list.some(
+      (x) => typeof x.policy_id === 'string' && x.policy_id.toLowerCase() === policyId && x.asset_name === MANDATE_TOKEN_HEX,
+    ),
+  );
   return bytesOf(field(utxo?.inline_datum?.value, 3));
 }
 
@@ -112,10 +143,10 @@ async function committedHead(read: ReadTx, txHash: string): Promise<LogAnchor | 
 
 /**
  * A closing anchor is only a closing anchor when metadata 1694 carries a valid engine signature over
- * EVIDENCE_ANCHOR_V1 || run_id || seq || hash, checked against engine_vkey in the on-chain mandate datum.
- * Unsigned or invalid is no closing anchor.
+ * EVIDENCE_ANCHOR_V1 || run_id || seq || hash, checked against engine_vkey on the mandate NFT of `policyId`.
+ * Unsigned, invalid, or a mandate-named token on another policy is no closing anchor.
  */
-async function signedClosingHead(read: ReadTx, txHash: string, runId: string): Promise<LogAnchor | null> {
+async function signedClosingHead(read: ReadTx, txHash: string, runId: string, policyId: string): Promise<LogAnchor | null> {
   let tx: KoiosTx | null;
   try {
     tx = await read(txHash);
@@ -126,20 +157,22 @@ async function signedClosingHead(read: ReadTx, txHash: string, runId: string): P
   const meta = tx.metadata?.['1694'] as { log_head?: unknown; signature?: unknown } | undefined;
   const head = namedHead(meta?.log_head);
   if (!head || typeof meta?.signature !== 'string') return null;
-  const key = engineVkey(tx);
+  const key = engineVkey(tx, policyId);
   return key && verifyEvidenceAnchor(runId, head.seq, head.head, meta.signature, key) ? head : null;
 }
 
 /**
  * The on-chain anchor for a run, from chain data the browser reads itself. First the run's closing anchor
- * (`closingTx`, a pointer from the API: only the head read from chain counts). Failing that, the latest settlement
- * named in the log, whose head must be an event from before that transaction was submitted (a transaction cannot
- * commit a head that names itself). No answer or no valid head is no anchor, never a pass.
+ * (`closingTx`, a pointer from the API: only the head read from chain counts). The engine key comes from the
+ * mandate NFT of this run's policy (`mandatePolicy` when the log never issued an authorization). Failing that,
+ * the latest settlement named in the log, whose head must be an event from before that transaction was submitted
+ * (a transaction cannot commit a head that names itself). No answer or no valid head is no anchor, never a pass.
  */
-export async function readAnchor(events: RunEvent[], read: ReadTx, closingTx: string | null = null): Promise<LogAnchor | null> {
+export async function readAnchor(events: RunEvent[], read: ReadTx, closingTx: string | null = null, mandatePolicy: string | null = null): Promise<LogAnchor | null> {
   const runId = events[0]?.run_id;
-  if (closingTx && runId) {
-    const closing = await signedClosingHead(read, closingTx, runId);
+  const policyId = resolveMandatePolicy(events, mandatePolicy);
+  if (closingTx && runId && policyId) {
+    const closing = await signedClosingHead(read, closingTx, runId, policyId);
     if (closing) return closing;
   }
   const settled = events.findLast((e) => e.type === 'TransactionConfirmed');

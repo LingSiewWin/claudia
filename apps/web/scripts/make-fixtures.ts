@@ -441,7 +441,7 @@ function close(run: Run, s: Setup, m: Mandate) {
   const signature = signEvidenceAnchor(run.id, head.seq, head.hash, s.engineSk);
   block += 1;
   out.koios[tx] = metadataTx(tx, block, { log_head: head, signature }, [mandateAnchorInput(s, m)]);
-  out.anchors[run.id] = { tx_hash: tx, ...head };
+  out.anchors[run.id] = { tx_hash: tx, ...head, mandate_ref: s.mandateRef };
 }
 
 function reject(run: Run, actionId: string, invariant: string): string {
