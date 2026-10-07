@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@connectrpc/connect>@bufbuild/protobuf': 1.10.1
+  '@connectrpc/connect-node>@bufbuild/protobuf': 1.10.1
+  '@connectrpc/connect-web>@bufbuild/protobuf': 1.10.1
+
 packageExtensionsChecksum: sha256-WSzrlpa6J7Hkfg0ws4l4BdEQiZBltobAMEGqnLTt1b0=
 
 importers:
@@ -49,6 +54,25 @@ importers:
       '@meshsdk/core':
         specifier: 1.9.1
         version: 1.9.1(@bufbuild/protobuf@1.10.1)(@harmoniclabs/bytestring@1.0.0)(@harmoniclabs/crypto@0.2.5)(rxjs@7.8.2)
+      '@types/node':
+        specifier: 26.6.4
+        version: 26.6.4
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@26.6.4)(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15))
+
+  packages/cardano:
+    dependencies:
+      '@authority/core':
+        specifier: workspace:*
+        version: link:../core
+      '@meshsdk/core':
+        specifier: 1.9.1
+        version: 1.9.1(@bufbuild/protobuf@1.10.1)(@harmoniclabs/bytestring@1.0.0)(@harmoniclabs/crypto@0.2.5)(rxjs@7.8.2)
+    devDependencies:
       '@types/node':
         specifier: 26.6.4
         version: 26.6.4
@@ -180,9 +204,18 @@ importers:
 
   scripts:
     dependencies:
+      '@authority/cardano':
+        specifier: workspace:*
+        version: link:../packages/cardano
+      '@authority/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@authority/stripe':
         specifier: workspace:*
         version: link:../packages/stripe
+      '@meshsdk/core':
+        specifier: 1.9.1
+        version: 1.9.1(@bufbuild/protobuf@1.10.1)(@harmoniclabs/bytestring@1.0.0)(@harmoniclabs/crypto@0.2.5)(rxjs@7.8.2)
     devDependencies:
       '@types/node':
         specifier: 26.6.4
@@ -346,19 +379,19 @@ packages:
     resolution: {integrity: sha512-0ANnrr6SvsjevsWEgdzHy7BaHkluZyS6s4xNoVt7RBHFR5V/kT9lPokoIbYUOU9JHzdRgTaS3x5595mwUsu15g==}
     engines: {node: '>=16.0.0'}
     peerDependencies:
-      '@bufbuild/protobuf': ^1.4.2
+      '@bufbuild/protobuf': 1.10.1
       '@connectrpc/connect': 1.4.0
 
   '@connectrpc/connect-web@1.4.0':
     resolution: {integrity: sha512-13aO4psFbbm7rdOFGV0De2Za64DY/acMspgloDlcOKzLPPs0yZkhp1OOzAQeiAIr7BM/VOHIA3p8mF0inxCYTA==}
     peerDependencies:
-      '@bufbuild/protobuf': ^1.4.2
+      '@bufbuild/protobuf': 1.10.1
       '@connectrpc/connect': 1.4.0
 
   '@connectrpc/connect@1.4.0':
     resolution: {integrity: sha512-vZeOkKaAjyV4+RH3+rJZIfDFJAfr+7fyYr6sLDKbYX3uuTVszhFe9/YKf5DNqrDb5cKdKVlYkGn6DTDqMitAnA==}
     peerDependencies:
-      '@bufbuild/protobuf': ^1.4.2
+      '@bufbuild/protobuf': 1.10.1
 
   '@dnsquery/dns-packet@6.1.1':
     resolution: {integrity: sha512-WXTuFvL3G+74SchFAtz3FgIYVOe196ycvGsMgvSH/8Goptb1qpIQtIuM4SOK9G9lhMWYpHxnXyy544ZhluFOew==}
@@ -2031,8 +2064,8 @@ snapshots:
       '@biglup/is-cid': 1.0.3
       '@cardano-ogmios/client': 6.9.0
       '@cardano-ogmios/schema': 6.9.0
-      '@cardano-sdk/crypto': 0.4.5
-      '@cardano-sdk/util': 0.17.1
+      '@cardano-sdk/crypto': 0.4.7
+      '@cardano-sdk/util': 0.17.2
       '@foxglove/crc': 0.0.3
       '@scure/base': 1.2.6
       fraction.js: 4.0.1
@@ -2073,7 +2106,7 @@ snapshots:
 
   '@cardano-sdk/crypto@0.4.5':
     dependencies:
-      '@cardano-sdk/util': 0.17.1
+      '@cardano-sdk/util': 0.17.2
       blake2b: 2.1.4
       i: 0.3.7
       libsodium-wrappers-sumo: 0.7.10
@@ -2115,7 +2148,7 @@ snapshots:
     dependencies:
       '@cardano-sdk/core': 0.46.12(rxjs@7.8.2)
       '@cardano-sdk/key-management': 0.29.19
-      '@cardano-sdk/util': 0.17.1
+      '@cardano-sdk/util': 0.17.2
       bignumber.js: 9.3.1
       lodash: 4.18.1
       ts-custom-error: 3.3.1
