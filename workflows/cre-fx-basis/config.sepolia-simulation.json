@@ -3,6 +3,6 @@
   "feedChainSelectorName": "ethereum-mainnet",
   "feedAddress": "0x3126E7F38D5f60f4E2B6ec3511C7bdbD79317Df1",
   "chainSelectorName": "ethereum-testnet-sepolia",
-  "registryAddress": "0x0000000000000000000000000000000000000000",
-  "gasLimit": "3000000"
+  "registryAddress": "0xA87C315e4966Dc39ed63183f909aaec08566e9FF",
+  "gasLimit": "5000000"
 }
