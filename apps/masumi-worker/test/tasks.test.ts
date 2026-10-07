@@ -205,8 +205,13 @@ describe('paid Task', () => {
     const t = await setup(true);
     const tampered = { ...t.deps.mps, createPayment: async (b: Parameters<typeof t.deps.mps.createPayment>[0]) => ({ ...(await t.deps.mps.createPayment(b)), RequestedFunds: [{ amount: '5000000', unit: b.RequestedFunds[0]!.unit }] }) };
     await pollTasks({ ...t.deps, mps: tampered });
-    expect(t.rec().stage).toBe('failed');
+    expect(t.rec().stage).toBe('needs-inspection');
+    expect(t.statusEvents('FAILED')).toHaveLength(0);
     expect(t.paymentEvents()).toHaveLength(0);
+    await pollTasks(t.restart());
+    expect(t.rec().stage).toBe('needs-inspection');
+    expect(t.mps.calls.create).toBe(1);
+    expect(t.statusEvents('FAILED')).toHaveLength(0);
   });
 
   it('no check runs once the result deadline is near; the Task fails and the escrow refunds', async () => {
@@ -401,6 +406,8 @@ describe('payment request and lease', () => {
     }));
     await pollTasks(t.deps);
     t.mps.lock();
+    // retryAfterMs clamps to Date.now(); pin the signed deadline far ahead of wall time so a 120s wait is not 0.
+    t.mps.only().submitResultTime = String(Date.parse('2099-01-01T00:00:00.000Z'));
     let now = NOW;
     const deps = { ...t.deps, now: () => now };
     await pollTasks(deps);

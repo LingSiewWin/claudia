@@ -155,6 +155,7 @@ export async function advanceTask(start: TaskRecord, deps: TaskDeps): Promise<Ta
   };
   const fail = async (reason: string): Promise<TaskRecord> => {
     if ((await deps.core.getTask(rec.taskId)).status !== 'FAILED') {
+      if (lostHold(deps)) return inspect('lease generation changed before FAILED');
       await deps.core.postEvent(rec.taskId, { status: 'FAILED', comment: reason });
     }
     save({ stage: 'failed', error: reason, createRetryable: false });
@@ -191,7 +192,7 @@ export async function advanceTask(start: TaskRecord, deps: TaskDeps): Promise<Ta
     }
     if (!payment) {
       if (lastErr instanceof QuoteError) {
-        await fail(`Signed payment terms rejected: ${lastErr.message}`);
+        inspect(lastErr.message);
         return 'stop';
       }
       const kind = classifyCreate(lastErr);
@@ -218,8 +219,10 @@ export async function advanceTask(start: TaskRecord, deps: TaskDeps): Promise<Ta
         const task = await deps.core.getTask(rec.taskId);
         if (task.assigneeId !== deps.coworkerId) return inspect('task is not assigned to this coworker');
         if (task.status === 'GRANT_PENDING') return rec; // waits for the Workspace owner to approve Vendor access
-        if (task.status === 'READY') await deps.core.postEvent(rec.taskId, { status: 'RUNNING' });
-        else if (task.status !== 'RUNNING') return inspect(`unexpected task status ${task.status}`);
+        if (task.status === 'READY') {
+          if (lostHold(deps)) return inspect('lease generation changed before RUNNING');
+          await deps.core.postEvent(rec.taskId, { status: 'RUNNING' });
+        } else if (task.status !== 'RUNNING') return inspect(`unexpected task status ${task.status}`);
         save({ stage: 'started', name: task.name, description: task.description });
         continue;
       }
@@ -343,6 +346,7 @@ export async function advanceTask(start: TaskRecord, deps: TaskDeps): Promise<Ta
       case 'complete-pending': {
         const task = await deps.core.getTask(rec.taskId);
         if (task.status === 'RUNNING') {
+          if (lostHold(deps)) return inspect('lease generation changed before COMPLETED');
           const event = await deps.core.postEvent(rec.taskId, { status: 'COMPLETED', comment: need(rec.resultText, 'result') });
           save({ completionEventId: event.id });
         } else if (task.status !== 'COMPLETED') {
