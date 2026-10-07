@@ -44,17 +44,23 @@ export function ConsoleView({ mandateId }: { mandateId: string }) {
   const isAdmin = holds(wallet, admin);
 
   return (
-    <div className="grid gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:items-start xl:gap-16">
-      <div className="min-w-0 space-y-12">
-        <MandateSummary m={mandate.data} error={mandate.error} />
+    <div className="space-y-12">
+      <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between md:gap-10">
+        <div className="min-w-0 flex-1">
+          <MandateSummary m={mandate.data} error={mandate.error} />
+        </div>
         <WalletPanel wallet={wallet} onConnect={setWallet} approver={approver} admin={admin} isApprover={isApprover} isAdmin={isAdmin} />
-        <Approvals wallet={isApprover ? wallet : null} approver={approver} />
       </div>
-      <div className="min-w-0 space-y-12">
-        <Receipts mandateId={mandateId} />
-        {mandate.data ? (
-          <MandateControls m={mandate.data} wallet={isAdmin ? wallet : null} note={controlsNote(isAdmin, admin, wallet !== null)} onDone={mandate.reload} />
-        ) : null}
+      <div className="grid gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:items-start xl:gap-16">
+        <div className="min-w-0 space-y-12">
+          <Approvals wallet={isApprover ? wallet : null} approver={approver} />
+        </div>
+        <div className="min-w-0 space-y-12">
+          <Receipts mandateId={mandateId} />
+          {mandate.data ? (
+            <MandateControls m={mandate.data} wallet={isAdmin ? wallet : null} note={controlsNote(isAdmin, admin, wallet !== null)} onDone={mandate.reload} />
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -138,8 +144,8 @@ function WalletPanel({
   };
   const wrongNetwork = wallet !== null && wallet.networkId !== 0;
   return (
-    <section aria-label="Wallet" data-testid="wallet">
-      <h2 className="text-xl font-extrabold">Your wallet</h2>
+    <section aria-label="Wallet" data-testid="wallet" className="md:max-w-sm md:shrink-0 md:text-right">
+      <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">Your wallet</h2>
       {wallet ? (
         <p className="mt-2 text-fg" data-testid="wallet-status" data-cfo={isApprover ? 'true' : 'false'} data-admin={isAdmin ? 'true' : 'false'}>
           {wallet.name} connected.{' '}
@@ -151,7 +157,7 @@ function WalletPanel({
       ) : choices.length === 0 ? (
         <p className="mt-2 text-muted">No Cardano wallet found. Install Lace and switch it to preprod.</p>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-3">
+        <div className="mt-3 flex flex-wrap gap-3 md:justify-end">
           {choices.map((c) => (
             <button key={c.key} type="button" className="btn" onClick={() => connect(c.key)}>
               Connect {c.name}
