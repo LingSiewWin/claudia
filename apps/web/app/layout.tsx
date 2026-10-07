@@ -9,8 +9,8 @@ const serif = Newsreader({ subsets: ['latin'], style: ['normal', 'italic'], vari
 
 export const metadata: Metadata = {
   title: { default: 'Claudia', template: '%s · Claudia' },
-  description: 'Claudia, the human authority layer for AI agents. Agents are infinite. Human attention is not. Interrupting a person costs a bond; only that person\'s signature moves funds.',
-  openGraph: { title: 'Claudia', siteName: 'Claudia', description: 'The human authority layer for AI agents. Interrupting a person costs a bond; only that person\'s signature moves funds.' },
+  description: 'Give your agents an allowance, not your keys. Every agent gets its own ID and wallet. A mandate sets the daily cap and spending limit. Above the limit it pays a bond to ask you, and only your signature moves the money.',
+  openGraph: { title: 'Claudia', siteName: 'Claudia', description: 'Give your agents an allowance, not your keys. Every agent gets its own ID and wallet. A mandate sets the daily cap and spending limit. Above the limit it pays a bond to ask you, and only your signature moves the money.' },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -1,6 +1,6 @@
 # Claudia protocol
 
-Agents are infinite. Human attention is not. Interrupting a person costs a bond; only that person's signature moves funds.
+Give your agents an allowance, not your keys. Every agent gets its own ID and wallet. A mandate sets the daily cap and spending limit. Above the limit it pays a bond to ask you, and only your signature moves the money.
 
 Claudia, the human authority layer for AI agents, sits between an agent and consequential execution. The agent proposes an action; a deterministic engine checks it against a mandate; external facts are verified; funds move only for the exact action a human signed. This document is the protocol as implemented today on Cardano preprod. Shapes are copied from the code that validates them (`packages/core/src/schemas.ts`, `packages/core/src/brief.ts`, `apps/api/src/escalation.ts`).
 
