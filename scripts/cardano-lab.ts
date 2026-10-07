@@ -76,7 +76,8 @@ async function settle(step: string, plan: TxPlan, signers: SigningWallet[]): Pro
   const local = await evaluateTx(chain, unsigned);
   const hash = await signAndSubmit(chain, unsigned, signers);
   // The next context() must see this tx's outputs, or an attack is built on a spent UTxO and fails in phase 1 instead of in the script.
-  for (const address of new Set(plan.outputs.map((o) => o.address))) await awaitIndexed(chain, address, hash);
+  // Explicit outputs plus every signer's change address: the next snapshot must not respend what this tx consumed.
+  for (const address of new Set([...plan.outputs.map((o) => o.address), ...signers.map((s) => s.address)])) await awaitIndexed(chain, address, hash);
   console.log(json({ step, settled: hash, exec_units: local.ok ? local.budgets : local }));
   return hash;
 }
