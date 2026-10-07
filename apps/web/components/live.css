@@ -1,0 +1,209 @@
+/* The /live page: a paper gradient surface, a quiet one-line header, and the stage where agent actions take the
+   spotlight one at a time as the reader scrolls. The only motion here is the card handing over the stage
+   (opacity and scale); the floor keeps its own motion in floor.css. */
+.live {
+  --stage-ring: rgb(24 80 121 / 0.14);
+  background-color: var(--surface);
+  background-image: linear-gradient(180deg, var(--mist) 0%, #f6eee5 100%);
+  color: var(--fg);
+}
+.live[data-mode="replay"] {
+  background-image: linear-gradient(180deg, var(--mist) 0%, #e8eff3 48%, var(--accent-1) 100%);
+}
+.live-snap {
+  scroll-snap-type: y proximity;
+}
+
+/* Header chrome: one row, hairline under it. */
+.live-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  min-height: 64px;
+  border-bottom: 1px solid rgb(24 80 121 / 0.12);
+}
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid rgb(24 80 121 / 0.22);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.55);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.seg > button {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.seg > button[aria-checked="true"] {
+  background: var(--ink);
+  color: var(--mist);
+}
+.mode-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.mode-line > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+.mode-line .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ink);
+}
+
+/* Buttons on this page, until the shared button layer lands: 44px tall, navy fill or navy outline. */
+.live .btn {
+  min-height: 44px;
+  justify-content: center;
+  padding: 0 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  color: var(--ink);
+  background: transparent;
+}
+.live .btn-primary {
+  background: var(--ink);
+  color: var(--mist);
+}
+.live .btn:disabled {
+  opacity: 0.35;
+}
+
+/* The stage: one slot per action, the card in the slot nearest the viewport centre is on stage. */
+.stage {
+  display: grid;
+  gap: 8px;
+}
+.stage-slot {
+  display: grid;
+  align-items: center;
+  min-height: 46vh;
+  scroll-snap-align: center;
+}
+.stage-card {
+  position: relative;
+  padding: 24px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgb(24 80 121 / 0.1);
+  box-shadow: 0 1px 0 rgb(24 80 121 / 0.04);
+}
+/* Only on the stage does a card recede: the Attack Lab's own cards stand still. */
+.stage-slot > .stage-card {
+  opacity: 0.5;
+  transform: scale(0.96);
+  transform-origin: 50% 50%;
+  transition:
+    opacity 400ms var(--ease-settle),
+    transform 400ms var(--ease-settle),
+    box-shadow 400ms var(--ease-settle);
+}
+.stage-slot > .stage-card[data-active="true"] {
+  opacity: 1;
+  transform: none;
+  box-shadow:
+    0 0 0 1px var(--stage-ring),
+    0 24px 48px -28px rgb(24 80 121 / 0.45);
+}
+.stage-card[data-unanchored="true"] {
+  background: color-mix(in srgb, #ffffff 70%, var(--mist));
+}
+.stage-index {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.stage-amount {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.stage-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* The sticky panel: the action on stage, in full. */
+.panel {
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.72);
+  border: 1px solid rgb(24 80 121 / 0.1);
+  backdrop-filter: blur(6px);
+}
+@media (min-width: 1024px) {
+  .panel-sticky {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+  }
+}
+
+/* Attack tiles: equal cards on an 8px grid. */
+.attack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.attack-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid rgb(24 80 121 / 0.12);
+}
+.attack-tile[aria-pressed="true"] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.attack-tile .btn {
+  margin-top: auto;
+}
+@media (max-width: 479px) {
+  .attack-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (min-width: 640px) {
+  .attack-grid-wide {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-snap {
+    scroll-snap-type: none;
+  }
+  .stage-slot > .stage-card {
+    transition: none;
+    transform: none;
+  }
+}

@@ -3,7 +3,7 @@
 
 /* Brand tokens, shared with the deck. Paper and navy are the two poles; the accent scale comes from the deck card
    gradient; permit / cosign / forbid are status colours only (zones, outcomes), never decoration.
-   Light "paper" surface for LIVE and the public pages; dark "navy" surface for REPLAY. Token names are stable. */
+   Light "paper" surface everywhere; REPLAY tints it towards the accent scale (components/live.css). Token names are stable. */
 :root {
   --mist: #fbf6f1;
   --ink: #185079;
@@ -26,18 +26,9 @@
   --btn-fg: var(--mist);
 }
 
+/* REPLAY keeps the paper surface, tinted towards the lightest accent so it is never mistaken for LIVE. */
 [data-mode="replay"] {
-  --surface: var(--tape);
-  --raised: #173d5a;
-  --heading: #efe6dc;
-  --fg: #efe6dc;
-  --muted: #a9bac8;
-  --line: rgb(251 246 241 / 0.16);
-  --permit: #6fcaa6;
-  --cosign: #e3b65c;
-  --forbid: #f0927f;
-  --btn-bg: #efe6dc;
-  --btn-fg: var(--tape);
+  --surface: #eef3f6;
 }
 
 @theme inline {
@@ -79,9 +70,6 @@ body {
 /* Outside the floor, the only motion in the product: the action's marker slides along the boundary rail. */
 .rail-marker {
   transition: left 400ms var(--ease-settle);
-}
-.replay-hatch {
-  background-image: repeating-linear-gradient(135deg, rgb(251 246 241 / 0.08) 0 10px, transparent 10px 20px);
 }
 .forbid-hatch {
   background-image: repeating-linear-gradient(135deg, rgb(179 70 58 / 0.22) 0 6px, rgb(179 70 58 / 0.1) 6px 12px);
@@ -133,13 +121,10 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
-/* Partner logos: any colour renders as ink on the light surface and as mist in replay. */
+/* Partner logos: any colour renders as ink on the light surface. */
 .logo-mark {
   filter: brightness(0);
   opacity: 0.85;
-}
-[data-mode="replay"] .logo-mark {
-  filter: brightness(0) invert(1);
 }
 :focus-visible {
   outline: 2px solid var(--btn-bg);

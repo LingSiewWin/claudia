@@ -1,17 +1,20 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getMandate, getMetrics, listRuns, startRun } from '../lib/api';
 import { config } from '../lib/config';
 import type { Limits, MandateView, RunSummary } from '../lib/contract';
-import { clock, money } from '../lib/format';
+import { clock, money, actionTitle } from '../lib/format';
 import { useEventStream, useLoad, useNow, useReplay } from '../lib/hooks';
-import { type RunView, metricsOf, treasury, units } from '../lib/run';
-import { ActionCard } from './action-card';
+import { type CardView, type RunView, metricsOf, statusLine, treasury, units } from '../lib/run';
+import { ActionCard, ActionDetail } from './action-card';
 import { FloorStage } from './floor/floor-stage';
-import { AttackLab } from './attack-lab';
+import { ATTACKS, AttackLab, AttackTileBody } from './attack-lab';
 import { BoundaryRail } from './boundary-rail';
 import { type Mode, ModeBanner } from './mode-banner';
+import './live.css';
+
+const DESKTOP = 1024;
 
 export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; initialRun: string | null }) {
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -19,6 +22,9 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
   const [replayRun, setReplayRun] = useState<string | null>(initialMode === 'replay' ? initialRun : null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const stageRef = useRef<HTMLOListElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   const live = useEventStream(mode === 'live' ? liveRun : null);
   const mandate = useLoad(mode === 'live' ? () => getMandate(config.stageMandateId).then(fromMandate) : null, [mode]);
@@ -36,7 +42,48 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
     window.history.replaceState(null, '', `/live?${q.toString()}`);
   }, [mode, liveRun, replayRun]);
 
+  // Cards snap to the viewport centre while this page is mounted.
+  useEffect(() => {
+    document.documentElement.classList.add('live-snap');
+    return () => document.documentElement.classList.remove('live-snap');
+  }, []);
+
   const view: RunView = mode === 'live' ? live.view : replay.view;
+  const runKey = mode === 'live' ? liveRun : replayRun;
+  useEffect(() => setSelected(null), [mode, runKey]);
+
+  // The newest card takes the stage unless the reader has already picked another one.
+  const lastId = view.cards.at(-1)?.actionId ?? null;
+  const prevLast = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastId !== null && (selected === null || selected === prevLast.current)) setSelected(lastId);
+    prevLast.current = lastId;
+  }, [lastId]);
+
+  // Scrolling hands the stage to the card crossing the viewport centre.
+  useEffect(() => {
+    const cards = Array.from(stageRef.current?.querySelectorAll<HTMLElement>('[data-testid=action-card]') ?? []);
+    if (cards.length === 0) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        const id = hit?.target.getAttribute('data-action-id');
+        if (id) setSelected(id);
+      },
+      { rootMargin: '-45% 0px -45% 0px', threshold: 0 },
+    );
+    for (const c of cards) io.observe(c);
+    return () => io.disconnect();
+  }, [view.cards.length]);
+
+  const select = (id: string) => {
+    setSelected(id);
+    if (window.innerWidth < DESKTOP) {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    }
+  };
+
   // LIVE: the mandate-wide numbers from the API, refetched each time a card reaches an outcome. REPLAY: this run's own.
   const settledCount = view.cards.filter((c) => ['PROVEN', 'DENIED', 'SETTLED'].includes(c.state)).length;
   const apiMetrics = useLoad(mode === 'live' ? () => getMetrics(config.stageMandateId) : null, [mode, liveRun, settledCount]);
@@ -61,48 +108,44 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
 
   const metrics = mode === 'live' ? apiMetrics.data : metricsOf(view);
   const source = mode === 'live' ? (apiMetrics.data ? 'api' : 'none') : 'replay';
+  const allRuns = runs.data?.runs ?? [];
+  const labs = ATTACKS.flatMap((a) => allRuns.filter((r) => r.kind === 'lab' && r.attack === a.id));
+  const onLab = mode === 'replay' && labs.some((r) => r.run_id === replayRun);
+  const selectedIndex = view.cards.findIndex((c) => c.actionId === selected);
+  const selectedCard: CardView | null = selectedIndex >= 0 ? (view.cards[selectedIndex] ?? null) : null;
 
   return (
-    <div data-mode={mode} className="min-h-dvh bg-surface text-fg">
-      <div className="mx-auto max-w-7xl px-5 py-8">
-        <div className="flex flex-wrap items-center gap-3">
-            <div role="radiogroup" aria-label="Mode" className="inline-flex rounded-full border border-line p-1 text-sm font-bold">
-              {(['live', 'replay'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === m}
-                  onClick={() => setMode(m)}
-                  className={`rounded-full px-3 py-1 ${mode === m ? 'bg-fg text-surface' : 'text-muted'}`}
-                >
-                  {m === 'live' ? 'LIVE EXECUTION' : 'REPLAY'}
-                </button>
-              ))}
-            </div>
-            {mode === 'live' ? (
-              <button type="button" className="btn-strong" onClick={run} disabled={starting}>
-                {starting ? 'Starting…' : liveRun ? 'Run the agent again' : 'Run the agent'}
+    <div data-mode={mode} className="live min-h-dvh">
+      <div className="mx-auto max-w-7xl px-5">
+        <header className="live-head">
+          <div role="radiogroup" aria-label="Mode" className="seg">
+            {(['live', 'replay'] as const).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}>
+                {m === 'live' ? 'LIVE EXECUTION' : 'REPLAY'}
               </button>
-            ) : (
-            <RunPicker runs={runs.data?.runs ?? []} value={replayRun} onChange={setReplayRun} />
+            ))}
+          </div>
+          {mode === 'live' ? (
+            <button type="button" className="btn btn-primary" onClick={run} disabled={starting}>
+              {starting ? 'Starting…' : liveRun ? 'Run the agent again' : 'Run the agent'}
+            </button>
+          ) : (
+            <RunPicker runs={allRuns} value={replayRun} onChange={setReplayRun} />
           )}
           <span className="flex-1" />
-          <Link href="/" className="text-sm font-semibold text-muted">
+          <Link href="/" className="text-sm font-semibold text-heading">
             Claudia
           </Link>
-        </div>
+        </header>
 
-        <div className="mt-5">
-          <ModeBanner
-            mode={mode}
-            recordedAt={mode === 'replay' ? replay.recordedAt : null}
-            verdict={mode === 'replay' ? replay.verdict : null}
-            banner={mode === 'replay' ? replay.banner : null}
-          />
-        </div>
+        <ModeBanner
+          mode={mode}
+          recordedAt={mode === 'replay' ? replay.recordedAt : null}
+          verdict={mode === 'replay' ? replay.verdict : null}
+          banner={mode === 'replay' ? replay.banner : null}
+        />
 
-        <div className="mt-5">
+        <div className="mt-2">
           <FloorStage view={view} metrics={metrics} source={source} now={now} mode={mode} />
         </div>
         {mode === 'replay' && !replay.done && view.cards.length > 0 ? (
@@ -110,10 +153,38 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
             Skip to the end
           </button>
         ) : null}
+
+        {onLab ? (
+          <section aria-label="Attacks" className="mt-8">
+            <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Attacks · recorded attempts on the lab treasury, each stopped with no funds moved
+            </h2>
+            <ul className="attack-grid attack-grid-wide mt-3">
+              {labs.map((r) => {
+                const spec = ATTACKS.find((a) => a.id === r.attack);
+                if (!spec) return null;
+                return (
+                  <li key={r.run_id} className="grid">
+                    <button
+                      type="button"
+                      className="attack-tile"
+                      aria-pressed={r.run_id === replayRun}
+                      title={`Recorded ${r.started_at.slice(0, 10)} ${clock(r.started_at)}`}
+                      onClick={() => setReplayRun(r.run_id)}
+                    >
+                      <AttackTileBody a={spec} />
+                      <span className="mt-auto font-mono text-[11px] text-muted">{r.started_at.slice(0, 10)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
       </div>
 
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 pb-8 lg:grid-cols-[minmax(0,46rem)_1fr]">
-        <section aria-label="Agent actions" className="min-w-0">
+      <div className="mx-auto grid max-w-7xl gap-8 px-5 pb-16 pt-10 lg:grid-cols-12">
+        <section aria-label="Agent actions" className="min-w-0 lg:col-span-7">
           <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">Log</h2>
           {authority ? <AuthorityHeader a={authority} /> : null}
 
@@ -136,27 +207,60 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
             <p className="mt-4 text-sm text-muted">Some events of this run were missed. Reload the page to rebuild it from the log.</p>
           ) : null}
 
-          <ol className="mt-6 space-y-5">
-            {view.cards.map((card) => (
-              <li key={card.actionId}>
+          <ol ref={stageRef} className="stage mt-6">
+            {view.cards.map((card, i) => (
+              <li key={card.actionId} className="stage-slot">
                 <ActionCard
                   card={card}
                   started={view.started}
                   now={now}
+                  index={{ n: i + 1, of: view.cards.length }}
                   unanchored={mode === 'replay' && replay.unanchored.has(card.actionId)}
+                  selected={selected === card.actionId}
+                  onSelect={select}
                 />
               </li>
             ))}
           </ol>
         </section>
 
-        <aside aria-label="Attack Lab" className="min-w-0">
-          {mode === 'live' ? (
-            <AttackLab />
-          ) : (
-            <p className="text-sm text-muted">The Attack Lab runs real attempts, so it is available in LIVE EXECUTION only.</p>
-          )}
+        <aside ref={panelRef} aria-label="Detail" className="min-w-0 lg:col-span-5">
+          <div className="panel-sticky grid gap-4">
+            {selectedCard ? (
+              <DetailPanel card={selectedCard} n={selectedIndex + 1} of={view.cards.length} started={view.started} now={now} />
+            ) : view.cards.length > 0 ? (
+              <div className="panel p-5 text-sm text-muted">Scroll the log. The action on stage opens here.</div>
+            ) : null}
+            {mode === 'live' ? (
+              <div className="panel p-5">
+                <AttackLab />
+              </div>
+            ) : null}
+          </div>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+/** The action on stage, in full: outcome, brief, the three questions, the chain. */
+function DetailPanel({ card, n, of, started, now }: { card: CardView; n: number; of: number; started: RunView['started']; now: number }) {
+  const a = card.action;
+  const amount = a?.amount.value ?? card.authorization?.fields.amount ?? null;
+  const decimals = started?.limits.decimals ?? 6;
+  const status = statusLine(card);
+  return (
+    <div data-testid="detail" data-action-id={card.actionId} className="panel p-5">
+      <p className="stage-index">
+        On stage · {String(n).padStart(2, '0')} / {String(of).padStart(2, '0')}
+      </p>
+      <div className="mt-1 flex items-baseline justify-between gap-4">
+        <h2 className="text-lg font-bold leading-tight">{a ? actionTitle(a) : 'Payment outside the mandate'}</h2>
+        <p className="text-xl font-extrabold tabular-nums text-heading">{amount === null ? '—' : money(amount, decimals)}</p>
+      </div>
+      <p className="mt-1 text-sm font-semibold text-fg">{status.text}</p>
+      <div className="mt-4">
+        <ActionDetail card={card} started={started} now={now} />
       </div>
     </div>
   );
@@ -203,20 +307,20 @@ function fromMandate(m: MandateView): Authority {
 function AuthorityHeader({ a }: { a: Authority }) {
   const usd = (v: string | bigint) => money(v, a.limits.decimals);
   return (
-    <div className="mt-6">
+    <div className="mt-4">
       <h1 data-testid="authority" className="text-[15px] font-normal text-muted">
         {a.principal} delegated authority to {a.delegate} under Mandate {a.mandate}
       </h1>
       <dl data-testid="money" className="mt-3 flex flex-wrap gap-x-10 gap-y-2">
         <div>
           <dt className="text-sm text-muted">Treasury</dt>
-          <dd data-testid="treasury" className="text-2xl font-extrabold tabular-nums">
+          <dd data-testid="treasury" className="text-2xl font-extrabold tabular-nums text-heading">
             {usd(a.balance)}
           </dd>
         </div>
         <div>
           <dt className="text-sm text-muted">Daily spend</dt>
-          <dd data-testid="daily-spend" className="text-2xl font-extrabold tabular-nums">
+          <dd data-testid="daily-spend" className="text-2xl font-extrabold tabular-nums text-heading">
             {usd(a.spent)} <span className="text-base font-semibold text-muted">/ {usd(a.limits.daily_cap)}</span>
           </dd>
         </div>
@@ -236,22 +340,19 @@ function AuthorityHeader({ a }: { a: Authority }) {
   );
 }
 
+/** Stage run | Attacks. Dates live in the banner and the tile tooltips, not in the control. */
 function RunPicker({ runs, value, onChange }: { runs: RunSummary[]; value: string | null; onChange: (id: string) => void }) {
+  const stage = runs.find((r) => r.kind === 'stage') ?? null;
+  const firstLab = ATTACKS.flatMap((a) => runs.filter((r) => r.kind === 'lab' && r.attack === a.id))[0] ?? null;
+  const onLab = runs.find((r) => r.run_id === value)?.kind === 'lab';
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-muted">Recorded run</span>
-      <select
-        className="rounded-md border border-line bg-raised px-2 py-1 text-fg"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {runs.map((r) => (
-          <option key={r.run_id} value={r.run_id}>
-            {r.kind === 'lab' ? `Attack Lab: ${r.attack ?? 'attack'}` : `${r.mandate_id} stage run`} ({r.started_at.slice(0, 10)}{' '}
-            {clock(r.started_at)})
-          </option>
-        ))}
-      </select>
-    </label>
+    <div role="radiogroup" aria-label="Recorded run" className="seg">
+      <button type="button" role="radio" aria-checked={!onLab} disabled={stage === null} onClick={() => stage && onChange(stage.run_id)}>
+        Stage run
+      </button>
+      <button type="button" role="radio" aria-checked={onLab} disabled={firstLab === null} onClick={() => firstLab && onChange(firstLab.run_id)}>
+        Attacks
+      </button>
+    </div>
   );
 }

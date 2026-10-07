@@ -42,13 +42,13 @@ export function BoundaryRail({
             <div
               key={z.key}
               data-testid={full ? `zone-${z.key}` : undefined}
-              className={`${z.tone} flex flex-col justify-center px-3 text-fg`}
+              className={`${z.tone} flex min-w-0 flex-col justify-center overflow-hidden px-2 text-fg`}
               style={{ width: `${z.width}%` }}
             >
               {full ? (
                 <>
-                  <span className="text-sm font-extrabold tracking-wide">{z.name}</span>
-                  <span className="text-sm">{z.bounds}</span>
+                  <span className="truncate text-[12px] font-extrabold tracking-wide">{z.name}</span>
+                  <span className="truncate text-sm">{z.bounds}</span>
                 </>
               ) : null}
             </div>

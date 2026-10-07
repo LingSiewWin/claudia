@@ -13,9 +13,8 @@ const NOTE: Record<ReplayVerdict, string> = {
 };
 
 /**
- * LIVE is a small ink pill with a static dot. REPLAY is a hatched tape banner that cannot be mistaken for it.
- * `verdict` and `banner` are the browser's own check of the stored log (lib/replay.ts replayPlan), never a server
- * claim; `recordedAt` comes from the hashed RunStarted event.
+ * One quiet line under the header. LIVE carries a dot; REPLAY carries the browser's own verdict on the stored log
+ * (lib/replay.ts replayPlan), never a server claim; `recordedAt` comes from the hashed RunStarted event.
  */
 export function ModeBanner({
   mode,
@@ -30,20 +29,23 @@ export function ModeBanner({
 }) {
   if (mode === 'live') {
     return (
-      <p data-testid="mode-banner" data-mode="live" className="inline-flex items-center gap-2 rounded-full bg-ink px-3 py-1 text-sm font-bold text-mist">
-        <span aria-hidden className="size-2 rounded-full bg-mist" />
-        LIVE EXECUTION
+      <p data-testid="mode-banner" data-mode="live" className="mode-line">
+        <strong>
+          <span aria-hidden className="dot" />
+          LIVE EXECUTION
+        </strong>
+        <span>Real transactions on Cardano preprod, as the evidence log records them.</span>
       </p>
     );
   }
   const note = verdict === null ? null : NOTE[verdict];
   return (
-    <div data-testid="mode-banner" data-mode="replay" data-verdict={verdict ?? undefined} className="replay-hatch rounded-[10px] border border-line px-4 py-3 text-fg">
-      <p className={`font-extrabold tracking-wide ${verdict === 'failed' ? 'text-forbid' : ''}`}>{banner ?? REPLAY_CHECKING}</p>
-      <p className="mt-1 text-[15px]">
+    <p data-testid="mode-banner" data-mode="replay" data-verdict={verdict ?? undefined} className="mode-line">
+      <strong className={verdict === 'failed' ? 'text-forbid' : undefined}>{banner ?? REPLAY_CHECKING}</strong>
+      <span>
         {recordedAt ? `Recorded execution ${recordedAt.slice(0, 10)} ${clock(recordedAt)}. ` : null}
         {note ? `${note} ` : null}No transactions are being submitted.
-      </p>
-    </div>
+      </span>
+    </p>
   );
 }
