@@ -21,6 +21,8 @@ export const quantityOf = (u: UTxO, unit: string): bigint =>
 
 class NotIndexed extends Error {}
 
+const withUnit = (utxos: UTxO[], unit: string): UTxO[] => utxos.filter((u) => quantityOf(u, unit) > 0n);
+
 function one(utxos: UTxO[], label: string): UTxO {
   if (utxos.length !== 1 || !utxos[0]?.output.plutusData) throw new NotIndexed(`${label}: expected exactly one UTxO with an inline datum, found ${utxos.length}`);
   return utxos[0];
@@ -43,12 +45,13 @@ async function indexed<T>(read: () => Promise<T>): Promise<T> {
 }
 
 export async function readAnchor(fetcher: IFetcher, d: Pick<Deployment, 'mandate_id' | 'anchor'>): Promise<AnchorState> {
-  const utxo = await indexed(async () => one(await fetcher.fetchAddressUTxOs(d.anchor.address, d.anchor.policy + MANDATE_TOKEN), `${d.mandate_id} anchor`));
+  // Unfiltered address read, filtered here: Blockfrost's per-asset UTxO index can lag the address index by a block.
+  const utxo = await indexed(async () => one(withUnit(await fetcher.fetchAddressUTxOs(d.anchor.address), d.anchor.policy + MANDATE_TOKEN), `${d.mandate_id} anchor`));
   return { utxo, datum: parseAnchorDatum(utxo.output.plutusData as string) };
 }
 
 export async function readVault(fetcher: IFetcher, d: Pick<Deployment, 'mandate_id' | 'vault' | 'asset'>): Promise<VaultState> {
-  const utxo = await indexed(async () => one(await fetcher.fetchAddressUTxOs(d.vault.address, d.vault.hash + VAULT_TOKEN), `${d.mandate_id} vault`));
+  const utxo = await indexed(async () => one(withUnit(await fetcher.fetchAddressUTxOs(d.vault.address), d.vault.hash + VAULT_TOKEN), `${d.mandate_id} vault`));
   return { utxo, datum: parseVaultDatum(utxo.output.plutusData as string), balance: quantityOf(utxo, d.asset.policy + d.asset.name) };
 }
 

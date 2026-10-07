@@ -80,9 +80,16 @@ const noPayer: BondPayer = {
   },
 };
 
-const bondContext = (deps: RuntimeDeps, summary: RunSummary): BondContext => ({
+/** Attack Lab no_bond: the agent proposes but never locks the bond, so the 402 stands and the inbox stays empty. */
+const withheldPayer: BondPayer = {
+  pay: async () => {
+    throw new Error('no_bond attack: the bond is withheld by design');
+  },
+};
+
+const bondContext = (deps: RuntimeDeps, summary: RunSummary, claim: Claim): BondContext => ({
   authority: deps.authority,
-  payer: deps.payer ?? noPayer,
+  payer: claim.attack === 'no_bond' ? withheldPayer : (deps.payer ?? noPayer),
   maxBondLovelace: deps.maxBondLovelace ?? 10_000_000n,
   state: deps.escalation ?? newEscalationState(),
   summary,
@@ -95,7 +102,7 @@ const bondContext = (deps: RuntimeDeps, summary: RunSummary): BondContext => ({
 export async function runClaimed(deps: RuntimeDeps, claim: Claim): Promise<RunResult> {
   const items: ItemResult[] = [];
   const summary = newSummary();
-  const bonds = bondContext(deps, summary);
+  const bonds = bondContext(deps, summary, claim);
   deps.log({ event: 'run_claimed', run_id: claim.run_id, kind: claim.kind, mandate_id: claim.mandate_id, attack: claim.attack, model: deps.model.modelId, provider: deps.model.provider });
   try {
     const sk = deps.agentKeys.get(claim.mandate_id);
