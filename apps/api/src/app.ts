@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DAY_MS } from '@authority/core';
+import { approve, decline, pendingApprovals, submitApproved } from './approvals';
 import { type Caller, type Engine, handleCheck } from './check';
 import { bearer, HttpError, idempotencyKey, parseJson, readBody, type Reply, send } from './http';
 import { currentMandate, limitsOf, mandateOfKind, readChain, vaultSummary } from './mandates';
@@ -146,6 +147,18 @@ export function createApp(deps: AppDeps) {
       handler: async ({ url }) => ok({ receipts: await settlementReceipts(eng.db, url.searchParams.get('mandate_id') ?? 'M-001') }),
     },
     { method: 'GET', path: new RegExp(`^/v1/receipts/${ID}$`), handler: async ({ params }) => ok(await receiptBundle(eng.db, params[0]!)) },
+    // Approvals (CFO console)
+    {
+      method: 'GET',
+      path: /^\/v1\/approvals$/,
+      handler: async ({ url }) => {
+        if ((url.searchParams.get('status') ?? 'pending') !== 'pending') throw new HttpError(400, 'only status=pending is listed');
+        return ok({ approvals: await pendingApprovals(eng) });
+      },
+    },
+    { method: 'POST', path: new RegExp(`^/v1/approvals/${ID}/approve$`), handler: async ({ params }) => approve(eng, params[0]!) },
+    { method: 'POST', path: new RegExp(`^/v1/approvals/${ID}/decline$`), handler: async ({ req, params }) => decline(eng, params[0]!, await readBody(req)) },
+    { method: 'POST', path: /^\/v1\/executions$/, handler: async ({ req }) => submitApproved(eng, await readBody(req)) },
   ];
 
   const corsFor = (req: IncomingMessage): Record<string, string> => {
