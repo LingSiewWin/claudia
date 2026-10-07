@@ -44,10 +44,10 @@ describe('DEMO_INVOICES', () => {
       ['INV-L-0004', 'lab', 'aws', 50],
       ['INV-L-0005', 'lab', 'aws', 50],
       ['INV-L-0006', 'lab', 'aws', 50],
-      ['INV-L-0011', 'lab', 'globex', 20],
-      ['INV-L-0012', 'lab', 'globex', 20],
-      ['INV-L-0013', 'lab', 'globex', 20],
-      ['INV-L-0014', 'lab', 'globex', 20],
+      ['INV-L-0021', 'lab', 'globex', 50],
+      ['INV-L-0022', 'lab', 'globex', 50],
+      ['INV-L-0023', 'lab', 'globex', 50],
+      ['INV-L-0024', 'lab', 'globex', 50],
     ]);
     expect(new Set(DEMO_INVOICES.map((i) => i.number)).size).toBe(DEMO_INVOICES.length);
   });

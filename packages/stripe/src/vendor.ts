@@ -38,11 +38,11 @@ export const DEMO_INVOICES: readonly DemoInvoice[] = [
   { number: 'INV-L-0004', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: expired authorization' },
   { number: 'INV-L-0005', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: revoked mandate' },
   { number: 'INV-L-0006', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: prompt injection' },
-  // Unlisted vendor, small amount: each escalates on counterparty alone and fits the lab daily cap after the honest releases.
-  { number: 'INV-L-0011', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 1' },
-  { number: 'INV-L-0012', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 2' },
-  { number: 'INV-L-0013', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 3' },
-  { number: 'INV-L-0014', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 4' },
+  // Unlisted vendor at Stripe's minimum charge (0.50 USD, below the lab autonomous limit): each escalates on counterparty alone.
+  { number: 'INV-L-0021', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 1' },
+  { number: 'INV-L-0022', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 2' },
+  { number: 'INV-L-0023', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 3' },
+  { number: 'INV-L-0024', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 4' },
 ];
 
 export const ACME_CUSTOMER = { name: 'Acme Corp', email: 'acme-ap@example.com' } as const;
