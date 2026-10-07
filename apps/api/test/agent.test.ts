@@ -37,7 +37,8 @@ const facts = (): InvoiceFacts[] =>
     }));
 
 const agent = (model: AgentModel): RuntimeDeps => ({
-  authority: httpAuthority({ url: api.url, key: AGENT_KEY }),
+  // The agent runtime pays the 402 (lock bond, retry with PAYMENT-SIGNATURE); here the fake chain holds the bond.
+  authority: httpAuthority({ url: api.url, key: AGENT_KEY, fetch: api.x402Fetch }),
   model,
   invoices: { listOpen: async () => facts() },
   agentKeys: new Map([
@@ -66,7 +67,8 @@ async function cfo(choices: Record<string, 'approve' | 'decline'>, stop: { done:
         await api.post('/v1/executions', { approval_id: p.approval_id, authorization_digest: approved.json.authorization.digest_hex, cfo_witness_cbor: WITNESS });
       } else {
         const { wallet, address } = await cfoWallet();
-        await api.post(`/v1/approvals/${p.approval_id}/decline`, await wallet.signData(bytesToHex(utf8ToBytes(declineMessage(p.approval_id))), address));
+        const sig = await wallet.signData(bytesToHex(utf8ToBytes(declineMessage(p.approval_id, 'legitimate'))), address);
+        await api.post(`/v1/approvals/${p.approval_id}/decline`, { ...sig, reason: 'legitimate' });
       }
     }
     await sleep(10);

@@ -27,6 +27,7 @@ const EVENT_TYPES = new Set([
   'CREVerificationCompleted', 'AuthorizationIssued', 'ApprovalRequested', 'CFOApproved', 'CFODeclined', 'ActionDenied',
   'TransactionBuilt', 'TransactionSubmitted', 'TransactionConfirmed', 'TransactionRejected', 'ReceiptProven',
   'AttackStarted', 'AttackResult', 'MandateUpdated', 'MandateRevoked', 'RunCompleted',
+  'BondRequired', 'BondLocked', 'BondRefunded', 'BondCaptured',
 ]);
 
 describe('web contract (what /live, /console, /mandate and /receipt render)', () => {

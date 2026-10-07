@@ -7,6 +7,7 @@ import {
   bytesToHex,
   canonicalHash,
   type ChainBinding,
+  type EscalationPrice,
   type Mandate,
   mandateHash,
   parseMandate,
@@ -21,6 +22,7 @@ import { createApp } from '../src/app';
 import type { Engine } from '../src/check';
 import { createExecutor } from '../src/executor';
 import { createLog } from '../src/log';
+import { BOND_LOCK_MS } from '../src/escalation';
 import { insertMandate } from '../src/mandates';
 import { type BondOutcome, type BondUtxo, CardanoError, type CardanoPort, type LabDeps, type SettlementMetadata } from '../src/ports';
 
@@ -251,6 +253,15 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
       const fault = faults.shift();
       if (fault) throw fault;
       const txHash = txCbor.slice(4);
+      const spend = bondSpends.get(txHash);
+      if (spend) {
+        // Escrow validator: Refund needs the approver's signature or a validity range past locked_until; Capture the signature.
+        if (witnessSets.length === 0 && (spend.outcome === 'capture' || now() <= spend.bond.datum.locked_until_ms)) {
+          throw new CardanoError('SCRIPT_FAILED', 'bond: approver signature required', 'BOND', txCbor);
+        }
+        for (const [k, b] of bonds) if (b.tx_hash === spend.bond.tx_hash) bonds.delete(k);
+        return txHash;
+      }
       const anchor = anchorTxs.get(txHash);
       if (anchor) {
         const c = chains.get(anchor.vault)!;
@@ -288,6 +299,29 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
   return {
     port,
     built,
+    bonds,
+    bondSpends,
+    /** The agent locked the priced bond in escrow: the UTxO the port will read back for this approval. */
+    lockBond(price: EscalationPrice, o: { amount?: bigint; agent?: string } = {}): BondUtxo {
+      const utxo: BondUtxo = {
+        tx_hash: sha256Hex(`bond:lock:${price.approval_id}:${price.action_hash}`),
+        output_index: 0,
+        amount: o.amount ?? BigInt(price.amount),
+        escrow_address: price.escrow_address,
+        datum: {
+          approval_ref: sha256Hex(price.approval_id),
+          action_hash: price.action_hash,
+          mandate_ref: 'bb'.repeat(28),
+          agent_pkh: o.agent ?? 'a6'.repeat(28),
+          agent_stake: null,
+          approver_pkh: price.approver_key_hash,
+          amount: o.amount ?? BigInt(price.amount),
+          locked_until_ms: price.locked_until_ms,
+        },
+      };
+      bonds.set(price.approval_id, utxo);
+      return utxo;
+    },
     fault: (e: CardanoError) => void faults.push(e),
     reads: () => reads,
     failReads: (v: boolean) => void (readsFail = v),
@@ -370,6 +404,7 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     enqueue: (id) => executor.enqueue(id),
     interpret: o.interpret ?? null,
     publicApiUrl: 'https://api.test',
+    bondLovelace: '5000000',
   };
   const lab: LabDeps = {
     runner: o.labRunner ?? null,
@@ -393,6 +428,18 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     return { status: res.status, headers: res.headers, json: text ? (JSON.parse(text) as any) : null };
   };
   let keyN = 0;
+  /** PAYMENT-SIGNATURE for a bond the fake chain holds. */
+  const paymentHeader = (accepted: unknown, price: EscalationPrice, utxo: { tx_hash: string; output_index: number }) =>
+    Buffer.from(JSON.stringify({ x402Version: 2, accepted, payload: { approval_id: price.approval_id, tx_hash: utxo.tx_hash, output_index: utxo.output_index } })).toString('base64');
+  /** fetch that pays a 402 the way the agent does: lock the priced bond, retry with PAYMENT-SIGNATURE. */
+  const x402Fetch: typeof fetch = async (input, init) => {
+    const first = await fetch(input, init);
+    if (first.status !== 402) return first;
+    const required = JSON.parse(await first.text()) as { accepts: Array<{ extra: EscalationPrice }> };
+    const accepted = required.accepts[0]!;
+    const utxo = cardano.lockBond(accepted.extra);
+    return fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), 'payment-signature': paymentHeader(accepted, accepted.extra, utxo) } });
+  };
   const api = {
     url,
     db,
@@ -410,13 +457,30 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     chains,
     now,
     advance: (ms: number) => void (t += ms),
-    get: (path: string) => request('GET', path),
+    get: (path: string, headers: Record<string, string> = {}) => request('GET', path, undefined, headers),
     post: (path: string, body: unknown = {}, headers: Record<string, string> = {}) => request('POST', path, body, headers),
-    check: (body: unknown, o2: { key?: string; idem?: string } = {}) =>
+    check: (body: unknown, o2: { key?: string; idem?: string; headers?: Record<string, string> } = {}) =>
       request('POST', '/v1/authority/check', body, {
         authorization: `Bearer ${o2.key ?? AGENT_KEY}`,
         'idempotency-key': o2.idem ?? `test:${++keyN}`,
+        ...o2.headers,
       }),
+    paymentHeader,
+    x402Fetch,
+    /** check that pays the 402: locks the priced bond on the fake chain and retries with the proof (same key). */
+    async checkPaying(body: unknown, o2: { key?: string; idem?: string } = {}) {
+      const idem = o2.idem ?? `test:${++keyN}`;
+      const first = await request('POST', '/v1/authority/check', body, { authorization: `Bearer ${o2.key ?? AGENT_KEY}`, 'idempotency-key': idem });
+      if (first.status !== 402) return first;
+      const accepted = first.json.accepts[0];
+      const utxo = cardano.lockBond(accepted.extra);
+      return request('POST', '/v1/authority/check', body, {
+        authorization: `Bearer ${o2.key ?? AGENT_KEY}`,
+        'idempotency-key': idem,
+        'payment-signature': paymentHeader(accepted, accepted.extra, utxo),
+      });
+    },
+    bondLockMs: BOND_LOCK_MS,
     /** A stage run the agent has claimed (status active). */
     async agentRun(): Promise<string> {
       const started = await api.post('/v1/runs', { mandate_id: 'M-001' });
