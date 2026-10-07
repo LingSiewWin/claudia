@@ -1,4 +1,4 @@
-import type { Mandate } from '@authority/core';
+import type { FxCorridor, Mandate } from '@authority/core';
 import { b64json, decodePaymentRequired, decodePaymentResponse, type PaymentPayload, type PaymentRequired, type PaymentResponse } from './x402';
 export type { BondRef, PaymentPayload, PaymentRequired, PaymentRequirements, PaymentResponse } from './x402';
 
@@ -30,7 +30,10 @@ export interface Claim {
   attack: string | null;
 }
 
-export type WorkItem = { kind: 'invoice'; invoice_number: string } | { kind: 'request'; message_id: string };
+export type WorkItem =
+  | { kind: 'invoice'; invoice_number: string }
+  | { kind: 'request'; message_id: string }
+  | { kind: 'fx_payable'; corridor: FxCorridor; notional: string; due_at: string };
 
 export interface InboxMessage {
   id: string;

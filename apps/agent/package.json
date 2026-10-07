@@ -18,6 +18,7 @@
   "dependencies": {
     "@authority/cardano": "workspace:*",
     "@authority/core": "workspace:*",
+    "@authority/crebit": "workspace:*",
     "@authority/llm": "workspace:*",
     "@authority/stripe": "workspace:*",
     "tsx": "4.23.15",

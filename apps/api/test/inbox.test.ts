@@ -12,7 +12,7 @@ describe('run work', () => {
     await storeWork(db, RUN, stageWork(NOW));
     const work = await readWork(db, RUN);
     expect(work.run_id).toBe(RUN);
-    expect(work.queue.map((w) => (w.kind === 'invoice' ? w.invoice_number : w.message_id))).toEqual(['INV-3821', 'INV-3822', 'INV-G-0042', 'INV-3825', 'msg-nft-request', 'INV-3823', 'INV-3824']);
+    expect(work.queue.map((w) => (w.kind === 'invoice' ? w.invoice_number : w.kind === 'request' ? w.message_id : w.corridor))).toEqual(['INV-3821', 'INV-3822', 'INV-G-0042', 'INV-3825', 'msg-nft-request', 'INV-3823', 'INV-3824']);
     expect(work.messages.find((m) => m.id === 'msg-payout-inv-3823')!.body).toContain(ATTACKER_ADDRESS);
     expect(work.messages.find((m) => m.id === 'msg-nft-request')!.body).toContain(NFT_ADDRESS);
     await expect(readWork(db, '11111111-1111-4111-8111-111111111111')).rejects.toMatchObject({ status: 404 });

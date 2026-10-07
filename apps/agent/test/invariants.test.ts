@@ -19,7 +19,7 @@ const src = (dir: string) =>
 const SOURCES = [...src(new URL('../src', import.meta.url).pathname), ...src(new URL('../../../packages/llm/src', import.meta.url).pathname)];
 
 describe('G1: only propose_action has an effect, and Stripe is read-only', () => {
-  it('registers exactly four read tools and one proposal tool', async () => {
+  it('registers four read tools and one proposal tool, plus the two fx tools', async () => {
     const fake = fakeAuthority();
     const ctx = {
       authority: fake.client,
@@ -41,8 +41,9 @@ describe('G1: only propose_action has an effect, and Stripe is read-only', () =>
       out: { proposal: null },
     };
     const registry = agentTools(ctx);
-    expect(registry.map((t) => [t.def.name, t.effect])).toEqual([...READ_TOOLS.map((n) => [n, 'read']), [PROPOSE_TOOL, 'proposal']]);
-    for (const t of registry.filter((x) => x.effect === 'read')) await t.handle({});
+    // The fx tools read Crebit quotes (read) and propose a lock (proposal); without keys they only refuse.
+    expect(registry.map((t) => [t.def.name, t.effect])).toEqual([...READ_TOOLS.map((n) => [n, 'read']), [PROPOSE_TOOL, 'proposal'], ['get_fx_quote', 'read'], ['propose_fx_lock', 'proposal']]);
+    for (const t of registry.filter((x) => x.effect === 'read' && (READ_TOOLS as readonly string[]).includes(x.def.name))) await t.handle({});
     expect([fake.checks.length, fake.events.length]).toEqual([0, 0]);
   });
 
