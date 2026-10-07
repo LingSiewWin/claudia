@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { MpsError, mip004InputHash, mip004ResultHashEscaped } from '@authority/masumi';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AuthorityContractError, createAuthorityClient, type AuthorityClient } from '../src/authority';
-import { advanceJob, createMip003Handler, jobStatus, startJob, type JobDeps, type JobRecord } from '../src/jobs';
+import { advanceJob, advanceJobs, createMip003Handler, jobStatus, startJob, type JobDeps, type JobRecord } from '../src/jobs';
 import { Journal, LEASE_TTL_MS, holdGeneration, tryAcquireLease } from '../src/journal';
 import { ENGINE_PUBLIC_KEY, SIGNED_INPUT, SOURCE, WEB, authorityResponse, fakeMps, startFakeAuthority } from './fakes';
 
@@ -184,6 +184,34 @@ describe('POST /start_job (idempotent per identifier_from_purchaser)', () => {
     expect(deps.jobs.read(ID)?.stage).toBe('needs-inspection');
     expect(mps.calls.create).toBe(0);
   });
+
+  it('a null generation is no hold, so no payment is requested', async () => {
+    const { deps, mps } = await setup({ generation: null });
+    expect((await start(deps)).status).toBe(502);
+    expect(deps.jobs.read(ID)?.stage).toBe('needs-inspection');
+    expect(mps.calls.create).toBe(0);
+  });
+
+  it('a quote whose inputHash does not match the request is 502, one create, and 409 on restart', async () => {
+    const { deps, mps, restart } = await setup();
+    const inner = deps.mps;
+    const mismatched: JobDeps = {
+      ...deps,
+      mps: {
+        ...inner,
+        createPayment: async (body) => {
+          const p = await inner.createPayment(body);
+          return { ...p, inputHash: '00'.repeat(32) };
+        },
+      },
+    };
+    expect((await start(mismatched)).status).toBe(502);
+    const saved = deps.jobs.read(ID);
+    expect(saved?.stage).toBe('needs-inspection');
+    expect(saved?.createRetryable).toBe(false);
+    expect((await start(restart())).status).toBe(409);
+    expect(mps.calls.create).toBe(1);
+  });
 });
 
 describe('job execution', () => {
@@ -342,6 +370,26 @@ describe('job execution', () => {
     expect(job.stage).toBe('needs-inspection');
     expect(api.calls).toHaveLength(1);
     expect(mps.calls.submit).toBe(0);
+  });
+
+  it('one unreadable job record does not skip the rest', async () => {
+    const { deps, mps } = await setup();
+    const other = 'bbccddeeff0011223344';
+    await start(deps);
+    await start(deps, SIGNED_INPUT, other);
+    for (const p of mps.payments.values()) mps.lock(p.blockchainIdentifier);
+    const jobs = deps.jobs;
+    const flaky = {
+      read(key: string) {
+        if (key === ID) throw new Error('corrupt record');
+        return jobs.read(key);
+      },
+      write: jobs.write.bind(jobs),
+      keys: jobs.keys.bind(jobs),
+    } as Journal<JobRecord>;
+    await advanceJobs({ ...deps, jobs: flaky });
+    expect(jobs.read(ID)?.stage).toBe('awaiting-payment');
+    expect(jobs.read(other)?.stage).toBe('completed');
   });
 
   it('FundsOrDatumInvalid and RefundRequested fail the job', async () => {

@@ -63,8 +63,8 @@ export interface JobDeps {
   webUrl: string;
   now: () => number;
   log: Log;
-  // Generation captured after the executor acquired the lease. External writes
-  // are refused if holdGeneration(leaseDir) no longer matches.
+  // Generation captured after the executor acquired the lease. Null means no hold.
+  // A string is refused once holdGeneration(leaseDir) differs.
   leaseDir: string;
   generation: string | null;
   wait?: (ms: number) => Promise<void>;
@@ -93,7 +93,7 @@ type Reply = { status: number; body: unknown };
 
 const waitFor = (deps: JobDeps, ms: number): Promise<void> => (deps.wait ?? ((n) => new Promise((r) => setTimeout(r, n))))(ms);
 
-const lostHold = (deps: JobDeps): boolean => holdGeneration(deps.leaseDir) !== deps.generation;
+const lostHold = (deps: JobDeps): boolean => deps.generation === null || holdGeneration(deps.leaseDir) !== deps.generation;
 
 const inspect = (job: JobRecord, deps: JobDeps, error: string): JobRecord => {
   const next = { ...job, stage: 'needs-inspection' as const, error, createRetryable: false };
@@ -156,13 +156,17 @@ export async function startJob(raw: unknown, deps: JobDeps): Promise<Reply> {
       return { status: 502, body: { error: 'payment service request failed' } };
     }
     try {
-      payment = await deps.mps.createPayment(quoteRequest);
-      checkQuote(payment, deps.source, quoteRequest);
+      const created = await deps.mps.createPayment(quoteRequest);
+      checkQuote(created, deps.source, quoteRequest);
+      payment = created;
       lastErr = undefined;
       break;
     } catch (e) {
       lastErr = e;
-      if (e instanceof QuoteError) break;
+      if (e instanceof QuoteError) {
+        inspect(job, deps, String(e));
+        return { status: 502, body: { error: 'payment service request failed' } };
+      }
       if (classifyCreate(e) === 'retry') {
         await waitFor(deps, RETRY_BACKOFF_MS);
         continue;
@@ -297,7 +301,13 @@ export async function advanceJob(start: JobRecord, deps: JobDeps): Promise<JobRe
 
 export async function advanceJobs(deps: JobDeps): Promise<void> {
   for (const key of deps.jobs.keys()) {
-    const found = deps.jobs.read(key);
+    let found: JobRecord | null;
+    try {
+      found = deps.jobs.read(key);
+    } catch (e) {
+      deps.log('job record unreadable', { identifier: key, error: String(e) });
+      continue;
+    }
     if (found && ACTIVE.has(found.stage)) await advanceJob(found, deps);
   }
 }

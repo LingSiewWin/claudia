@@ -166,6 +166,9 @@ function assertSellable(res: AuthorityResponse): void {
   }
   if (authorization.fields.action_hash !== e.action_hash) throw new AuthorityContractError('authorization is for another action');
   if (authorization.fields.mandate_hash !== e.mandate_hash) throw new AuthorityContractError('authorization is under another mandate');
+  // A present report is the binding; otherwise the evaluation's verification hash.
+  const boundRef = res.verification != null ? res.verification.report_hash : e.verification_hash;
+  if (authorization.fields.verification_ref !== boundRef) throw new AuthorityContractError('authorization is for another verification');
 }
 
 export interface AuthorityOutput {

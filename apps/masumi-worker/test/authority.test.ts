@@ -139,6 +139,18 @@ describe('authority client refuses authorizations it cannot verify', () => {
     ['a signed evaluation for a request sent without an agent signature', UNSIGNED_INPUT, authorityResponse({ authorization: null })],
     ['a decision_hash that does not match the evaluation', SIGNED_INPUT, { ...authorityResponse(), decision_hash: '00'.repeat(32) }],
     ['a signed ALLOW without an authorization record', SIGNED_INPUT, authorityResponse({ authorization: null })],
+    [
+      'a signature-valid record whose verification_ref is a different report',
+      SIGNED_INPUT,
+      (() => {
+        const base = authorityResponse();
+        return {
+          ...base,
+          evaluation: { ...base.evaluation, verification_hash: 'ff'.repeat(32) },
+          authorization: authorizationRecord(false, { verificationRef: 'ff'.repeat(32) }),
+        };
+      })(),
+    ],
   ];
   it.each(cases)('%s', async (_label, request, json) => {
     const api = await startFakeAuthority(() => ({ status: 200, json }));
@@ -186,5 +198,28 @@ describe('buildOutput (the sold result)', () => {
     ['signed ALLOW without an authorization record', { authorization: null }],
   ])('refuses to sell %s', (_label, o) => {
     expect(() => buildOutput(authorityResponse(o) as never, WEB)).toThrow(AuthorityContractError);
+  });
+
+  it('refuses a signature-valid record whose verification_ref is a different report', () => {
+    const base = authorityResponse();
+    const res = {
+      ...base,
+      evaluation: { ...base.evaluation, verification_hash: 'ff'.repeat(32) },
+      authorization: authorizationRecord(false, { verificationRef: 'ff'.repeat(32) }),
+    };
+    expect(() => buildOutput(res as never, WEB)).toThrow(AuthorityContractError);
+  });
+
+  it('with no report, sells a record whose verification_ref matches the evaluation hash', () => {
+    const base = authorityResponse();
+    const res = { ...base, verification: null, authorization: authorizationRecord(false) };
+    expect(buildOutput(res as never, WEB).output.decision).toBe('ALLOW');
+    const other = { ...base, verification: null, authorization: authorizationRecord(false, { verificationRef: 'ff'.repeat(32) }) };
+    expect(() => buildOutput(other as never, WEB)).toThrow(AuthorityContractError);
+  });
+
+  it('check-time REQUIRE_APPROVAL with no authorization record stays sellable', () => {
+    const res = authorityResponse({ outcome: 'REQUIRE_APPROVAL', authorization: null });
+    expect(buildOutput(res as never, WEB).output.authorization).toBeNull();
   });
 });
