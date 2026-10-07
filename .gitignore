@@ -38,3 +38,6 @@ workflows/*/.cre_build_tmp.js
 contracts/sepolia/out/
 contracts/sepolia/cache/
 contracts/sepolia/broadcast/
+
+# Masumi worker journals
+apps/masumi-worker/.state/
