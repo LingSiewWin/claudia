@@ -20,3 +20,8 @@ overrides:
   "@connectrpc/connect>@bufbuild/protobuf": "1.10.1"
   "@connectrpc/connect-node>@bufbuild/protobuf": "1.10.1"
   "@connectrpc/connect-web>@bufbuild/protobuf": "1.10.1"
+  # @meshsdk/provider pulls @utxorpc/sdk, whose connect-node transport (unused here, Blockfrost only) pins old
+  # undici, ip-address and busboy with published advisories; the patched lines are the same ones Node 24 ships.
+  "undici@<6.28.1": ">=6.28.1 <7"
+  "ip-address@<10.7.1": ">=10.7.1"
+  "@fastify/busboy@<3.2.2": ">=3.2.2"

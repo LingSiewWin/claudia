@@ -1,7 +1,10 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Trigger } from '@authority/chainlink';
 import type { Db } from '@authority/db';
+import * as z from 'zod';
 import { HttpError, parseJson, type Reply } from './http';
+
+const ResultBody = z.strictObject({ output: z.string().max(1024 * 1024) });
 
 export const RELAY_TIMEOUT_MS = 300_000;
 
@@ -38,11 +41,11 @@ export async function claimJob(db: Db): Promise<Reply> {
 }
 
 export async function completeJob(db: Db, triggerId: string, rawBody: string): Promise<Reply> {
-  const body = parseJson(rawBody) as { output?: unknown };
-  if (typeof body?.output !== 'string') throw new HttpError(400, 'body must be { output: string }');
+  const body = ResultBody.safeParse(parseJson(rawBody));
+  if (!body.success) throw new HttpError(400, 'body must be { output: string }');
   const done = await db.query(`update cre_jobs set status = 'done', output = $2 where trigger_id = $1 and status = 'claimed' returning trigger_id`, [
     triggerId,
-    body.output,
+    body.data.output,
   ]);
   if (done.length === 0) throw new HttpError(409, 'no claimed job with this trigger id');
   return { status: 200, body: { ok: true } };

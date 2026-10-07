@@ -67,7 +67,7 @@ export interface CardanoPort {
   /** Escrow address and sink for the 402 price. */
   bondAddresses(): { escrow: string; sink: string };
   /** The live bond UTxO for this escalation, verified against the price, or null. */
-  readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash'>): Promise<BondUtxo | null>;
+  readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash' | 'network'>): Promise<BondUtxo | null>;
   /** Unsigned Refund or Capture of a bond; the approver key hash is a required signer. */
   buildBondSpend(bond: BondUtxo, outcome: BondOutcome): Promise<UnsignedTx>;
 }

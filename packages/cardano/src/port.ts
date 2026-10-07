@@ -69,7 +69,7 @@ export interface CardanoPort {
   awaitConfirmation(txHash: string, untilMs: number): Promise<{ block_height: number } | null>;
   releaseOf(binding: ChainBinding, authorization: AuthorizationRecord): Promise<string | null>;
   bondAddresses(): { escrow: string; sink: string };
-  readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash'>): Promise<BondUtxo | null>;
+  readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash' | 'network'>): Promise<BondUtxo | null>;
   buildBondSpend(bond: BondUtxo, outcome: BondOutcome): Promise<UnsignedTx>;
 }
 
@@ -164,7 +164,7 @@ async function snapshot(chain: Chain, d: Deployment, fee: SigningWallet): Promis
 }
 
 async function blockfrostGet(chain: Chain, path: string): Promise<{ status: number; body: unknown }> {
-  const res = await fetch(`${BLOCKFROST}${path}`, { headers: { project_id: chain.projectId } });
+  const res = await fetch(`${BLOCKFROST}${path}`, { headers: { project_id: chain.projectId }, signal: AbortSignal.timeout(30_000) });
   const text = await res.text();
   if (!res.ok) return { status: res.status, body: null };
   return { status: res.status, body: JSON.parse(text) as unknown };

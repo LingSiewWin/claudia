@@ -167,6 +167,44 @@ describe('interrupt budget', () => {
     expect((await api.get('/v1/authority/CFO?mandate_id=M-001')).json).toMatchObject({ interrupt_budget: { used: 0, per_day: 3 }, availability: 'open' });
   });
 
+  it("two bonds racing for the day's last slot: the second is denied at claim time, never paged, refunded at locked_until", async () => {
+    for (const spec of escalating.slice(0, 2)) expect((await api.checkPaying(body(spec))).status).toBe(200);
+    // Both are priced while one slot is left; both bonds are locked before either proof is read back.
+    const third = await api.check(body(escalating[2]!), { idem: 'p3' });
+    const fourth = await api.check(body(escalating[3]!), { idem: 'p4' });
+    expect([third.status, fourth.status]).toEqual([402, 402]);
+    const [a3, a4] = [third.json.accepts[0], fourth.json.accepts[0]];
+    const [u3, u4] = [api.cardano.lockBond(a3.extra), api.cardano.lockBond(a4.extra)];
+    const port = api.cardano.port;
+    const readBond = port.readBond.bind(port);
+    let raced = false;
+    port.readBond = async (price) => {
+      // The third escalation settles while the fourth's bond is being read back: its engine evaluation saw used = 2.
+      if (!raced && price.approval_id === 'AP-4') {
+        raced = true;
+        const settled = await api.check(body(escalating[2]!), { idem: 'p3', headers: { 'payment-signature': api.paymentHeader(a3, a3.extra, u3) } });
+        expect(settled.status).toBe(200);
+        expect(settled.json.approval_id).toBe('AP-3');
+      }
+      return readBond(price);
+    };
+    const res = await api.check(body(escalating[3]!), { idem: 'p4', headers: { 'payment-signature': api.paymentHeader(a4, a4.extra, u4) } });
+    expect(raced).toBe(true);
+    expect(res.status).toBe(200);
+    expect(res.json.evaluation).toMatchObject({ outcome: 'DENY', reason: 'INTERRUPT_BUDGET_EXHAUSTED' });
+    expect(res.json.evaluation.checks.find((c: { id: string }) => c.id === 'interrupt_budget')).toMatchObject({ result: 'fail', detail: { used: 3, per_day: 3 } });
+    expect(res.json.approval_id).toBeNull();
+    expect(res.json.bond).toMatchObject({ approval_id: 'AP-4', status: 'locked', tx_hash: u4.tx_hash });
+    expect((await api.log(run)).slice(-3).map((e) => [e.type, e.action_id])).toEqual([['BondLocked', 'E-4'], ['AuthorityEvaluated', 'E-4'], ['ActionDenied', 'E-4']]);
+    expect(await inbox()).toHaveLength(3);
+    expect((await api.get('/v1/approvals/AP-4')).json).toMatchObject({ status: 'awaiting_bond', bond: { status: 'locked', tx_hash: u4.tx_hash } });
+    api.advance(api.bondLockMs + 1);
+    await inbox();
+    const view = (await api.get('/v1/approvals/AP-4')).json;
+    expect(view).toMatchObject({ status: 'expired', bond: { status: 'refunded', tx_hash: u4.tx_hash } });
+    expect((await api.log(run)).filter((e) => e.type === 'BondRefunded').map((e) => e.payload)).toContainEqual({ approval_id: 'AP-4', tx_hash: view.bond.outcome_tx_hash, reason: 'expired' });
+  });
+
   it('priced but unpaid escalations consume nothing', async () => {
     for (const spec of escalating.slice(0, 3)) expect((await api.check(body(spec))).status).toBe(402);
     expect((await api.get('/v1/authority/CFO?mandate_id=M-001')).json).toMatchObject({ interrupt_budget: { used: 0 }, availability: 'open' });
