@@ -39,10 +39,10 @@ export const DEMO_INVOICES: readonly DemoInvoice[] = [
   { number: 'INV-L-0005', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: revoked mandate' },
   { number: 'INV-L-0006', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: prompt injection' },
   // Unlisted vendor at Stripe's minimum charge (0.50 USD, below the lab autonomous limit): each escalates on counterparty alone.
-  { number: 'INV-L-0021', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 1' },
-  { number: 'INV-L-0022', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 2' },
-  { number: 'INV-L-0023', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 3' },
-  { number: 'INV-L-0024', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 4' },
+  { number: 'INV-L-0031', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 1' },
+  { number: 'INV-L-0032', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 2' },
+  { number: 'INV-L-0033', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 3' },
+  { number: 'INV-L-0034', set: 'lab', vendor: 'globex', cents: 50, memo: 'Lab: escalation 4' },
 ];
 
 export const ACME_CUSTOMER = { name: 'Acme Corp', email: 'acme-ap@example.com' } as const;
@@ -154,6 +154,8 @@ async function createOpenInvoice(stripe: Stripe, customerId: string, invoice: De
     collection_method: 'send_invoice',
     days_until_due: 30,
     auto_advance: false,
+    // Only the line item added below belongs on this invoice; stray pending items on the customer must not roll in.
+    pending_invoice_items_behavior: 'exclude',
     description: invoice.memo,
     metadata: invoiceMetadata(invoice, payoutAddress),
   });
