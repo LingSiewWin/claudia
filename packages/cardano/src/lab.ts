@@ -198,7 +198,7 @@ export const ATTACKS = {
     plan.mints = [{ policy: anchor.hash, name: MANDATE_TOKEN, quantity: 1n, script: anchor.cbor, redeemer: MINT_REDEEMER }];
     plan.outputs = [{ address: anchor.address, amount: [{ unit: anchor.hash + MANDATE_TOKEN, quantity: '1' }], datum: anchorDatumData(ctx.anchor.datum) }];
     plan.requiredSigners = [ctx.anchor.datum.principal_pkh];
-    return { trace: 'm1 ? False', plan, cosigner: null };
+    return { trace: 'm1 ? False', plan, cosigner: 'principal' };
   },
   /** V1: a second VAULT mint under the vault policy (its seed is long spent). */
   second_vault_mint: (ctx: LabContext): Attack => {
@@ -208,7 +208,7 @@ export const ATTACKS = {
     plan.mints = [{ policy: vault.hash, name: VAULT_TOKEN, quantity: 1n, script: vault.cbor, redeemer: MINT_REDEEMER }];
     plan.outputs = [{ address: vault.address, amount: [{ unit: vault.hash + VAULT_TOKEN, quantity: '1' }], datum: vaultDatumData(ZERO_VAULT_DATUM) }];
     plan.requiredSigners = [ctx.anchor.datum.principal_pkh];
-    return { trace: 'v1 ? False', plan, cosigner: null };
+    return { trace: 'v1 ? False', plan, cosigner: 'principal' };
   },
   /** R5: an M-LAB authorization naming another vault (the M-001 vault hash), spent against M-LAB. */
   cross_vault: (ctx: LabContext, otherVaultHash: string): Attack => ({

@@ -90,6 +90,15 @@ describe('the admin key and the payment approver key cannot stand in for each ot
     expect([a.plan.requiredSigners, a.cosigner]).toEqual([[PRINCIPAL_PKH], 'principal']);
     expect(rejectedBy(await attempt(w, a.plan), a.trace)).toBe(true);
   });
+
+  it('a second MANDATE or VAULT mint requires the principal cosigner', async () => {
+    for (const id of ['second_anchor_mint', 'second_vault_mint'] as const) {
+      const w = world();
+      const a = ATTACKS[id](w.lab());
+      expect([a.plan.requiredSigners, a.cosigner]).toEqual([[PRINCIPAL_PKH], 'principal']);
+      expect(rejectedBy(await attempt(w, a.plan), a.trace)).toBe(true);
+    }
+  });
 });
 
 describe('stale authorizations die once the chain moves', () => {
