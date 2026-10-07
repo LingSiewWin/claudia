@@ -195,7 +195,7 @@ function HumanHome() {
         <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">Real transactions, not a mockup</h2>
         <ul className="mt-8 divide-y divide-line border-y border-line">
           {ONCHAIN.map((row) => (
-            <li key={row.hash} className="grid gap-1 py-4 sm:grid-cols-[11rem_1fr] sm:gap-6">
+            <li key={row.hash} className="grid gap-1 py-4 sm:grid-cols-[14rem_1fr] sm:gap-6">
               <p className="font-bold">{row.what}</p>
               <div>
                 <a href={cardanoscanTxUrl(row.hash)} className="font-mono text-[13px] underline underline-offset-4" rel="noreferrer">
@@ -205,7 +205,7 @@ function HumanHome() {
               </div>
             </li>
           ))}
-          <li className="grid gap-1 py-4 sm:grid-cols-[11rem_1fr] sm:gap-6">
+          <li className="grid gap-1 py-4 sm:grid-cols-[14rem_1fr] sm:gap-6">
             <p className="font-bold">Attack lab</p>
             <div>
               <p className="text-[15px]">Eight forged releases against the live M-LAB vault, each rejected by the Cardano node with no funds moved:</p>
@@ -232,17 +232,17 @@ function HumanHome() {
         <div>
           <Eyebrow>Who it is for</Eyebrow>
           <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">People who already sign for money</h2>
-          <dl className="mt-8 divide-y divide-line border-y border-line">
-            <Audience title="Multisig signers">
+          <ul className="mt-8 divide-y divide-line border-y border-line">
+            <Audience title="Multisig signers" art="/art/multisig-signers.png" artSize={[696, 622]}>
               Let an agent prepare and pay the routine, and reach you only with a bonded, briefed, exact-action request.
             </Audience>
-            <Audience title="Treasury operators">
+            <Audience title="Treasury operators" art="/art/treasury-operators.png" artSize={[722, 972]}>
               Write the mandate once: vendors, limits, daily cap, floor, interrupt budget. The vault enforces it on chain.
             </Audience>
-            <Audience title="Finance teams running agents">
+            <Audience title="Finance teams running agents" art="/art/finance-teams.png" artSize={[696, 636]}>
               Give the agent authority, not credentials. Every payment has a receipt that binds action, facts, brief and signature.
             </Audience>
-          </dl>
+          </ul>
         </div>
         <div className="border-l-2 border-fg pl-5">
           <p className="text-sm font-extrabold tracking-wide">START HERE</p>
@@ -391,11 +391,20 @@ function Outcome({ name, color, children }: { name: string; color: string; child
   );
 }
 
-function Audience({ title, children }: { title: string; children: ReactNode }) {
+function Audience({ title, art, artSize, children }: { title: string; art: string; artSize: [number, number]; children: ReactNode }) {
   return (
-    <div className="grid gap-1 py-4 sm:grid-cols-[13rem_1fr] sm:gap-6">
-      <dt className="text-lg font-bold">{title}</dt>
-      <dd className="text-[15px] leading-relaxed">{children}</dd>
-    </div>
+    <li className="grid grid-cols-[6.5rem_1fr] items-center gap-4 py-5 sm:grid-cols-[14rem_1fr] sm:gap-8">
+      <Image
+        src={art}
+        alt=""
+        width={artSize[0]}
+        height={artSize[1]}
+        className="h-28 w-full object-contain object-left mix-blend-multiply sm:h-56"
+      />
+      <div>
+        <h3 className="text-lg font-bold">{title}</h3>
+        <p className="mt-1 text-[15px] leading-relaxed">{children}</p>
+      </div>
+    </li>
   );
 }
