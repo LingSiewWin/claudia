@@ -61,15 +61,40 @@ create table if not exists nonces (
 );
 
 create table if not exists approvals (
-  id           bigserial primary key,
-  run_id       uuid not null,
-  mandate_id   text not null,
-  action_id    text not null,
-  proposal     text not null,
-  evaluation   text not null,
-  status       text not null check (status in ('pending', 'approving', 'authorized', 'declined', 'closed')),
-  requested_at timestamptz not null default now()
+  id              bigserial primary key,
+  run_id          uuid not null,
+  mandate_id      text not null,
+  action_id       text not null,
+  action_hash     text,
+  proposal        text not null,
+  evaluation      text not null,
+  status          text not null,
+  -- UTC day (ms / 86400000) the escalation was requested; the interrupt budget counts per mandate and day.
+  day_index       int not null default 0,
+  locked_until_ms bigint,
+  -- Escalation price (402 body), decision brief and its hash, bond on record; RFC 8785 text like every document.
+  price           text,
+  brief           text,
+  brief_hash      text,
+  bond            text,
+  -- Unsigned bond spend (Refund or Capture) waiting for the approver's witness, and why it was declined.
+  bond_tx         text,
+  decline_reason  text,
+  requested_at    timestamptz not null default now()
 );
+alter table approvals add column if not exists action_hash text;
+alter table approvals add column if not exists day_index int not null default 0;
+alter table approvals add column if not exists locked_until_ms bigint;
+alter table approvals add column if not exists price text;
+alter table approvals add column if not exists brief text;
+alter table approvals add column if not exists brief_hash text;
+alter table approvals add column if not exists bond text;
+alter table approvals add column if not exists bond_tx text;
+alter table approvals add column if not exists decline_reason text;
+alter table approvals drop constraint if exists approvals_status_check;
+alter table approvals add constraint approvals_status_check
+  check (status in ('awaiting_bond', 'pending', 'approving', 'authorized', 'declined', 'closed', 'expired'));
+create index if not exists approvals_by_action on approvals (mandate_id, action_hash, status);
 
 create table if not exists authorizations (
   id            bigserial primary key,
