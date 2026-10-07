@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DAY_MS } from '@authority/core';
 import { prepareRevoke, prepareUpdate, submitMandateTx } from './admin';
+import { anchorFor } from './anchor';
 import { approve, decline, pendingApprovals, submitApproved } from './approvals';
 import { type Caller, type Engine, handleCheck } from './check';
 import { bearer, HttpError, idempotencyKey, parseJson, readBody, type Reply, send } from './http';
@@ -102,7 +103,7 @@ export function createApp(deps: AppDeps) {
     {
       method: 'GET',
       path: /^\/v1\/runs\/([0-9a-f-]{36})\/log$/,
-      handler: async ({ params }) => ok({ ...(await runLog(eng.db, params[0]!)), anchor: null }),
+      handler: async ({ params }) => ok({ ...(await runLog(eng.db, params[0]!)), anchor: await anchorFor(eng.db, params[0]!) }),
     },
     {
       method: 'GET',
