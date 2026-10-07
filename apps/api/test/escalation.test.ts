@@ -306,7 +306,7 @@ describe('Attack Lab: escalation attacks', () => {
     const claimed = (await api.post('/v1/agent/runs/claim', {}, auth)).json;
     expect(claimed).toMatchObject({ run_id, kind: 'lab', attack: 'no_bond' });
     const work = (await api.get(`/v1/agent/runs/${run_id}/work`, auth)).json;
-    expect(work.queue).toHaveLength(1);
+    expect(work.queue).toEqual([{ kind: 'invoice', invoice_number: 'INV-L-0007' }, { kind: 'request', message_id: 'req-no_bond-1' }]);
     const res = await api.check(labBody('LAB-NB-1', run_id));
     expect(res.status).toBe(402);
     expect(await inbox()).toEqual([]);
@@ -322,7 +322,7 @@ describe('Attack Lab: escalation attacks', () => {
   it('escalation_spam: three priced and paid, the fourth denied by the engine before any human; inbox holds three', async () => {
     const { run_id } = (await api.post('/v1/lab/attacks', { attack: 'escalation_spam' })).json;
     await api.post('/v1/agent/runs/claim', {}, auth);
-    expect((await api.get(`/v1/agent/runs/${run_id}/work`, auth)).json.queue).toHaveLength(4);
+    expect((await api.get(`/v1/agent/runs/${run_id}/work`, auth)).json.queue.filter((w: { kind: string }) => w.kind === 'invoice')).toHaveLength(4);
     for (let i = 1; i <= 3; i++) {
       const res = await api.checkPaying(labBody(`LAB-ES-${i}`, run_id));
       expect(res.status).toBe(200);
