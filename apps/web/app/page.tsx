@@ -38,43 +38,43 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
 function HumanHome() {
   return (
     <>
-      <section aria-label="Thesis" className="mt-14">
+      <section aria-label="Thesis" className="mt-16">
         <h1 className="font-serif text-[3.1rem] leading-[0.98] tracking-[-0.02em] sm:text-7xl lg:text-[5.6rem]">
           Give your agents an allowance, <em className="text-muted">not your keys.</em>
         </h1>
-        <p className="mt-8 max-w-4xl text-xl leading-snug sm:text-2xl">
-          Every agent gets its own ID and wallet. A mandate sets the daily cap and spending limit. Above the limit it pays a bond to ask
-          you, and only your signature moves the money.
+        <p className="mt-8 max-w-3xl text-xl leading-snug sm:text-2xl">
+          Each agent gets its own wallet and a daily allowance. Above the limit it pays a bond to ask you, and only your signature moves
+          the money.
         </p>
-        <dl aria-label="Allowance, ask, sign" className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border-y border-line py-3 text-[15px]">
-          <Pillar name="Allowance">daily cap, per-action limit, approved counterparties</Pillar>
-          <Pillar name="Ask">HTTP 402 plus a bond, refunded when the ask is reasonable, captured when it is not</Pillar>
-          <Pillar name="Sign">the human&apos;s wallet signature is the only thing the vault accepts</Pillar>
-        </dl>
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,38rem)_1fr] lg:items-end">
-          <p className="text-[15px] text-muted">Claudia, the human authority layer for AI agents. Below, a recorded run on the authority floor.</p>
-          <div className="flex flex-wrap gap-3 lg:justify-end">
-            <Link href="/live?mode=replay" className="btn-strong text-lg">
-              Watch it act
-            </Link>
-            <Link href="/protocol" className="btn text-lg">
-              Read the protocol
-            </Link>
-            <a href={SOKOSUMI} className="btn text-lg" rel="noreferrer">
-              Try it on Sokosumi
-            </a>
-            <a href="/llms.txt" className="btn-quiet self-center text-[15px]">
-              For agents: /llms.txt
-            </a>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <Link href="/live?mode=replay" className="btn-strong">
+            Watch it act
+          </Link>
+          <Link href="/protocol" className="btn">
+            Read the protocol
+          </Link>
+        </div>
+        <p className="mt-4 text-[15px]">
+          <a href={SOKOSUMI} className="font-semibold underline underline-offset-4" rel="noreferrer">
+            Try it on Sokosumi
+          </a>
+          <span className="text-muted"> · 1 tUSDM per evaluation</span>
+        </p>
+        <div className="mt-12">
+          <Eyebrow>A recorded run on the authority floor</Eyebrow>
+          <div className="mt-4">
+            <HeroFloor />
           </div>
         </div>
-        <div className="mt-8">
-          <HeroFloor />
-        </div>
-        <p className="mt-3 font-mono text-[12px] text-muted">
-          Above: an agent escalates three frivolous invoices in a row. Each costs it a 5 ADA bond, captured on decline; the fourth is denied at
-          the gate because the day&apos;s interrupt budget is spent, and nobody is paged.
+        <p className="mt-4 max-w-3xl text-[15px] text-muted">
+          An agent escalates three frivolous invoices and loses a 5 ADA bond each time. The fourth is denied at the gate, and nobody is
+          paged.
         </p>
+        <dl aria-label="Allowance, ask, sign" className="mt-12 grid gap-6 border-t border-line pt-6 sm:grid-cols-3">
+          <Pillar name="Allowance">Daily cap, per-action limit, approved counterparties.</Pillar>
+          <Pillar name="Ask">HTTP 402 plus a bond: refunded when the ask is reasonable, captured when it is not.</Pillar>
+          <Pillar name="Sign">Only your wallet signature moves money out of the vault.</Pillar>
+        </dl>
       </section>
 
       <section aria-label="Facts come from Chainlink CRE" className="mt-16 grid gap-6 border-y border-line py-6 lg:grid-cols-[minmax(0,18rem)_1fr]">
@@ -278,9 +278,9 @@ function HumanHome() {
 
 function Pillar({ name, children }: { name: string; children: ReactNode }) {
   return (
-    <div className="flex items-baseline gap-2">
+    <div>
       <dt className="font-mono text-[12px] font-bold uppercase tracking-[0.12em]">{name}</dt>
-      <dd className="text-muted">{children}</dd>
+      <dd className="mt-1 text-[15px] leading-snug text-muted">{children}</dd>
     </div>
   );
 }

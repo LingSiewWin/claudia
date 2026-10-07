@@ -56,13 +56,8 @@ export function FloorStage({
   const decimals = view.started?.limits.decimals ?? 6;
   const vault = treasury(view);
   return (
-    <div data-testid="floor" className="floor" data-selected={card?.actionId ?? undefined}>
-      <div className="grid gap-3 p-3 lg:block lg:p-0">
-        <div className="order-2 lg:order-none">
-          <Scene floor={floor} selected={card?.actionId ?? null} onSelect={setPicked} cards={view.cards} treasury={vault ? money(vault.balance, decimals, true) : null} />
-        </div>
-
-        <dl data-testid="metrics" data-source={source} className="order-1 grid grid-cols-2 gap-2 lg:absolute lg:top-4 lg:left-4 lg:w-[38rem] lg:grid-cols-4">
+    <div data-testid="floor" data-selected={card?.actionId ?? undefined}>
+      <dl data-testid="metrics" data-source={source} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Tile label="Interruptions / 100 actions" id="metric-interruptions" value={metrics ? (metrics.actions_evaluated < 5 ? `${metrics.escalate} of ${metrics.actions_evaluated}` : String(metrics.interruptions_per_100_actions)) : '—'} />
           <Tile label="Actions evaluated" id="metric-evaluated" value={metrics ? String(metrics.actions_evaluated) : '—'}>
             {metrics ? (
@@ -76,35 +71,42 @@ export function FloorStage({
             {metrics ? `${metrics.bonds.locked} locked · ${metrics.bonds.required} required · ${metrics.bonds.refunded} refunded · ${metrics.bonds.captured} captured` : null}
           </Tile>
           <Tile label="Denied, nobody paged" id="metric-budget" value={metrics ? String(metrics.budget_exhausted) : '—'} />
-          <p className="col-span-2 px-1 text-[11px] text-muted lg:col-span-4">
-            {metrics?.median_decision_ms != null ? `Median human decision ${Math.round(metrics.median_decision_ms / 1000)}s. ` : ''}
-            {source === 'api' ? 'Across every run of this mandate, from the evidence log.' : source === 'replay' ? 'This recorded run, counted from its events in your browser.' : 'Metrics unavailable.'}
-          </p>
-        </dl>
+        <p className="col-span-2 text-[12px] text-muted sm:col-span-4">
+          {metrics?.median_decision_ms != null ? `Median human decision ${Math.round(metrics.median_decision_ms / 1000)}s. ` : ''}
+          {source === 'api' ? 'Across every run of this mandate, from the evidence log.' : source === 'replay' ? 'This recorded run, counted from its events in your browser.' : 'Metrics unavailable.'}
+        </p>
+      </dl>
 
-        {detail ? (
-          <aside aria-label="Decision brief" className="floor-glass order-3 p-4 lg:absolute lg:top-4 lg:right-4 lg:w-[20rem]">
-            {card ? <Detail card={card} now={now} decimals={decimals} mode={mode} /> : <p className="text-sm text-muted">Waiting for the first proposal.</p>}
-          </aside>
-        ) : children ? (
-          <div className="order-3 lg:absolute lg:top-4 lg:right-4">{children}</div>
-        ) : null}
+      <div className="floor mt-4">
+        <div className="grid gap-3 p-3 lg:block lg:p-0">
+          <div className="order-2 lg:order-none">
+            <Scene floor={floor} selected={card?.actionId ?? null} onSelect={setPicked} cards={view.cards} treasury={vault ? money(vault.balance, decimals, true) : null} />
+          </div>
 
-        <ol data-testid="floor-steps" aria-label="Steps" className="floor-glass order-4 grid grid-cols-4 gap-y-3 px-3 py-3 sm:grid-cols-7 lg:absolute lg:bottom-4 lg:left-4 lg:w-[46rem]">
-          {floor.steps.map((s) => (
-            <li key={s.step} data-step={s.step} data-status={s.status} className="min-w-0 overflow-hidden px-1">
-              <div className="flex items-center gap-2">
-                <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${STEP_DOT[s.status]}`} />
-                <span className={`text-[12px] font-extrabold uppercase tracking-wider ${s.status === 'pending' || s.status === 'skipped' ? 'text-muted' : ''}`}>{STEP_LABEL[s.step]}</span>
-              </div>
-              <p className="mt-0.5 truncate pl-[18px] font-mono text-[11px] tabular-nums text-muted">
-                {s.at ? clock(s.at).replace(' UTC', '') : s.status === 'skipped' ? (s.note ?? 'not reached') : '·'}
-                {s.at && s.note ? ` ${s.note}` : ''}
-              </p>
-            </li>
-          ))}
-          {floor.steps.length === 0 ? <li className="col-span-full text-[12px] text-muted">The step tracker follows the selected action.</li> : null}
-        </ol>
+          {detail ? (
+            <aside aria-label="Decision brief" className="floor-glass order-3 p-4 lg:absolute lg:top-4 lg:right-4 lg:w-[20rem]">
+              {card ? <Detail card={card} now={now} decimals={decimals} mode={mode} /> : <p className="text-sm text-muted">Waiting for the first proposal.</p>}
+            </aside>
+          ) : children ? (
+            <div className="order-3 lg:absolute lg:top-4 lg:right-4">{children}</div>
+          ) : null}
+
+          <ol data-testid="floor-steps" aria-label="Steps" className="floor-glass order-4 grid grid-cols-4 gap-y-3 px-3 py-3 sm:grid-cols-7 lg:absolute lg:bottom-4 lg:left-4 lg:w-[46rem]">
+            {floor.steps.map((s) => (
+              <li key={s.step} data-step={s.step} data-status={s.status} className="min-w-0 overflow-hidden px-1">
+                <div className="flex items-center gap-2">
+                  <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${STEP_DOT[s.status]}`} />
+                  <span className={`text-[12px] font-extrabold uppercase tracking-wider ${s.status === 'pending' || s.status === 'skipped' ? 'text-muted' : ''}`}>{STEP_LABEL[s.step]}</span>
+                </div>
+                <p className="mt-0.5 truncate pl-[18px] font-mono text-[11px] tabular-nums text-muted">
+                  {s.at ? clock(s.at).replace(' UTC', '') : s.status === 'skipped' ? (s.note ?? 'not reached') : '·'}
+                  {s.at && s.note ? ` ${s.note}` : ''}
+                </p>
+              </li>
+            ))}
+            {floor.steps.length === 0 ? <li className="col-span-full text-[12px] text-muted">The step tracker follows the selected action.</li> : null}
+          </ol>
+        </div>
       </div>
     </div>
   );
@@ -112,11 +114,11 @@ export function FloorStage({
 
 function Tile({ label, id, value, children }: { label: string; id: string; value: string; children?: React.ReactNode }) {
   return (
-    <div className="floor-glass px-3 py-2.5">
+    <div className="flex flex-col rounded-[8px] border border-line bg-raised p-4">
       <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</dt>
-      <dd data-testid={id} className={`mt-0.5 font-extrabold leading-none tabular-nums ${/^[\d.—]+$/.test(value) ? 'text-2xl' : 'pt-1 text-sm text-muted'}`}>
+      <dd data-testid={id} className="mt-2 text-2xl font-extrabold leading-none tabular-nums">
         {value}
-        {children ? <span className="mt-1 block text-[11px] font-semibold leading-snug text-muted">{children}</span> : null}
+        {children ? <span className="mt-2 block text-[12px] font-semibold leading-snug text-muted">{children}</span> : null}
       </dd>
     </div>
   );
@@ -199,7 +201,7 @@ function Detail({ card, now, decimals, mode }: { card: CardView; now: number; de
         </p>
       ) : null}
       {card.receipt ? (
-        <Link href={`/receipt/${encodeURIComponent(card.receipt.id)}`} className="btn-strong mt-3 text-sm">
+        <Link href={`/receipt/${encodeURIComponent(card.receipt.id)}`} className="btn-strong mt-3">
           Receipt {card.receipt.id}
         </Link>
       ) : null}
