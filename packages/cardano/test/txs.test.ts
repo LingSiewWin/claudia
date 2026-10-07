@@ -1,4 +1,4 @@
-import { type UTxO, pubKeyAddress, scriptAddress, serializeAddressObj } from '@meshsdk/core';
+import { type UTxO, core, pubKeyAddress, scriptAddress, serializeAddressObj } from '@meshsdk/core';
 import { describe, expect, it } from 'vitest';
 import { type TxPlan, buildTx } from '../src/build';
 import { type Evaluation, evaluateTx, slotAt } from '../src/chain';
@@ -90,6 +90,32 @@ describe('honest transactions pass the real validators', () => {
     expect(vault.script.hash).toBe(w.deployment.vault.hash);
     expect((await honest(w, vault.plan)).ok).toBe(true);
     expect(await buildTx(w.env, planRefScript(vault.script, w.executor))).toMatch(/^84/);
+  });
+
+  it('anchor mint spends the seed and does not use it as collateral', async () => {
+    const w = world();
+    const [seed] = w.principal.utxos;
+    const spare = w.principal.utxos.find((u) => u.output.amount.length === 1 && u.output.amount[0]?.quantity === String(40_000_000));
+    if (!seed || !spare) throw new Error('test world is missing the seed or the spare ADA UTxO');
+    const datum = anchorDatumFor(w.deployment.mandate, PREPROD_USDM);
+    // A copy of the 20 ADA seed: exclusion must match the outpoint, not this object.
+    const seedCopy: UTxO = {
+      input: { txHash: seed.input.txHash, outputIndex: seed.input.outputIndex },
+      output: { ...seed.output, amount: seed.output.amount.map((a) => ({ ...a })) },
+    };
+    const body = core.deserializeTx(await buildTx(w.env, planAnchorMint(seedCopy, datum, w.principal).plan)).body();
+    const point = (txHash: string, index: number) => `${txHash}#${index}`;
+    const listed = (inputs: { values(): readonly { toCore(): { txId: string; index: number } }[] }) =>
+      inputs.values().map((i) => {
+        const c = i.toCore();
+        return point(c.txId, c.index);
+      });
+    const seedPoint = point(seed.input.txHash, seed.input.outputIndex);
+    const collateral = body.collateral();
+    if (!collateral) throw new Error('anchor mint tx has no collateral');
+    expect(listed(body.inputs())).toContain(seedPoint);
+    expect(listed(collateral)).not.toContain(seedPoint);
+    expect(listed(collateral)).toEqual([point(spare.input.txHash, spare.input.outputIndex)]);
   });
 });
 

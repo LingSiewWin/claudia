@@ -52,11 +52,14 @@ const COLLATERAL_MIN = 5_000_000n;
 
 const lovelace = (u: UTxO) => BigInt(u.output.amount.find((a) => a.unit === 'lovelace')?.quantity ?? '0');
 const spendable = (u: UTxO) => !u.output.scriptRef;
+/** Tx hash plus output index. Callers may pass a copy of a wallet UTxO, so identity is not enough. */
+const outpoint = (u: UTxO) => `${u.input.txHash}#${u.input.outputIndex}`;
 
-/** The smallest ADA-only UTxO of at least 5 ADA. buildTx never spends it, so it stays usable as collateral. */
-export function pickCollateral(w: Wallet): UTxO {
+/** The smallest ADA-only UTxO of at least 5 ADA that is not already a key input. buildTx never spends it, so it stays usable as collateral. */
+export function pickCollateral(w: Wallet, keyInputs: UTxO[] = []): UTxO {
+  const taken = new Set(keyInputs.map(outpoint));
   const pure = w.utxos
-    .filter((u) => spendable(u) && u.output.amount.length === 1 && lovelace(u) >= COLLATERAL_MIN)
+    .filter((u) => spendable(u) && !taken.has(outpoint(u)) && u.output.amount.length === 1 && lovelace(u) >= COLLATERAL_MIN)
     .sort((a, b) => (lovelace(a) < lovelace(b) ? -1 : lovelace(a) > lovelace(b) ? 1 : 0));
   if (!pure[0]) throw new Error(`wallet ${w.address} has no ADA-only UTxO of at least 5 ADA for collateral`);
   return pure[0];
@@ -104,9 +107,11 @@ export async function buildTx(env: TxEnv, plan: TxPlan, fixedBudget: { mem: numb
   if (plan.metadata) tx.metadataValue(METADATA_LABEL, plan.metadata);
   let collateral: UTxO | null = null;
   if (plan.scriptInputs.length > 0 || plan.mints.length > 0) {
-    collateral = pickCollateral(plan.wallet);
+    collateral = pickCollateral(plan.wallet, plan.keyInputs);
     tx.txInCollateral(collateral.input.txHash, collateral.input.outputIndex, collateral.output.amount, collateral.output.address);
   }
-  tx.changeAddress(plan.wallet.address).selectUtxosFrom(plan.wallet.utxos.filter((u) => spendable(u) && u !== collateral));
+  const held = new Set(plan.keyInputs.map(outpoint));
+  if (collateral) held.add(outpoint(collateral));
+  tx.changeAddress(plan.wallet.address).selectUtxosFrom(plan.wallet.utxos.filter((u) => spendable(u) && !held.has(outpoint(u))));
   return tx.complete();
 }
