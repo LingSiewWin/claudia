@@ -406,8 +406,12 @@ describe('payment request and lease', () => {
     }));
     await pollTasks(t.deps);
     t.mps.lock();
-    // retryAfterMs clamps to Date.now(); pin the signed deadline far ahead of wall time so a 120s wait is not 0.
-    t.mps.only().submitResultTime = String(Date.parse('2099-01-01T00:00:00.000Z'));
+    // retryAfterMs clamps to wall Date.now(); pin the journaled deadline (deadlineMs) far ahead so a 120s wait is not 0.
+    const rec = t.rec();
+    t.deps.tasks.write(TASK, {
+      ...rec,
+      payment: { ...rec.payment!, submitResultTime: String(Date.parse('2099-01-01T00:00:00.000Z')) },
+    });
     let now = NOW;
     const deps = { ...t.deps, now: () => now };
     await pollTasks(deps);
