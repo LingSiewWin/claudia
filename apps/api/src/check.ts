@@ -17,13 +17,14 @@ import {
   IssuanceRefused,
   REPORT_MAX_AGE_MS,
   type State,
-  type VerificationReport,
+  type AnyVerificationReport,
   type VerifiedReport,
 } from '@authority/core';
 import type { Db, StoredEvent } from '@authority/db';
 import * as z from 'zod';
 import { issueOnce } from './authorize';
 import { BOND_ASSET, bondOf, briefFor, type PaymentProof, paymentResponse, priceFor, reply402, withBudget } from './escalation';
+import type { VerifyFx } from './fx';
 import { HttpError, parseJson, type Reply } from './http';
 import { idempotent } from './idempotency';
 import type { EventLog } from './log';
@@ -41,6 +42,8 @@ export interface Engine {
   now: () => number;
   cardano: CardanoPort;
   verify: Verify;
+  /** fx_lock: the proposed quote read back from Crebit. Fails closed without keys. */
+  verifyFx: VerifyFx;
   readInvoice: ReadInvoice;
   /** mandate id -> engine Ed25519 secret key */
   engineKeys: Map<string, Uint8Array>;
@@ -66,7 +69,8 @@ const FACT_REASONS = new Set([
   'RECIPIENT_MISMATCH',
   'VERIFICATION_UNAVAILABLE',
 ]);
-export const layerOf = (reason: string) => (FACT_REASONS.has(reason) ? 'cre' : 'engine');
+const FX_FACT_REASONS = new Set(['QUOTE_NOT_FOUND', 'RATE_MISMATCH', 'PREMIUM_MISMATCH', 'EXPIRY_MISMATCH', 'QUOTE_OFF_MARKET']);
+export const layerOf = (reason: string): Layer => (FACT_REASONS.has(reason) ? 'cre' : FX_FACT_REASONS.has(reason) ? 'crebit' : 'engine');
 
 export const CheckBodySchema = z
   .strictObject({
@@ -79,11 +83,11 @@ export const CheckBodySchema = z
   .refine((b) => (b.proposal === undefined) !== (b.request_text === undefined), 'send exactly one of proposal or request_text');
 export type CheckBody = z.infer<typeof CheckBodySchema>;
 
-export type Layer = 'agent' | 'engine' | 'cre' | 'vault' | 'principal';
+export type Layer = 'agent' | 'engine' | 'cre' | 'crebit' | 'vault' | 'principal';
 
 export interface Decided {
   evaluation: Evaluation & { outcome: DecisionOutcome };
-  verification: { report: VerificationReport; report_hash: string; sepolia_tx: string } | null;
+  verification: { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null } | null;
   /** The report exactly as verifyInvoice returned it from Sepolia, fresh for this decision (never cached). */
   verified: VerifiedReport | null;
   /** For a DENY: the layer that stopped it. */
@@ -133,6 +137,7 @@ export async function decide(
   const first = await evaluateNow(null);
   if (first.outcome !== 'NEEDS_VERIFICATION') return final(first, null);
   const action = input.action;
+  if (action?.type === 'fx_lock') return decideFx(eng, { row, proposal, state, action, emit, first, evaluateNow, final });
   if (!action?.reference) {
     await emit('ActionDenied', { reason: 'VERIFICATION_UNAVAILABLE', layer: 'cre' });
     throw new HttpError(422, 'the action has no invoice reference, so its invoice facts cannot be verified');
@@ -179,6 +184,51 @@ export async function decide(
   throw new HttpError(503, `verification unavailable: ${why}`, { 'retry-after': '30' });
 }
 
+/**
+ * fx_lock: the quote is read back from Crebit and the report evaluated at once. The report CRE produced when this
+ * action was priced (402) is reused on the paid retry, as for invoices.
+ */
+async function decideFx(
+  eng: Engine,
+  i: {
+    row: MandateRow;
+    proposal: Proposal;
+    state: State;
+    action: ActionIR;
+    emit: Emit;
+    first: Evaluation;
+    evaluateNow: (v: VerifiedReport | null) => Promise<Evaluation>;
+    final: (e: Evaluation, v: Decided['verification'], deniedBy?: Layer | null) => Decided;
+  },
+): Promise<Decided> {
+  const { row, action, emit } = i;
+  const fx = row.mandate.fx;
+  if (!fx) {
+    await emit('ActionDenied', { reason: 'FX_NOT_AUTHORIZED', layer: 'engine' });
+    throw new HttpError(422, 'this mandate has no fx block, so no rate lock can be verified under it');
+  }
+  const actionHash = canonicalHash(action);
+  const priced = await pricedVerification(eng, row.mandate.id, actionHash);
+  if (priced !== null) {
+    await emit('QuoteVerificationCompleted', priced.verification);
+    const again = await i.evaluateNow(priced.verified);
+    if (again.outcome !== 'NEEDS_VERIFICATION') return i.final(again, priced.verification);
+  }
+  const triggerId = randomUUID();
+  await emit('QuoteVerificationStarted', { trigger_id: triggerId, quote_id: action.fx?.quote_id ?? null, source: 'crebit' });
+  const out = await eng.verifyFx(action, triggerId, { maxBasisBps: fx.max_basis_bps, decimals: row.mandate.asset.decimals });
+  if (out.status === 'reported') {
+    const verification = { report: out.verified.report, report_hash: out.verified.report_hash, sepolia_tx: null };
+    await emit('QuoteVerificationCompleted', verification);
+    const second = await i.evaluateNow(out.verified);
+    if (second.outcome !== 'NEEDS_VERIFICATION') return i.final(second, verification);
+  }
+  await emit('ActionDenied', { reason: 'VERIFICATION_UNAVAILABLE', layer: 'crebit' });
+  const why = out.status === 'unavailable' ? out.error : 'the quote report is not usable';
+  console.error(`quote verification unavailable, trigger ${triggerId}: ${why}`);
+  throw new HttpError(503, `verification unavailable: ${why}`, { 'retry-after': '30' });
+}
+
 /** The verification report bound by a live authorization for this action, read back from this log, or null. */
 async function boundVerification(
   eng: Engine,
@@ -198,7 +248,7 @@ async function boundVerification(
     [mandateId, invoiceId, actionHash, eng.now()],
   );
   if (!row) return pricedVerification(eng, mandateId, actionHash);
-  const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  const verification = JSON.parse(row.payload) as { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null };
   return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
 }
 
@@ -211,13 +261,13 @@ async function pricedVerification(eng: Engine, mandateId: string, actionHash: st
   const [row] = await eng.db.query<{ payload: string; created_ms: string }>(
     `select e.payload, (extract(epoch from e.created_at) * 1000)::bigint::text as created_ms
        from approvals ap
-       join events e on e.run_id = ap.run_id and e.action_id = ap.action_id and e.type = 'CREVerificationCompleted'
+       join events e on e.run_id = ap.run_id and e.action_id = ap.action_id and e.type in ('CREVerificationCompleted', 'QuoteVerificationCompleted')
       where ap.mandate_id = $1 and ap.action_hash = $2 and ap.status = 'awaiting_bond'
       order by e.seq desc limit 1`,
     [mandateId, actionHash],
   );
   if (!row) return null;
-  const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  const verification = JSON.parse(row.payload) as { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null };
   if (verification.report.action_hash !== actionHash) return null;
   return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
 }
@@ -245,6 +295,7 @@ export function decisionContext(
       report_hash: d.verification.report_hash,
       sepolia_tx: d.verification.sepolia_tx,
       result: d.verification.report.result,
+      ...(d.verification.report.schema === 'fx-verification/v0.1' ? { quote_id: d.verification.report.quote_id, quote_hash: d.verification.report.quote_hash } : {}),
     },
     approval,
     first_event_hash: firstEventHash,
@@ -355,6 +406,10 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: P
       }
       if (e.outcome === 'DENY') {
         await denied(e, d.deniedBy);
+      } else if (e.outcome === 'ALLOW' && action.type === 'fx_lock') {
+        // No vault authorization: the premium leaves on Crebit's chain by the human's own signature (the funding
+        // instruction follows POST /fx/contracts). The decision receipt below is the engine's record of the ALLOW.
+        await emit('FxLockAllowed', { quote_id: action.fx?.quote_id ?? null, amount: action.amount.value, asset: action.amount.asset });
       } else if (e.outcome === 'ALLOW') {
         try {
           const out = await issueOnce(eng, {

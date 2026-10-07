@@ -1,7 +1,7 @@
 import type { Evaluation } from './engine';
 import { canonicalHash } from './hash';
 import { enforcementLimits } from './mandate';
-import type { ActionIR, Mandate, ReasonCode, VerificationReport } from './schemas';
+import type { ActionFx, ActionIR, AnyVerificationReport, Mandate, ReasonCode } from './schemas';
 
 /*
  * Decision Brief (brief/v0.1): what a human reads before authorizing. Built from the Action IR, the engine's
@@ -13,7 +13,7 @@ export interface BriefInput {
   action: ActionIR;
   evaluation: Evaluation;
   mandate: Mandate;
-  verification: { report: VerificationReport; report_hash: string; sepolia_tx: string | null } | null;
+  verification: { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null } | null;
   bond: { amount: string; asset: string } | null;
   expires_at_ms: number;
 }
@@ -30,6 +30,8 @@ export interface DecisionBrief {
     counterparty: { id: string; display: string };
     recipient: string;
     reference: { invoice_id: string; invoice_number: string } | null;
+    /** fx_lock only: the quote the human is asked to lock, with money as display decimals. */
+    fx?: ActionFx & { notional_display: string; premium_display: string; deposit_display: string };
   };
   why: string;
   engine: {
@@ -41,8 +43,8 @@ export interface DecisionBrief {
   verified: {
     report_hash: string;
     sepolia_tx: string | null;
-    result: VerificationReport['result'];
-    facts: VerificationReport['facts'];
+    result: AnyVerificationReport['result'];
+    facts: AnyVerificationReport['facts'];
   } | null;
   limits: { autonomous_limit: string; hard_cap: string; daily_cap: string; treasury_minimum: string };
   will_happen: string;
@@ -79,6 +81,19 @@ export function buildBrief(input: BriefInput): DecisionBrief {
     ? ` for invoice ${action.reference.invoice_number} (${action.reference.invoice_id})`
     : '';
   const v = input.verification;
+  const fx = action.fx;
+  const fxView = fx === undefined ? null : {
+    ...fx,
+    notional_display: `${formatUnits(fx.notional, mandate.asset.decimals)} ${action.amount.asset}`,
+    premium_display: `${formatUnits(fx.premium, mandate.asset.decimals)} ${action.amount.asset}`,
+    deposit_display: `${formatUnits(fx.deposit, mandate.asset.decimals)} ${action.amount.asset}`,
+  };
+  const willHappen = fx === undefined
+    ? `Release ${display} from vault ${action.source.vault} to ${action.recipient.address}` +
+      ` for ${action.counterparty.display}${reference}. Nothing else is authorized by this signature.`
+    : `Transfer ${display} to the Crebit funding wallet assigned at lock to lock ${fx.corridor} (${fx.direction}) at ${fx.locked_rate}` +
+      ` for ${fx.tenor_hours} hours (${fx.contract_type}, quote ${fx.quote_id}, expires ${fx.quote_expires_at});` +
+      ` Crebit pays the FX delta to ${action.recipient.address} at exercise. Nothing else is authorized.`;
   return {
     schema: 'brief/v0.1',
     action_id: action.id,
@@ -91,6 +106,7 @@ export function buildBrief(input: BriefInput): DecisionBrief {
       counterparty: { id: action.counterparty.id, display: action.counterparty.display },
       recipient: action.recipient.address,
       reference: action.reference ?? null,
+      ...(fxView === null ? {} : { fx: fxView }),
     },
     why: action.rationale,
     engine: {
@@ -104,9 +120,7 @@ export function buildBrief(input: BriefInput): DecisionBrief {
         : { approver, because: e.approvals_required.map((a) => ({ constraint: a.constraint, reason: a.reason })) },
     verified: v === null ? null : { report_hash: v.report_hash, sepolia_tx: v.sepolia_tx, result: v.report.result, facts: v.report.facts },
     limits: { autonomous_limit: str(l.autonomous), hard_cap: str(l.hardCap), daily_cap: str(l.dailyCap), treasury_minimum: str(l.treasuryMinimum) },
-    will_happen:
-      `Release ${display} from vault ${action.source.vault} to ${action.recipient.address}` +
-      ` for ${action.counterparty.display}${reference}. Nothing else is authorized by this signature.`,
+    will_happen: willHappen,
     expires_at_ms: input.expires_at_ms,
     cost: { bond: input.bond, interrupt_budget: { used, per_day: mandate.interrupt_budget.per_day } },
   };

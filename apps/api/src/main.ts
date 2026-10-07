@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { createCardanoPort, createLabRunner } from '@authority/cardano';
+import { crebitFromEnv } from '@authority/crebit';
 import { simulateBroadcast, verificationRequestFor, verifyInvoice } from '@authority/chainlink';
 import { migrate, pgDb } from '@authority/db';
 import { createInterpreter, guardModel, modelConfigured, modelFromEnv, secretsFromEnv } from '@authority/llm';
@@ -15,6 +16,7 @@ import { createApp } from './app';
 import type { Engine } from './check';
 import { loadConfig } from './config';
 import { createExecutor } from './executor';
+import { fxVerifier } from './fx';
 import { labKeys } from './lab';
 import { createLog } from './log';
 import { checkEngineKeys, currentMandate, type MandateRow, seedDeployment } from './mandates';
@@ -40,6 +42,11 @@ const verify: Verify = async (action, triggerId) => {
   return verifyInvoice(request, { trigger, client: sepoliaClient, registry: cfg.registry, newTriggerId: () => triggerId });
 };
 
+// Optional: without CREBIT_* keys every fx_lock fails closed with VERIFICATION_UNAVAILABLE.
+const crebit = crebitFromEnv(process.env);
+if (crebit === null) console.warn('crebit: keys not configured; fx_lock verification unavailable');
+const verifyFx = fxVerifier(crebit === null ? null : (id) => crebit.getQuote(id), now);
+
 const reader = readOnlyStripe(cfg.stripeReadKey);
 const readInvoice: ReadInvoice = (invoiceId) => getInvoice(reader, invoiceId);
 if (!cfg.stripeSettlementKey.startsWith('rk_test_')) throw new Error('STRIPE_SETTLEMENT_KEY must be a test-mode restricted key (Invoices: Write)');
@@ -55,6 +62,7 @@ const eng: Engine = {
   now,
   cardano,
   verify,
+  verifyFx,
   readInvoice,
   engineKeys: cfg.engineKeys,
   enqueue: (id) => executor.enqueue(id),

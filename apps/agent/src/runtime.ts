@@ -2,6 +2,7 @@ import { bytesToHex, canonicalHash, type Mandate, publicKeyFromSecret, signPropo
 import { type AgentModel, buildAction, converse, type GuardedModel, sourceVaultFor, unitsToDecimal } from '@authority/llm';
 import { type AuthorityClient, type AuthorityPricing, type Claim, type MandateView, type RunWork, withRetry, type WorkItem } from './authority';
 import { type BondContext, type BondPayer, budgetExhausted, checkWithBond, costLine, type EscalationState, newEscalationState, newSummary, type RunSummary } from './bond';
+import type { FxQuoteSource } from './fx';
 import { agentTools, type InvoiceSource, type ProposalRecord } from './tools';
 
 export interface RuntimeDeps {
@@ -20,6 +21,8 @@ export interface RuntimeDeps {
   maxBondLovelace?: bigint;
   /** Shared across runs in one process: bonds paid and mandates out of interrupt budget today. Absent, per run. */
   escalation?: EscalationState;
+  /** Crebit quotes for fx payables. Absent, the fx tools answer that keys are not configured. */
+  fx?: FxQuoteSource | null;
   log: (line: Record<string, unknown>) => void;
 }
 
@@ -50,10 +53,16 @@ export function systemPrompt(principal: string, delegate: string): string {
   ].join(' ');
 }
 
-const itemPrompt = (item: WorkItem, index: number, total: number, cost: string) =>
-  (item.kind === 'invoice'
-    ? `Today's queue, item ${index + 1} of ${total}: invoice ${item.invoice_number}.`
-    : `Today's queue, item ${index + 1} of ${total}: internal request ${item.message_id} in the AP inbox.`) + ` ${cost}`;
+const itemPrompt = (item: WorkItem, index: number, total: number, cost: string) => {
+  const head = `Today's queue, item ${index + 1} of ${total}:`;
+  const what =
+    item.kind === 'invoice'
+      ? `invoice ${item.invoice_number}.`
+      : item.kind === 'request'
+        ? `internal request ${item.message_id} in the AP inbox.`
+        : `fx payable of ${item.notional} ${item.corridor} due ${item.due_at}. Price a rate lock with get_fx_quote (option, tenor to the due date), then propose it with propose_fx_lock, or explain why not.`;
+  return `${head} ${what} ${cost}`;
+};
 
 /** The approver's current price and budget; null when the API does not publish them (the planner then sees no numbers). */
 async function pricingFor(deps: RuntimeDeps, mandate: Mandate): Promise<AuthorityPricing | null> {
@@ -143,6 +152,7 @@ export async function runClaimed(deps: RuntimeDeps, claim: Claim): Promise<RunRe
         bonds,
         cost: { line: cost, pricing },
         out,
+        fx: deps.fx ?? null,
       });
       const conv = await converse({
         model: deps.model,

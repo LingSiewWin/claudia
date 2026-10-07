@@ -1,0 +1,17 @@
+{
+  "route": "GET /fx/contracts/{contract_id}/status",
+  "status": 200,
+  "body": {
+    "fx_contract_id": "33333333-3333-4333-8333-333333333333",
+    "crebit_contract_reference": "CREBIT-20260524-7F3A9C2B1D",
+    "status": "active",
+    "partner_transaction_reference": "platform-tx-9901",
+    "activated_at": "2026-05-24T16:35:08Z",
+    "exercised_at": null,
+    "settled_at": null,
+    "expired_at": null,
+    "failed_at": null,
+    "failure_reason": null,
+    "updated_at": "2026-05-24T16:35:08Z"
+  }
+}

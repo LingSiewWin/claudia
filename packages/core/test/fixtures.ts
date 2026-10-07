@@ -4,7 +4,7 @@ import { canonicalHash } from '../src/hash';
 import type { ChainBinding } from '../src/issue';
 import { parseMandate } from '../src/mandate';
 import { signProposal } from '../src/proposal';
-import type { ActionIR, ActionType, Mandate, State, VerificationReport, VerifiedReport } from '../src/schemas';
+import type { ActionIR, ActionType, Mandate, State, VerificationReport, VerifiedInvoiceReport, VerifiedReport } from '../src/schemas';
 import { buildAddress } from './helpers/address-builder';
 
 export const ENGINE_SK = new Uint8Array(32).fill(1);
@@ -144,7 +144,7 @@ export function verified(
   result: 'VERIFIED' | 'MISMATCH' = 'VERIFIED',
   reason?: FactReason,
   blockTimeMs: number = NOW - 30_000,
-): VerifiedReport {
+): VerifiedInvoiceReport {
   const report = verificationReport(a, result, reason);
   return { report, report_hash: canonicalHash(report), block_time_ms: blockTimeMs };
 }

@@ -1,9 +1,11 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import { crebitFromEnv } from '@authority/crebit';
 import { guardModel, modelFromEnv, secretsFromEnv } from '@authority/llm';
 import { listOpenInvoices, readOnlyStripe } from '@authority/stripe';
 import { httpAuthority } from './authority';
 import { cardanoBondPayer, newEscalationState } from './bond';
 import { loadConfig } from './config';
+import { crebitQuoteSource } from './fx';
 import { runClaimed } from './runtime';
 
 // The agent process: claims pending runs from the Authority API and works them with the configured model.
@@ -12,6 +14,8 @@ const config = loadConfig(process.env);
 const model = guardModel(modelFromEnv(process.env), secretsFromEnv(process.env));
 const stripe = readOnlyStripe(config.stripeReadKey);
 const log = (line: Record<string, unknown>) => console.log(JSON.stringify({ at: new Date().toISOString(), ...line }));
+const crebit = crebitFromEnv(process.env);
+if (crebit === null) log({ event: 'crebit_not_configured' });
 const deps = {
   authority: httpAuthority({ url: config.apiUrl, key: config.apiKey }),
   model,
@@ -25,6 +29,7 @@ const deps = {
   payer: cardanoBondPayer(process.env),
   maxBondLovelace: config.maxBondLovelace,
   escalation: newEscalationState(),
+  fx: crebit === null ? null : crebitQuoteSource(crebit, Date.now),
   log,
 };
 const once = process.argv.includes('--once');

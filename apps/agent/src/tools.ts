@@ -1,4 +1,4 @@
-import { canonicalHash, type Mandate, signProposal } from '@authority/core';
+import { type ActionIR, canonicalHash, type Mandate, signProposal } from '@authority/core';
 import {
   buildAction,
   type InvoiceFacts,
@@ -13,7 +13,9 @@ import {
   unitsToDecimal,
 } from '@authority/llm';
 import { AuthorityError, type AuthorityClient, type AuthorityPricing, type Claim, type RunWork, withRetry, type WorkItem } from './authority';
+import { QuoteActionError } from '@authority/crebit';
 import { type BondContext, BondRefused, checkWithBond } from './bond';
+import { CREBIT_NOT_CONFIGURED, type FxQuoteSource, FxQuoteArgsSchema, fxLockAction, ProposeFxLockArgsSchema, quoteView } from './fx';
 
 // The agent's whole tool surface. Four tools only read; propose_action is the only one with an effect, and that
 // effect is a signed request to the Authority Engine. No tool can write to Stripe, the database, or any chain.
@@ -58,10 +60,13 @@ export interface ItemContext {
   cost: { line: string; pricing: AuthorityPricing | null };
   /** Set once propose_action has been accepted for this item. */
   out: { proposal: ProposalRecord | null };
+  /** Crebit quotes; null when CREBIT_* keys are not configured (the fx tools then return a clear error). */
+  fx?: FxQuoteSource | null;
 }
 
 export const READ_TOOLS = ['list_open_invoices', 'read_mandate', 'read_decision_history', 'read_vendor_messages'] as const;
 export const PROPOSE_TOOL = 'propose_action';
+export const FX_TOOLS = ['get_fx_quote', 'propose_fx_lock'] as const;
 
 const noArgs = (name: string, input: unknown) => {
   if (!NoArgsSchema.safeParse(input ?? {}).success) throw new ToolError(`${name} takes no arguments`);
@@ -142,6 +147,46 @@ export function agentTools(ctx: ItemContext): ToolHandler[] {
       effect: 'proposal',
       handle: (input) => propose(ctx, input),
     },
+    {
+      def: {
+        name: 'get_fx_quote',
+        description: 'Price a Crebit FX rate lock for an fx payable: returns a quote (locked rate, premium, expiry, 15 minute TTL). Pricing is free and commits nothing. Read-only.',
+        input_schema: toolSchema(FxQuoteArgsSchema),
+      },
+      effect: 'read',
+      async handle(input) {
+        const parsed = FxQuoteArgsSchema.safeParse(input);
+        if (!parsed.success) throw new ToolError(`invalid input: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+        if (!ctx.fx) throw new ToolError(CREBIT_NOT_CONFIGURED);
+        const q = await ctx.fx.quote(parsed.data, { reference: ctx.mandate.principal.id, name: ctx.mandate.principal.name });
+        ctx.log({ event: 'fx_quote', run_id: ctx.claim.run_id, action_id: ctx.actionId, quote_id: q.id, locked_rate: q.locked_rate, premium_amount: q.premium_amount, expires_at: q.expires_at });
+        return JSON.stringify(quoteView(q));
+      },
+    },
+    {
+      def: {
+        name: 'propose_fx_lock',
+        description: 'Propose locking one Crebit quote (by quote_id) to the Authority Engine. The lock terms are taken from the quote itself. Checked against the mandate fx limits and the quote read back from Crebit; the CFO decides where approval is needed. At most one proposal per work item.',
+        input_schema: toolSchema(ProposeFxLockArgsSchema),
+      },
+      effect: 'proposal',
+      async handle(input) {
+        if (ctx.out.proposal) throw new ToolError(`this work item already has a proposal (${ctx.out.proposal.action_id}); reply with your summary`);
+        const parsed = ProposeFxLockArgsSchema.safeParse(input);
+        if (!parsed.success) throw new ToolError(`invalid input: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+        if (!ctx.fx) throw new ToolError(CREBIT_NOT_CONFIGURED);
+        const q = await ctx.fx.get(parsed.data.quote_id);
+        if (q === null) throw new ToolError(`Crebit has no quote ${parsed.data.quote_id}; get a quote first`);
+        let action;
+        try {
+          action = fxLockAction(q, { id: ctx.actionId, mandate: ctx.mandate, sourceVault: sourceVaultFor(ctx.mandate.id), nowIso: new Date(ctx.now()).toISOString(), rationale: parsed.data.rationale });
+        } catch (error) {
+          if (error instanceof QuoteActionError) throw new ToolError(error.message);
+          throw error;
+        }
+        return submit(ctx, action);
+      },
+    },
   ];
 }
 
@@ -157,6 +202,11 @@ async function propose(ctx: ItemContext, input: unknown): Promise<string> {
   if (ctx.item.kind === 'invoice' && action.reference?.invoice_number !== ctx.item.invoice_number) {
     throw new ToolError(`this work item is invoice ${ctx.item.invoice_number}; a proposal for it must reference that invoice`);
   }
+  return submit(ctx, action);
+}
+
+/** Signs the action as the agent's proposal, submits it (paying a 402 where allowed) and follows it to a resolution. */
+async function submit(ctx: ItemContext, action: ActionIR): Promise<string> {
   const actionHash = canonicalHash(action);
   const proposal = { action, agent_signature: signProposal(actionHash, ctx.agentSecretKey) };
   let reply;
