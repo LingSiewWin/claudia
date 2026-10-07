@@ -76,7 +76,7 @@ test('REPLAY: escalation spam ends with a denial that paged nobody', async ({ pa
   await expect(fourth.getByTestId('denied')).toContainText("The agent has used today's interrupt budget.");
   await expect(fourth.getByTestId('nobody-paged')).toHaveText('Nobody was paged.');
   await expect(fourth.getByTestId('bond-chip')).toHaveCount(0);
-  await expect(page.getByTestId('metric-interruptions')).toHaveText('75');
+  await expect(page.getByTestId('metric-interruptions')).toHaveText('n too small');
   await expect(page.getByTestId('metric-budget')).toHaveText('1');
   await expect(page.getByTestId('metric-bonds')).toContainText('3 locked · 3 required · 0 refunded · 3 captured');
   await page.screenshot({ path: 'test-results/replay-spam.png', fullPage: true });
@@ -93,7 +93,7 @@ test('REPLAY: no bond stops at the 402 and the human is never reached', async ({
   await expect(card.getByTestId('bond-chip')).toHaveAttribute('data-status', 'required');
   await expect(card.getByTestId('bond-chip')).toContainText('Bond required');
   await expect(card.getByTestId('bond-chip')).toContainText('5.00 ADA');
-  await expect(page.getByTestId('metric-interruptions')).toHaveText('0');
+  await expect(page.getByTestId('metric-interruptions')).toHaveText('n too small');
   await expect(page.getByTestId('metric-bonds')).toContainText('0 locked · 1 required');
 });
 

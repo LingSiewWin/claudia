@@ -3,10 +3,10 @@ import Link from 'next/link';
 import { useState } from 'react';
 import type { Metrics } from '../../lib/contract';
 import { DECLINE_REASON_TEXT, actionTitle, clock, money, plainReason } from '../../lib/format';
-import { type CardView, type RunView, enforcedRow, mayRow, statusLine, trueRow } from '../../lib/run';
+import { type CardView, type RunView, enforcedRow, mayRow, statusLine, treasury, trueRow } from '../../lib/run';
 import { BondChip } from '../brief';
 import { type StepView, type Step } from './model';
-import { Scene } from './scene';
+import { Scene } from '../floor3d';
 import { useFloor } from './use-floor';
 
 const STEP_LABEL: Record<Step, string> = {
@@ -54,15 +54,16 @@ export function FloorStage({
   const floor = useFloor(view, picked);
   const card = floor.selected;
   const decimals = view.started?.limits.decimals ?? 6;
+  const vault = treasury(view);
   return (
     <div data-testid="floor" className="floor" data-selected={card?.actionId ?? undefined}>
       <div className="grid gap-3 p-3 lg:block lg:p-0">
         <div className="order-2 lg:order-none">
-          <Scene floor={floor} selected={card?.actionId ?? null} onSelect={setPicked} />
+          <Scene floor={floor} selected={card?.actionId ?? null} onSelect={setPicked} cards={view.cards} treasury={vault ? money(vault.balance, decimals, true) : null} />
         </div>
 
         <dl data-testid="metrics" data-source={source} className="order-1 grid grid-cols-2 gap-2 lg:absolute lg:top-4 lg:left-4 lg:w-[38rem] lg:grid-cols-4">
-          <Tile label="Interruptions / 100 actions" id="metric-interruptions" value={metrics ? String(metrics.interruptions_per_100_actions) : '—'} />
+          <Tile label="Interruptions / 100 actions" id="metric-interruptions" value={metrics ? (metrics.actions_evaluated < 5 ? 'n too small' : String(metrics.interruptions_per_100_actions)) : '—'} />
           <Tile label="Actions evaluated" id="metric-evaluated" value={metrics ? String(metrics.actions_evaluated) : '—'}>
             {metrics ? (
               <>
@@ -97,7 +98,7 @@ export function FloorStage({
                 <span className={`text-[12px] font-extrabold uppercase tracking-wider ${s.status === 'pending' || s.status === 'skipped' ? 'text-muted' : ''}`}>{STEP_LABEL[s.step]}</span>
               </div>
               <p className="mt-0.5 truncate pl-[18px] font-mono text-[11px] tabular-nums text-muted">
-                {s.at ? clock(s.at).replace(' UTC', '') : s.status === 'skipped' ? (s.note ?? 'skipped') : '·'}
+                {s.at ? clock(s.at).replace(' UTC', '') : s.status === 'skipped' ? (s.note ?? 'not reached') : '·'}
                 {s.at && s.note ? ` ${s.note}` : ''}
               </p>
             </li>
@@ -113,7 +114,7 @@ function Tile({ label, id, value, children }: { label: string; id: string; value
   return (
     <div className="floor-glass px-3 py-2.5">
       <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</dt>
-      <dd data-testid={id} className="mt-0.5 text-2xl font-extrabold leading-none tabular-nums">
+      <dd data-testid={id} className={`mt-0.5 font-extrabold leading-none tabular-nums ${/^[\d.—]+$/.test(value) ? 'text-2xl' : 'pt-1 text-sm text-muted'}`}>
         {value}
         {children ? <span className="mt-1 block text-[11px] font-semibold leading-snug text-muted">{children}</span> : null}
       </dd>
