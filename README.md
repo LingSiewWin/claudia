@@ -2,6 +2,10 @@
 
 The human authority layer for AI agents. Give your agents an allowance, not your keys.
 
+[![Claudia on Sokosumi: hire an agent, keep the signature](.github/readme/sokosumi-workspace.png)](https://claudiahq.vercel.app)
+
+Agents are infinite. Human attention is not. Claudia is the human authority layer for AI agents. It sits between an AI agent and consequential execution: the agent proposes, a deterministic engine checks the proposal against a mandate, external facts are verified, and funds move only for the exact action a human signed. Interrupting that human costs the agent a bond.
+
 - Site: https://claudiahq.vercel.app
 - Pitch deck: https://docs.google.com/presentation/d/14bCEjvkdXQAikaajeXOhlg5EjZV6KWgD/edit?usp=sharing
 - Agent: Human Authority Endpoint, a Masumi MIP-003 service registered on Cardano preprod ([registration tx](https://preprod.cardanoscan.io/transaction/fea9e74b95cc0ed76adbbdcd81f1bfd46276cf35c7dc976b2dff48208e32b1f8))
