@@ -8,6 +8,8 @@ importers:
 
   .: {}
 
+  apps/masumi-payment: {}
+
   apps/masumi-worker:
     dependencies:
       '@authority/core':
