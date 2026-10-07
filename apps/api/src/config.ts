@@ -1,4 +1,6 @@
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { hexOfLength } from '@authority/core';
 import { getAddress } from 'viem';
 
@@ -65,11 +67,32 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     cre:
       mode === 'relay'
         ? { mode: 'relay' }
-        : {
+        : localCre({
             mode: 'local',
             workflowsDir: optional('CRE_WORKFLOWS_DIR') ?? resolve(ROOT, 'workflows'),
             envFile: optional('CRE_ENV_FILE') ?? resolve(ROOT, '.env'),
-            creBin: optional('CRE_BIN') ?? 'cre',
-          },
+            creBin: optional('CRE_BIN') ?? defaultCreBin(env.HOME),
+          }),
   };
+}
+
+/** The CRE installer puts the CLI in ~/.cre/bin, which a service started outside a login shell does not have on PATH. */
+export function defaultCreBin(home = homedir()): string {
+  const installed = join(home, '.cre', 'bin', 'cre');
+  return existsSync(installed) ? installed : 'cre';
+}
+
+/** Names-only secret mapping the simulator needs next to the workflow (`secrets-path` in workflow.yaml). */
+export const CRE_SECRETS_FILE = 'cre-secrets.yaml';
+
+// Checked at startup: a missing file would otherwise surface only as VERIFICATION_UNAVAILABLE on the first escalation.
+function localCre(cre: Extract<CreMode, { mode: 'local' }>): CreMode {
+  for (const [what, path] of [
+    ['CRE_ENV_FILE', cre.envFile],
+    ['CRE_WORKFLOWS_DIR', join(cre.workflowsDir, 'cre-verifier', 'workflow.yaml')],
+    ['CRE_WORKFLOWS_DIR', join(cre.workflowsDir, CRE_SECRETS_FILE)],
+  ] as const) {
+    if (!existsSync(path)) throw new Error(`${what}: ${path} does not exist`);
+  }
+  return cre;
 }
