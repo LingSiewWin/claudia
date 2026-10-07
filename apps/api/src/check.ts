@@ -16,6 +16,7 @@ import {
   IdSchema,
   IssuanceRefused,
   REPORT_MAX_AGE_MS,
+  type ReasonCode,
   type State,
   type AnyVerificationReport,
   type VerifiedReport,
@@ -23,7 +24,7 @@ import {
 import type { Db, StoredEvent } from '@authority/db';
 import * as z from 'zod';
 import { issueOnce } from './authorize';
-import { BOND_ASSET, bondOf, briefFor, type PaymentProof, paymentResponse, priceFor, reply402, withBudget } from './escalation';
+import { BOND_ASSET, bondOf, briefFor, escalationsToday, type PaymentProof, paymentResponse, priceFor, reply402, withBudget } from './escalation';
 import type { VerifyFx } from './fx';
 import { HttpError, parseJson, type Reply } from './http';
 import { idempotent } from './idempotency';
@@ -104,7 +105,15 @@ export function factsDenial(
   reason: 'INVOICE_NOT_FOUND' | 'INVOICE_NOT_OPEN',
   detail: Record<string, string | number | boolean | null>,
 ): Evaluation & { outcome: 'DENY' } {
-  const index = e.checks.findIndex((c) => c.kind === 'verified_facts');
+  return denialAt(e, e.checks.findIndex((c) => c.kind === 'verified_facts'), reason, detail);
+}
+
+/** The engine's own budget denial, applied when the day's last slot went to a concurrent escalation after this one was evaluated. */
+export function budgetDenial(e: Evaluation, detail: { used: number; per_day: number }): Evaluation & { outcome: 'DENY' } {
+  return denialAt(e, e.checks.findIndex((c) => c.id === 'interrupt_budget'), 'INTERRUPT_BUDGET_EXHAUSTED', detail);
+}
+
+function denialAt(e: Evaluation, index: number, reason: ReasonCode, detail: Record<string, string | number | boolean | null>): Evaluation & { outcome: 'DENY' } {
   const checks = e.checks.map((c, i) => {
     if (i === index) return { ...c, result: 'fail' as const, reason, detail };
     if (i > index) return { ...c, result: 'not_evaluated' as const, reason: null, detail: {} };
@@ -397,8 +406,16 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: P
     if (e.outcome === 'ESCALATE') {
       const gate = await escalationGate(eng, { row, run, action, evaluation: e, proposal, approverPkh: chain.anchor.approver_pkh, verification: d.verification, payment, emit });
       if (gate.kind === 'priced') return gate.reply;
-      ({ brief, bond, price } = gate);
-      approvalId = gate.approvalId;
+      if (gate.kind === 'denied') {
+        // The bond is locked and comes back at locked_until (expireApprovals); the human is never paged.
+        ({ bond } = gate);
+        e = gate.evaluation;
+        await emit('AuthorityEvaluated', { evaluation: e });
+        await denied(e, 'engine');
+      } else {
+        ({ brief, bond, price } = gate);
+        approvalId = gate.approvalId;
+      }
     } else {
       if (d.verified && eng.now() - d.verified.block_time_ms > REPORT_MAX_AGE_MS) {
         d = await decide(eng, { row, proposal, state: chain.state, action, emit });
@@ -488,7 +505,10 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: P
   };
 }
 
-type Gate = { kind: 'priced'; reply: Reply } | { kind: 'locked'; approvalId: string; price: EscalationPrice; brief: DecisionBrief; bond: Bond };
+type Gate =
+  | { kind: 'priced'; reply: Reply }
+  | { kind: 'locked'; approvalId: string; price: EscalationPrice; brief: DecisionBrief; bond: Bond }
+  | { kind: 'denied'; evaluation: Decided['evaluation'] & { outcome: 'DENY' }; bond: Bond };
 
 /**
  * The 402 gate. An ESCALATE that wants execution first gets an approval row in `awaiting_bond` and its price; the
@@ -549,13 +569,26 @@ async function escalationGate(
   if (!valid) return { kind: 'priced', reply: reply402(eng.publicApiUrl, price, action.id) };
   const bond = bondOf(price, row.mandate.id, utxo);
   const brief = briefFor({ action, evaluation: e, row, verification: i.verification, bond: { amount: bond.amount, asset: bond.asset }, expiresAtMs: price.locked_until_ms });
-  const claimed = await eng.db.query(
-    `update approvals set status = 'pending', proposal = $2, evaluation = $3, brief = $4, brief_hash = $5, bond = $6, day_index = $7
-     where id = $1 and status = 'awaiting_bond' returning id`,
-    [id, canonicalJson(i.proposal), canonicalJson(e), canonicalJson(brief), briefHash(brief), canonicalJson(bond), dayIndex],
-  );
-  if (claimed.length === 0) throw new HttpError(429, 'this escalation is being settled, retry', { 'retry-after': '1' });
+  // The engine counted the budget before this bond was read back from Cardano. The claim takes the budget unit under
+  // a per-mandate lock, so two escalations racing for the day's last slot cannot both reach the human.
+  const perDay = row.mandate.interrupt_budget.per_day;
+  const claimed = await eng.db.tx(async (q) => {
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [row.mandate.id]);
+    const used = await escalationsToday(q, row.mandate.id, dayIndex);
+    if (used >= perDay) {
+      await q.query('update approvals set bond = $2 where id = $1 and status = $3', [id, canonicalJson(bond), 'awaiting_bond']);
+      return { used };
+    }
+    const rows = await q.query(
+      `update approvals set status = 'pending', proposal = $2, evaluation = $3, brief = $4, brief_hash = $5, bond = $6, day_index = $7
+       where id = $1 and status = 'awaiting_bond' returning id`,
+      [id, canonicalJson(i.proposal), canonicalJson(e), canonicalJson(brief), briefHash(brief), canonicalJson(bond), dayIndex],
+    );
+    return rows.length === 0 ? null : { used: null };
+  });
+  if (claimed === null) throw new HttpError(429, 'this escalation is being settled, retry', { 'retry-after': '1' });
   await emit('BondLocked', { approval_id: bond.approval_id, tx_hash: bond.tx_hash, output_index: bond.output_index, amount: bond.amount, asset: bond.asset });
+  if (claimed.used !== null) return { kind: 'denied', evaluation: budgetDenial(e, { used: claimed.used, per_day: perDay }), bond };
   await emit('ApprovalRequested', { approval_id: bond.approval_id, approvals_required: e.approvals_required, brief, bond });
   return { kind: 'locked', approvalId: bond.approval_id, price, brief, bond };
 }
