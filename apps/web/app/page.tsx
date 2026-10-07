@@ -53,7 +53,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
 function HumanHome() {
   return (
     <>
-      <section aria-label="Thesis" className="mt-16">
+      <section aria-label="Thesis" className="relative isolate mt-16 [overflow-x:clip]">
+        <Image
+          src="/art/handoff-ink.png"
+          alt=""
+          width={1200}
+          height={776}
+          priority
+          aria-hidden
+          className="pointer-events-none absolute -top-6 right-[-3%] -z-10 w-[92%] max-w-[1500px] select-none opacity-25 [mask-image:linear-gradient(to_right,transparent_0%,black_45%)] sm:w-[80%] sm:opacity-50 lg:-top-20 lg:w-[62%] lg:opacity-80 lg:[mask-image:linear-gradient(to_right,transparent_0%,black_42%)]"
+        />
         <h1 className="font-serif text-[clamp(2.6rem,7.5vw,7rem)] leading-[0.98] tracking-[-0.02em]">
           Give your agents an allowance, <em className="text-muted">not your keys.</em>
         </h1>
