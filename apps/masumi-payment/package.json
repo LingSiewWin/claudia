@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "compose": "docker compose --env-file ../../.env"
+    "compose": "docker compose --env-file ../../.env",
+    "register": "node --env-file-if-exists=../../.env --import tsx scripts/register.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
   }
 }
