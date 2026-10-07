@@ -124,6 +124,8 @@ const MREV: Setup = {
 const pk = (sk: Uint8Array) => bytesToHex(publicKeyFromSecret(sk));
 // Fixture approver: the real Cardano key hash (blake2b-224) of a fixed TEST public key, not any real wallet.
 const CFO_TEST = keyHash(pk(new Uint8Array(32).fill(7)));
+// Fixture admin: repeated TEST bytes, distinct from the payment approver. Not a real wallet.
+const ADMIN_TEST = '44'.repeat(28);
 
 function buildMandate(s: Setup, version = s.version): Mandate {
   const l = s.limits;
@@ -132,7 +134,7 @@ function buildMandate(s: Setup, version = s.version): Mandate {
     id: s.id,
     version,
     status: 'active',
-    principal: { type: 'organization', id: 'acme', name: 'Acme Corp' },
+    principal: { type: 'organization', id: 'acme', name: 'Acme Corp', cardano_key_hash: ADMIN_TEST },
     delegate: { type: 'agent', id: 'cfo-agent-01', public_key: `ed25519:${pk(s.agentSk)}` },
     approvers: [{ role: 'CFO', cardano_key_hash: CFO_TEST }],
     authority_engine: { public_key: `ed25519:${pk(s.engineSk)}` },
