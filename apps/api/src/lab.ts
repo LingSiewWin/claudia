@@ -13,7 +13,7 @@ import {
 import * as z from 'zod';
 import { checkInProcess, type Engine } from './check';
 import { HttpError, parseJson, type Reply } from './http';
-import { labInjectionWork, storeWork } from './inbox';
+import { labEscalationWork, labInjectionWork, storeWork } from './inbox';
 import { mandateOfKind, readChain, vaultSummary } from './mandates';
 import type { LabDeps, LabKeys, VaultAttack } from './ports';
 import { assertNoLiveRun, createRun, finishRun } from './runs';
@@ -31,6 +31,8 @@ export const ATTACK_IDS = [
   'revoked',
   'daily_cap',
   'cfo_bypass',
+  'escalation_spam',
+  'no_bond',
 ] as const;
 export type AttackId = (typeof ATTACK_IDS)[number];
 
@@ -78,7 +80,9 @@ export async function startAttack(eng: Engine, lab: LabDeps, rawBody: string): P
   const attack = body.data.attack;
   const row = await mandateOfKind(eng.db, 'lab');
   if (!row) throw new HttpError(503, 'the Attack Lab mandate is not deployed');
-  const agentDriven = attack === 'prompt_injection' || attack === 'prompt_injection_direct';
+  // Agent-driven attacks are claimed by the real agent; the engine records the result when it stops them
+  // (prompt injection: CRE or the agent; escalation spam: the interrupt budget; no bond: the 402 itself).
+  const agentDriven = attack === 'prompt_injection' || attack === 'prompt_injection_direct' || attack === 'escalation_spam' || attack === 'no_bond';
   if (!agentDriven && !lab.runner) throw new HttpError(501, 'vault attacks need the lab runner, which is not configured');
   await assertNoLiveRun(eng.db, 'lab');
   const { vault } = await readChain(eng.cardano, row, eng.now());
@@ -92,7 +96,7 @@ export async function startAttack(eng: Engine, lab: LabDeps, rawBody: string): P
     vault: vaultSummary(vault, eng.now()),
   });
   await eng.log.emit({ run_id: runId, action_id: null, type: 'AttackStarted', payload: { attack, mandate_id: row.mandate.id } });
-  if (agentDriven) await storeWork(eng.db, runId, labInjectionWork(eng.now()));
+  if (agentDriven) await storeWork(eng.db, runId, attack.startsWith('prompt_injection') ? labInjectionWork(eng.now()) : labEscalationWork(attack as 'escalation_spam' | 'no_bond', eng.now()));
   // The lab engine knows only the M-LAB key, whatever the shared engine holds.
   const labEng: Engine = { ...eng, engineKeys: new Map([[row.mandate.id, lab.keys.engine]]) };
   if (!agentDriven) void runVaultAttack(labEng, lab, runId, attack as VaultAttack);

@@ -58,9 +58,16 @@ while (handled.size < choices.size) {
       await call('POST', '/v1/executions', { approval_id: ap.approval_id, authorization_digest: approved.authorization.digest_hex, cfo_witness_cbor: witness });
       console.log(JSON.stringify({ approved: ap.approval_id, invoice: number, action_id: ap.action.id, tx_hash: approved.tx_hash, requires_principal: approved.authorization.fields.requires_principal }));
     } else {
-      const sig = await cfo.signData(bytesToHex(utf8ToBytes(declineMessage(ap.approval_id))), cfoAddress);
-      await call('POST', `/v1/approvals/${ap.approval_id}/decline`, sig);
-      console.log(JSON.stringify({ declined: ap.approval_id, invoice: number, action_id: ap.action.id }));
+      // A declined demo request is legitimate (the bond goes back to the agent); frivolous declines capture it.
+      const reason = 'legitimate';
+      const sig = await cfo.signData(bytesToHex(utf8ToBytes(declineMessage(ap.approval_id, reason))), cfoAddress);
+      const declined = await call('POST', `/v1/approvals/${ap.approval_id}/decline`, { ...sig, reason });
+      let bond_tx: string | null = null;
+      if (declined.bond_tx) {
+        const witness = await cfo.signTx(declined.bond_tx.unsigned_tx_cbor, true, false);
+        bond_tx = (await call('POST', `/v1/approvals/${ap.approval_id}/bond-submit`, { tx_hash: declined.bond_tx.tx_hash, cfo_witness_cbor: witness })).tx_hash;
+      }
+      console.log(JSON.stringify({ declined: ap.approval_id, invoice: number, action_id: ap.action.id, reason, bond_tx }));
     }
     handled.add(number);
   }

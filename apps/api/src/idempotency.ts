@@ -5,7 +5,8 @@ import { HttpError, type Reply } from './http';
 /** An in-progress key older than this is treated as abandoned (crash) and taken over. */
 export const IDEMPOTENCY_STALE_MS = 300_000;
 
-const transient = (status: number) => status >= 500 || status === 429 || status === 408;
+// A 402 is not a decision: the same key retried with a PAYMENT-SIGNATURE must run again, not replay the price.
+const transient = (status: number) => status >= 500 || status === 429 || status === 408 || status === 402;
 
 /** Identifies one claim of (caller, key). A stale takeover advances created_at, so a loser must not match the successor. */
 const attemptStamp = `to_char(created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS.US')`;

@@ -4,7 +4,8 @@
 // Usage: pnpm --filter @authority/api stage
 // Env: AUTHORITY_API_URL, AUTHORITY_AGENT_KEY, M001_AGENT_SECRET_KEY, STRIPE_READ_KEY, STRIPE_ACME_CUSTOMER_ID, CFO_TEST_MNEMONIC
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ActionIRSchema, bytesToHex, canonicalHash, hexOfLength, signProposal, utf8ToBytes } from '@authority/core';
+import { connect, lockBond, walletFromMnemonic } from '@authority/cardano';
+import { ActionIRSchema, bytesToHex, canonicalHash, type EscalationPrice, hexOfLength, signProposal, utf8ToBytes } from '@authority/core';
 import { listOpenInvoices, readOnlyStripe } from '@authority/stripe';
 import { deserializeAddress, MeshWallet } from '@meshsdk/core';
 import { declineMessage } from '../src/approvals';
@@ -29,10 +30,37 @@ async function call(method: 'GET' | 'POST', path: string, body?: unknown, header
     signal: AbortSignal.timeout(600_000),
   });
   const json = res.status === 204 ? null : ((await res.json()) as any);
+  if (res.status === 402) return { status: 402, ...json };
   if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status} ${JSON.stringify(json)}`);
   return json;
 }
 const agent = { authorization: `Bearer ${agentKey}` };
+
+// x402: an escalation is priced first. The agent wallet (AGENT_WALLET_MNEMONIC, preprod tADA) locks the bond in
+// the escrow validator and the check is retried with PAYMENT-SIGNATURE. Vault keys are never involved.
+let agentWallet: Promise<Awaited<ReturnType<typeof walletFromMnemonic>>> | null = null;
+let chain: Promise<Awaited<ReturnType<typeof connect>>> | null = null;
+async function checkPaying(body: unknown, headers: Record<string, string>) {
+  const first = await call('POST', '/v1/authority/check', body, headers);
+  if (first.status !== 402) return first;
+  const accepted = first.accepts[0];
+  if (accepted.scheme !== 'cardano-escrow') throw new Error(`unknown payment scheme ${accepted.scheme}`);
+  const price = accepted.extra as EscalationPrice;
+  chain ??= connect(process.env.BLOCKFROST_PROJECT_ID_PREPROD);
+  agentWallet ??= walletFromMnemonic(await chain, process.env.AGENT_WALLET_MNEMONIC, 'AGENT_WALLET_MNEMONIC');
+  const utxo = await lockBond(await chain, await agentWallet, price);
+  console.log(JSON.stringify({ bond_locked: price.approval_id, tx_hash: utxo.tx_hash, amount: price.amount, escrow: price.escrow_address }));
+  const proof = { x402Version: 2, accepted, payload: { approval_id: price.approval_id, tx_hash: utxo.tx_hash, output_index: utxo.output_index } };
+  const paid = await call('POST', '/v1/authority/check', body, { ...headers, 'payment-signature': Buffer.from(JSON.stringify(proof)).toString('base64') });
+  if (paid.status === 402) throw new Error(`bond ${utxo.tx_hash} not accepted: ${JSON.stringify(paid)}`);
+  return paid;
+}
+async function settleBond(approvalId: string, bondTx: { unsigned_tx_cbor: string; tx_hash: string } | null) {
+  if (!bondTx) return null;
+  const witness = await cfo.signTx(bondTx.unsigned_tx_cbor, true, false);
+  const out = await call('POST', `/v1/approvals/${approvalId}/bond-submit`, { tx_hash: bondTx.tx_hash, cfo_witness_cbor: witness });
+  return `https://preprod.cexplorer.io/tx/${out.tx_hash}`;
+}
 
 // The CFO test wallet must be the M-001 approver.
 const cfo = new MeshWallet({ networkId: 0, key: { type: 'mnemonic', words: need('CFO_TEST_MNEMONIC').split(/\s+/) } });
@@ -100,7 +128,7 @@ const cases = [
 ] as const;
 
 for (const c of cases) {
-  const res = await call('POST', '/v1/authority/check', { mandate_id: 'M-001', proposal: proposal(c.p), execute: true, run_id: run }, {
+  const res = await checkPaying({ mandate_id: 'M-001', proposal: proposal(c.p), execute: true, run_id: run }, {
     ...agent,
     'idempotency-key': `stage:${run}:${c.p.id}`,
   });
@@ -111,11 +139,14 @@ for (const c of cases) {
     const witness = await cfo.signTx(approved.unsigned_tx_cbor, true, false);
     await call('POST', '/v1/executions', { approval_id: res.approval_id, authorization_digest: approved.authorization.digest_hex, cfo_witness_cbor: witness });
     row.requires_principal = approved.authorization.fields.requires_principal;
+    row.bond_refund = await settleBond(res.approval_id, approved.bond_tx);
   }
   if ('cfo' in c && c.cfo === 'decline') {
-    const sig = await cfo.signData(bytesToHex(utf8ToBytes(declineMessage(res.approval_id))), cfoAddress);
-    await call('POST', `/v1/approvals/${res.approval_id}/decline`, sig);
+    const reason = 'legitimate';
+    const sig = await cfo.signData(bytesToHex(utf8ToBytes(declineMessage(res.approval_id, reason))), cfoAddress);
+    const declined = await call('POST', `/v1/approvals/${res.approval_id}/decline`, { ...sig, reason });
     row.reason = 'PRINCIPAL_DECLINED';
+    row.bond_refund = await settleBond(res.approval_id, declined.bond_tx);
   }
   if (c.n === 1 || c.n === 2) {
     const s = await settled(c.p.id);

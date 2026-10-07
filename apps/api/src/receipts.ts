@@ -11,7 +11,13 @@ export interface DecisionContext {
   agent_signature: string | null;
   evaluation: { outcome: string; reason: string | null; checks: Check[] };
   verification: { report_hash: string; sepolia_tx: string; result: string } | null;
-  approval: { required: boolean; cfo_key_hash: string | null };
+  approval: {
+    required: boolean;
+    cfo_key_hash: string | null;
+    /** Hash of the Decision Brief the human read (null until a bond was locked). */
+    brief_hash: string | null;
+    bond: { status: string; tx_hash: string | null; outcome_tx_hash: string | null } | null;
+  };
   first_event_hash: string;
 }
 

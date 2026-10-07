@@ -2,13 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DAY_MS } from '@authority/core';
 import { prepareRevoke, prepareUpdate, submitMandateTx } from './admin';
 import { anchorFor, closingFor } from './anchor';
-import { approve, decline, pendingApprovals, submitApproved } from './approvals';
+import { approvalView, approve, authorityView, bondSubmit, decline, pendingApprovals, submitApproved } from './approvals';
 import { type Caller, type Engine, handleCheck } from './check';
+import { parsePaymentSignature } from './escalation';
 import { bearer, HttpError, idempotencyKey, parseJson, readBody, type Reply, send } from './http';
 import { agentDecisions, readWork, stageWork, storeWork } from './inbox';
 import { startAttack } from './lab';
 import { currentMandate, limitsOf, mandateOfKind, readChain, vaultSummary } from './mandates';
 import type { LabDeps } from './ports';
+import { metricsFor } from './metrics';
 import { receiptBundle, settlementReceipts } from './receipts';
 import { claimJob, completeJob } from './relay';
 import { assertNoLiveRun, claimRun, completeRun, createRun, finishRun, listRuns, type RunKind, runLog } from './runs';
@@ -30,6 +32,12 @@ interface Route {
 }
 
 const ID = '([A-Za-z0-9._-]{1,64})';
+
+function mandateParam(url: URL): string {
+  const id = url.searchParams.get('mandate_id') ?? '';
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(id)) throw new HttpError(400, 'mandate_id is required');
+  return id;
+}
 
 async function mandateView(eng: Engine, id: string): Promise<Reply> {
   const row = await currentMandate(eng.db, id);
@@ -70,9 +78,16 @@ export function createApp(deps: AppDeps) {
       handler: async ({ req }) => {
         const caller = bearer<Caller>(req, { agent: deps.keys.agent, masumi: deps.keys.masumi });
         const key = idempotencyKey(req);
-        return handleCheck(eng, caller, key, await readBody(req));
+        return handleCheck(eng, caller, key, await readBody(req), parsePaymentSignature(req.headers['payment-signature']));
       },
     },
+    // Public: the price of interrupting an approver and the day's budget.
+    {
+      method: 'GET',
+      path: new RegExp(`^/v1/authority/(?!check$)${ID}$`),
+      handler: async ({ params, url }) => authorityView(eng, params[0]!, mandateParam(url)),
+    },
+    { method: 'GET', path: /^\/v1\/metrics$/, handler: async ({ url }) => ok(await metricsFor(eng.db, mandateParam(url))) },
     {
       method: 'GET',
       path: /^\/v1\/runs$/,
@@ -168,7 +183,9 @@ export function createApp(deps: AppDeps) {
         return ok({ approvals: await pendingApprovals(eng) });
       },
     },
+    { method: 'GET', path: new RegExp(`^/v1/approvals/${ID}$`), handler: async ({ params }) => approvalView(eng, params[0]!) },
     { method: 'POST', path: new RegExp(`^/v1/approvals/${ID}/approve$`), handler: async ({ params }) => approve(eng, params[0]!) },
+    { method: 'POST', path: new RegExp(`^/v1/approvals/${ID}/bond-submit$`), handler: async ({ req, params }) => bondSubmit(eng, params[0]!, await readBody(req)) },
     { method: 'POST', path: new RegExp(`^/v1/approvals/${ID}/decline$`), handler: async ({ req, params }) => decline(eng, params[0]!, await readBody(req)) },
     { method: 'POST', path: /^\/v1\/executions$/, handler: async ({ req }) => submitApproved(eng, await readBody(req)) },
     // Attack Lab
@@ -235,7 +252,8 @@ export function createApp(deps: AppDeps) {
           .writeHead(204, {
             ...cors,
             'access-control-allow-methods': 'GET, POST, OPTIONS',
-            'access-control-allow-headers': 'content-type, authorization, idempotency-key, last-event-id',
+            'access-control-allow-headers': 'content-type, authorization, idempotency-key, last-event-id, payment-signature',
+            'access-control-expose-headers': 'payment-required, payment-response',
             'access-control-max-age': '600',
           })
           .end();
