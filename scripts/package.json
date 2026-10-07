@@ -11,7 +11,8 @@
     "bond": "tsx bond-demo.ts",
     "fund": "tsx fund-split.ts",
     "split-self": "tsx split-self.ts",
-    "send": "tsx send.ts"
+    "send": "tsx send.ts",
+    "lab:reset": "tsx lab-reset.ts"
   },
   "dependencies": {
     "@authority/cardano": "workspace:*",
