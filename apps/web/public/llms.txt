@@ -1,0 +1,24 @@
+# Authority Layer
+
+> Agents are infinite. Human attention is not. Interrupting a person costs a bond; only that person's signature moves funds.
+
+Authority Layer is an authorization layer between an AI agent and consequential execution. The agent proposes an Action IR; a deterministic engine returns ALLOW, ESCALATE or DENY against a mandate; facts are verified by a Chainlink CRE workflow; a Cardano vault releases only the exact action a human signed. ESCALATE answers HTTP 402: the agent locks a bond in escrow before a person is interrupted. Reasonable asks are refunded; frivolous ones are captured by an unspendable sink. Each mandate has an interrupt budget per day; past it, nobody is paged.
+
+## Protocol
+
+- [Full protocol](/llms-full.txt): outcomes, Action IR, mandate and interrupt budget, the 402 flow (PAYMENT-REQUIRED, PAYMENT-SIGNATURE, PAYMENT-RESPONSE), EscalationPrice, bond rules, Decision Brief, endpoints, Masumi job shape.
+- [Protocol, rendered](/protocol): the same document for humans.
+- [Agent card](/.well-known/agent.json): name, endpoints, pricing, network.
+
+## Endpoints
+
+- GET /v1/authority/{role}?mandate_id=: the price of interrupting this person and the attention left today.
+- GET /v1/metrics?mandate_id=: outcomes, bonds and interruptions per 100 actions from the event log.
+- POST /v1/authority/check: send a signed Action IR; receive the outcome, the Decision Brief and, on ESCALATE, a 402 with the bond price.
+
+## Live on Cardano preprod
+
+- [Replay of a recorded run](/live?mode=replay)
+- [Mandate M-001 with its interrupt budget](/mandate/M-001)
+- [Human authority endpoint, CFO](/authority/CFO)
+- [Human Authority Endpoint on Sokosumi preprod](https://preprod.sokosumi.com/): 1 tUSDM per evaluation, Masumi MIP-003.
