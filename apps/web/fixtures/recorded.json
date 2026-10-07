@@ -8405,7 +8405,66 @@
   "1b8acf927aa03f9114e4e7be4acfbf70d3f03a4c629027089517d57d6b076d26": {
    "tx_hash": "1b8acf927aa03f9114e4e7be4acfbf70d3f03a4c629027089517d57d6b076d26",
    "block_height": 5261403,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     },
+     "asset_list": [
+      {
+       "policy_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "ffc3f250ee371a95dc5681da3a184608ee1d32d266a0ff7d82888ba760a64fcf"
+        },
+        {
+         "int": 3
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 10000000
+        },
+        {
+         "int": 50000000
+        },
+        {
+         "int": 50000000
+        },
+        {
+         "int": 100000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8413,14 +8472,74 @@
      "log_head": {
       "seq": 60,
       "hash": "dbacc1dd71720b0e2b989ed94937ff5709f871c070dd9dc3069c8b6bb63c4daf"
-     }
+     },
+     "signature": "c4bac0dfe08a2e4fefa21494727064cde947435bd118c19b2b7fef938b3442af29eeaccffdb25c8bec88d3bd45cd02d77952575221b811db4071e58d62170700"
     }
    }
   },
   "561d33cbdd5e245b836f4080660b6af0e21113b4aa6d2687c45e59817f17309d": {
    "tx_hash": "561d33cbdd5e245b836f4080660b6af0e21113b4aa6d2687c45e59817f17309d",
    "block_height": 5261404,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8428,14 +8547,74 @@
      "log_head": {
       "seq": 71,
       "hash": "06c9f6b37422c6e759d95cf45c0547af1c072f7eeccaf095284ae622f21db15d"
-     }
+     },
+     "signature": "49aadb2e74d57b3167757abcf737228586ef00d03db71de2eb227793ffa5284aebc5fbf8d6de0abf4aedf407dfca0bfdedf307b8fbb2e418904e6622a2a0dc06"
     }
    }
   },
   "686b2575c0755763976d55ec8b248651a06014fa19f4cf4691d1641635ac69db": {
    "tx_hash": "686b2575c0755763976d55ec8b248651a06014fa19f4cf4691d1641635ac69db",
    "block_height": 5261405,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8443,14 +8622,74 @@
      "log_head": {
       "seq": 82,
       "hash": "c75a2700e14a9c5f20ff0aa450795758583f9c9afad78cd8584d479cd25d8612"
-     }
+     },
+     "signature": "776c87eb13d71f59df22be36104a92a2644f3f36c2af5555e93b042af0514c6533a583a0f000b96a1403307278a0ff8b4cf12df70954bdb744f2bf07e6105900"
     }
    }
   },
   "c292d19a07293ed3e22ca07ad990c40411c37843c65356502448b291bb431afd": {
    "tx_hash": "c292d19a07293ed3e22ca07ad990c40411c37843c65356502448b291bb431afd",
    "block_height": 5261406,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8458,14 +8697,74 @@
      "log_head": {
       "seq": 95,
       "hash": "31f94117838bc4912ed10cb7597af5f8f4a3976d02bc5cac2e4eddb45ffc36ab"
-     }
+     },
+     "signature": "6e08b80067558a09b50d3a7de1998e9fcbcde48083532b629ea1cd0445c6a427ba486d46e5dc8197818f50455eafdb108c5e2c7c0a064aa68eddcbb74c905406"
     }
    }
   },
   "ef4089073fb5d0372c15da1073badb92078352f308019af09e1991541154bfbe": {
    "tx_hash": "ef4089073fb5d0372c15da1073badb92078352f308019af09e1991541154bfbe",
    "block_height": 5261407,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8473,7 +8772,8 @@
      "log_head": {
       "seq": 108,
       "hash": "e9fd2966a1809de68e67361582fbf26b0ba377588c50f5a0948753a25ebe4ab1"
-     }
+     },
+     "signature": "a59967539c3f0f1a67e52a073bceac2ce378cf5aaa0406356cb5f1c49fab6868de4438141de345f22069f2516c7c96ed90aa41f374c873a9500a4dd9b386760e"
     }
    }
   },
@@ -8495,7 +8795,66 @@
   "3421f413551a856112f3ae669af8708565288ec9181c721c1ef514bb69f65787": {
    "tx_hash": "3421f413551a856112f3ae669af8708565288ec9181c721c1ef514bb69f65787",
    "block_height": 5261409,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8503,14 +8862,74 @@
      "log_head": {
       "seq": 138,
       "hash": "6f42ffeafcc736c099894edb02345de7af934e790b03e7830bc8d3e920aa4427"
-     }
+     },
+     "signature": "e1e3fafa856bba451047377f44f5d44c6ebb271278017617e7278affabb53fcd4eb86eea4a875f3a92331d2c02f24a610b99b712f92df58477a935f626845802"
     }
    }
   },
   "7a1a4a60e973ba5c52b1e48cb89b8e4ef0e407cc1560e6faf5965a3aae7d54dd": {
    "tx_hash": "7a1a4a60e973ba5c52b1e48cb89b8e4ef0e407cc1560e6faf5965a3aae7d54dd",
    "block_height": 5261410,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8518,7 +8937,8 @@
      "log_head": {
       "seq": 152,
       "hash": "7ef80c3159faef563ec5ab4d1d77f84f32f4ccc081b17e4d3c37de9fd11c1a0c"
-     }
+     },
+     "signature": "4e77c0f74d6f0688274135f9d74e4e9d36c446c393459cc890b4e8a9658062b5907f7f57127ea62fd4bca6731d58cf257656515f762d05bc98a9d5fa1ff48a00"
     }
    }
   },
@@ -8600,7 +9020,66 @@
   "04bcde52c06a9f3fbb0f71e83b1feaca3622fab89c46276e0eb160a2c1e89bc1": {
    "tx_hash": "04bcde52c06a9f3fbb0f71e83b1feaca3622fab89c46276e0eb160a2c1e89bc1",
    "block_height": 5261416,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8608,14 +9087,74 @@
      "log_head": {
       "seq": 178,
       "hash": "8c257b01858445c5225e98c5985b257841f86b89aeb11e32ec181f8a5c22ab31"
-     }
+     },
+     "signature": "6c381191961776c572edfbfd9b95aeefc582574f239ae431ff66a0df1c09b8e3efb1f00c5723fda4061064fb4f5e7c03d299dd443902f253d5de5ad171ae1102"
     }
    }
   },
   "dc3d3c108c578fd4ced713850ce6e53396e4f64d1ab9463eefa3a372e4320d11": {
    "tx_hash": "dc3d3c108c578fd4ced713850ce6e53396e4f64d1ab9463eefa3a372e4320d11",
    "block_height": 5261417,
-   "reference_inputs": [],
+   "reference_inputs": [
+    {
+     "payment_addr": {
+      "bech32": "",
+      "cred": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+     },
+     "asset_list": [
+      {
+       "policy_id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "asset_name": "4d414e44415445",
+       "quantity": "1"
+      }
+     ],
+     "inline_datum": {
+      "bytes": null,
+      "value": {
+       "constructor": 0,
+       "fields": [
+        {
+         "bytes": "4f2a818f73a8b6ab6db482b1ecdc50637c1593454aaa3ddd9382fca14cfcf0d3"
+        },
+        {
+         "int": 1
+        },
+        {
+         "constructor": 0,
+         "fields": []
+        },
+        {
+         "bytes": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1"
+        },
+        {
+         "bytes": "8b218424ad74df25d35c2ea8e094a4c5c5aeb2cbb442419331569313"
+        },
+        {
+         "bytes": "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde"
+        },
+        {
+         "bytes": "0014df10745553444d"
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 5000000
+        },
+        {
+         "int": 1000000
+        },
+        {
+         "int": 1793923200000
+        }
+       ]
+      }
+     }
+    }
+   ],
    "outputs": [],
    "plutus_contracts": [],
    "metadata": {
@@ -8623,7 +9162,8 @@
      "log_head": {
       "seq": 184,
       "hash": "a465c63fedd8f0e794acd1cfb5c52f34f407b872c311c2e0264b4e7c76286f32"
-     }
+     },
+     "signature": "33c9df806f04e29b88212d4dc8eefd21cebec959d70ced8dcaa3ef64d15dc0c883db51a64e4d1e9c215faf22dc67af14defad5bd08504af913ded81aac29240e"
     }
    }
   }

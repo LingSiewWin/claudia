@@ -1,5 +1,5 @@
-import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '@authority/core';
-import type { KoiosTx } from './chain';
+import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes, verifyEvidenceAnchor } from '@authority/core';
+import { MANDATE_TOKEN_HEX, bytesOf, field, type KoiosTx } from './chain';
 import type { RunEvent } from './contract';
 
 /** Delay in ms before each event when replaying at stage speed: recorded gaps clamped to [min, max]. */
@@ -87,6 +87,18 @@ export function replayPlan(events: RunEvent[], anchor: LogAnchor | null = null, 
 
 type ReadTx = (txHash: string) => Promise<KoiosTx | null>;
 
+function namedHead(head: unknown): LogAnchor | null {
+  const named = head as { seq?: unknown; hash?: unknown } | null | undefined;
+  return typeof named?.seq === 'number' && Number.isInteger(named.seq) && typeof named.hash === 'string'
+    ? { seq: named.seq, head: named.hash }
+    : null;
+}
+
+function engineVkey(tx: KoiosTx): string | null {
+  const utxo = tx.reference_inputs.find((u) => u.asset_list.some((x) => x.asset_name === MANDATE_TOKEN_HEX));
+  return bytesOf(field(utxo?.inline_datum?.value, 3));
+}
+
 /** metadata 1694 `log_head` in its only valid form, `{ seq, hash }`. A bare hash, or no answer, is no head. */
 async function committedHead(read: ReadTx, txHash: string): Promise<LogAnchor | null> {
   let head: unknown;
@@ -95,8 +107,27 @@ async function committedHead(read: ReadTx, txHash: string): Promise<LogAnchor | 
   } catch {
     return null;
   }
-  const named = head as { seq?: unknown; hash?: unknown } | null | undefined;
-  return typeof named?.seq === 'number' && Number.isInteger(named.seq) && typeof named.hash === 'string' ? { seq: named.seq, head: named.hash } : null;
+  return namedHead(head);
+}
+
+/**
+ * A closing anchor is only a closing anchor when metadata 1694 carries a valid engine signature over
+ * EVIDENCE_ANCHOR_V1 || run_id || seq || hash, checked against engine_vkey in the on-chain mandate datum.
+ * Unsigned or invalid is no closing anchor.
+ */
+async function signedClosingHead(read: ReadTx, txHash: string, runId: string): Promise<LogAnchor | null> {
+  let tx: KoiosTx | null;
+  try {
+    tx = await read(txHash);
+  } catch {
+    return null;
+  }
+  if (!tx) return null;
+  const meta = tx.metadata?.['1694'] as { log_head?: unknown; signature?: unknown } | undefined;
+  const head = namedHead(meta?.log_head);
+  if (!head || typeof meta?.signature !== 'string') return null;
+  const key = engineVkey(tx);
+  return key && verifyEvidenceAnchor(runId, head.seq, head.head, meta.signature, key) ? head : null;
 }
 
 /**
@@ -106,8 +137,9 @@ async function committedHead(read: ReadTx, txHash: string): Promise<LogAnchor | 
  * commit a head that names itself). No answer or no valid head is no anchor, never a pass.
  */
 export async function readAnchor(events: RunEvent[], read: ReadTx, closingTx: string | null = null): Promise<LogAnchor | null> {
-  if (closingTx) {
-    const closing = await committedHead(read, closingTx);
+  const runId = events[0]?.run_id;
+  if (closingTx && runId) {
+    const closing = await signedClosingHead(read, closingTx, runId);
     if (closing) return closing;
   }
   const settled = events.findLast((e) => e.type === 'TransactionConfirmed');

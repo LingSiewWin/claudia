@@ -4,6 +4,7 @@ export * from './hash';
 export * from './decision';
 export * from './ed25519';
 export * from './proposal';
+export * from './evidence-anchor';
 export * from './address';
 // signAuthorization is deliberately not re-exported: issueAuthorization is the only public signing path.
 export {

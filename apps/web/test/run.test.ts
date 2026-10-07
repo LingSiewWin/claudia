@@ -292,6 +292,38 @@ describe('REPLAY anchor read from Cardano', () => {
     expect(anchor).toEqual({ seq: last.seq, head: last.hash });
     expect(replayPlan(events, anchor, true, STAGE)).toMatchObject({ verdict: 'verified', banner: REPLAY_VERIFIED });
   });
+  it('treats an unsigned closing transaction as no closing anchor', async () => {
+    const events = stage();
+    const { built } = settlement(events, 'last');
+    const unsigned = async (h: string) => {
+      const tx = structuredClone(recorded.koios[h] ?? null);
+      if (tx && h === closingTx()) {
+        const meta = { ...(tx.metadata?.['1694'] as object) } as { signature?: string };
+        delete meta.signature;
+        tx.metadata = { '1694': meta };
+      }
+      return tx;
+    };
+    expect(await readAnchor(events, unsigned, closingTx())).toEqual({
+      seq: built.payload.log_head.seq,
+      head: built.payload.log_head.hash,
+    });
+  });
+  it('treats an invalid closing-anchor signature as no closing anchor', async () => {
+    const events = stage();
+    const { built } = settlement(events, 'last');
+    const bad = async (h: string) => {
+      const tx = structuredClone(recorded.koios[h] ?? null);
+      if (tx && h === closingTx()) {
+        tx.metadata = { '1694': { ...(tx.metadata?.['1694'] as object), signature: '00'.repeat(64) } };
+      }
+      return tx;
+    };
+    expect(await readAnchor(events, bad, closingTx())).toEqual({
+      seq: built.payload.log_head.seq,
+      head: built.payload.log_head.hash,
+    });
+  });
   it('treats a bare hash as no anchor', async () => {
     const events = stage();
     const { tx, built } = settlement(events, 'last');

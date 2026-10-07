@@ -25,7 +25,8 @@ import {
 // Raw signer: @authority/core deliberately exports only issueAuthorization. Fixtures need the raw one to forge the
 // out-of-policy authorizations that the Attack Lab's stolen-engine-key runs simulate. Never imported by shipped code.
 import { signAuthorization } from '../../../packages/core/src/authorization';
-import { type EthReceipt, type KoiosTx, MANDATE_TOKEN_HEX, type PlutusJson } from '../lib/chain';
+import { signEvidenceAnchor } from '../../../packages/core/src/evidence-anchor';
+import { type EthReceipt, type KoiosTx, MANDATE_TOKEN_HEX } from '../lib/chain';
 import type {
   ApprovalView,
   AttackId,
@@ -382,11 +383,39 @@ const headOf = (run: Run): LogHead => {
   return { seq: last.seq, hash: last.hash };
 };
 
+function mandateAnchorInput(s: Setup, m: Mandate): KoiosTx['reference_inputs'][number] {
+  const l = s.limits;
+  return {
+    payment_addr: { bech32: '', cred: s.mandateRef },
+    asset_list: [{ policy_id: s.mandateRef, asset_name: MANDATE_TOKEN_HEX, quantity: '1' }],
+    inline_datum: {
+      bytes: null,
+      value: {
+        constructor: 0,
+        fields: [
+          { bytes: mandateHash(m) },
+          { int: m.version },
+          { constructor: 0, fields: [] },
+          { bytes: pk(s.engineSk) },
+          { bytes: CFO_TEST },
+          { bytes: ASSET.policy },
+          { bytes: ASSET.name },
+          { int: Number(l.autonomous_limit) },
+          { int: Number(l.hard_cap) },
+          { int: Number(l.daily_cap) },
+          { int: Number(l.treasury_minimum) },
+          { int: Date.parse(m.validity.expires_at) },
+        ],
+      },
+    },
+  };
+}
+
 /** Koios tx_info for a transaction that only carries metadata label 1694. */
-const metadataTx = (tx: string, height: number, metadata: Record<string, unknown>): KoiosTx => ({
+const metadataTx = (tx: string, height: number, metadata: Record<string, unknown>, refs: KoiosTx['reference_inputs'] = []): KoiosTx => ({
   tx_hash: tx,
   block_height: height,
-  reference_inputs: [],
+  reference_inputs: refs,
   outputs: [],
   plutus_contracts: [],
   metadata: { '1694': metadata },
@@ -406,11 +435,12 @@ function settle(run: Run, actionId: string, rec: AuthorizationRecord, v: Vault):
 }
 
 /** Closing anchor: one transaction per finished run whose metadata 1694 commits the head at the run's last event. */
-function close(run: Run) {
+function close(run: Run, s: Setup, m: Mandate) {
   const tx = txid(`close:${run.id}`);
   const head = headOf(run);
+  const signature = signEvidenceAnchor(run.id, head.seq, head.hash, s.engineSk);
   block += 1;
-  out.koios[tx] = metadataTx(tx, block, { log_head: head });
+  out.koios[tx] = metadataTx(tx, block, { log_head: head, signature }, [mandateAnchorInput(s, m)]);
   out.anchors[run.id] = { tx_hash: tx, ...head };
 }
 
@@ -466,34 +496,10 @@ function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRec
     settled_tx: settled.tx,
     created_at: new Date(run.t).toISOString(),
   });
-  const l = s.limits;
-  const anchorDatum: PlutusJson = {
-    constructor: 0,
-    fields: [
-      { bytes: mandateHash(m) },
-      { int: m.version },
-      { constructor: 0, fields: [] },
-      { bytes: pk(s.engineSk) },
-      { bytes: CFO_TEST },
-      { bytes: ASSET.policy },
-      { bytes: ASSET.name },
-      { int: Number(l.autonomous_limit) },
-      { int: Number(l.hard_cap) },
-      { int: Number(l.daily_cap) },
-      { int: Number(l.treasury_minimum) },
-      { int: Date.parse(m.validity.expires_at) },
-    ],
-  };
   out.koios[settled.tx] = {
     tx_hash: settled.tx,
     block_height: settled.block,
-    reference_inputs: [
-      {
-        payment_addr: { bech32: '', cred: s.mandateRef },
-        asset_list: [{ policy_id: s.mandateRef, asset_name: MANDATE_TOKEN_HEX, quantity: '1' }],
-        inline_datum: { bytes: null, value: anchorDatum },
-      },
-    ],
+    reference_inputs: [mandateAnchorInput(s, m)],
     outputs: [
       {
         payment_addr: { bech32: rec.fields.recipient, cred: '' },
@@ -588,7 +594,7 @@ function mandateView(s: Setup, m: Mandate, v: Vault, status: 'active' | 'revoked
     const settled = settle(run, k.action.id, rec, v);
     prove(run, M001, m, k, rec, settled, ++n);
   }
-  close(run);
+  close(run, M001, m);
   out.logs[run.id] = run.events;
   out.mandates['M-001'] = mandateView(M001, m, v);
   // keep only the approval that is still pending in a fresh inbox (case 2, before the CFO acted)
@@ -694,7 +700,7 @@ for (const attack of LAB_ATTACKS) {
     }
   }
   // run-lab-replay keeps no closing anchor: it is verified only through its own settlement's head.
-  if (attack !== 'replay') close(run);
+  if (attack !== 'replay') close(run, MLAB, m);
   out.logs[run.id] = run.events;
   labVault = v;
 }

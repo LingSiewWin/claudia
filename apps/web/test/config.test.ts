@@ -15,4 +15,17 @@ describe('config defaults', () => {
     expect(config.stageMandateId).toBe('M-001');
     expect(config.stageRunId).toBe('run-stage-0001');
   });
+
+  it('names the Vercel relay when Koios has no public URL', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KOIOS_URL', '');
+    const { dataSource } = await import('../lib/config');
+    expect(dataSource.cardano).toBe('Koios (relayed through Vercel)');
+  });
+
+  it('names the public Koios host when a direct URL is set', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KOIOS_URL', 'https://preprod.koios.rest/api/v1');
+    const { dataSource } = await import('../lib/config');
+    expect(dataSource.cardano).toBe('Koios (direct, preprod.koios.rest)');
+  });
 });
+
