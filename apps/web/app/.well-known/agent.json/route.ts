@@ -26,6 +26,8 @@ export function GET(request: Request) {
         unit: 'lovelace',
         display: '5 ADA',
         scheme: 'cardano-escrow',
+        schemes: ['cardano-escrow@cardano-preprod', 'exact@cardano:preprod'],
+        standard: 'x402 exact scheme on Cardano, assetTransferMethod script (seller-declared escrow)',
         transport: 'x402 v2 (PAYMENT-REQUIRED, PAYMENT-SIGNATURE, PAYMENT-RESPONSE)',
         refund: 'approved or declined as a reasonable ask',
         capture: 'declined as frivolous, paid to an unspendable sink',

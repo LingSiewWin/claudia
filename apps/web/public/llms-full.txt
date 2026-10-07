@@ -106,9 +106,26 @@ An ESCALATE that wants execution is priced before any human sees it. The transpo
       "payTo": "addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f",
       "maxTimeoutSeconds": 3600,
       "extra": { "...": "EscalationPrice, below" }
+    },
+    {
+      "scheme": "exact",
+      "network": "cardano:preprod",
+      "amount": "5000000",
+      "asset": "lovelace",
+      "payTo": "addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f",
+      "maxTimeoutSeconds": 3600,
+      "extra": {
+        "assetTransferMethod": "script",
+        "scriptHash": "03fb014855114c2e0def436d15bb36c2ffadefa59da6afabad8a4137",
+        "confirmationPolicy": { "l1Confirmations": 0 },
+        "escalation": { "...": "EscalationPrice, below" },
+        "datum": "<inline datum CBOR, present when the check body carries bond_refund_address>"
+      }
     }
   ]
 }
+
+The second entry is the official x402 Cardano `exact` scheme (`@x402/cardano`): the bond is a lock in a seller-declared script. A standard client answers with `PAYMENT-SIGNATURE` `{ "x402Version": 2, "accepted": <that entry>, "payload": { "transaction": "<base64 signed, unbroadcast tx>", "nonce": "<txHash>#<index>" } }`; the API submits the transaction and verifies the escrow UTxO on chain. Include `bond_refund_address` (a key address) in the check body to receive a complete `extra.datum`.
 ```
 
 `PAYMENT-SIGNATURE` (retry):
