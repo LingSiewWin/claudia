@@ -10,10 +10,10 @@ const LOCAL_FILE = fileURLToPath(new URL('../registration.local.json', import.me
 const ENV_FILE = fileURLToPath(new URL('../../../.env', import.meta.url));
 const MPS_RELEASE = '0.29.0 (71455701ac22c3380c50da54089e1b7363f6825d)';
 const TEST_USDM_UNIT = '16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde0014df10745553444d';
+// The registry caps description at 250 characters (MPS 0.29.0 validation).
 const LISTING =
-  'Agents pay to interrupt a named human. Send the action your agent wants to take; get back ALLOW, ESCALATE or DENY with a decision brief ' +
-  '(what, why, verified facts, why a human, what will happen). On ESCALATE you get the exact bond price and endpoint to reach the human. ' +
-  'Reasonable asks are refunded; only the human signature moves funds.';
+  'Agents pay to interrupt a named human. Send the action your agent wants to take; get ALLOW, ESCALATE or DENY with a decision brief. ' +
+  'On ESCALATE you get the exact bond price and endpoint to reach the human. Only the human signature moves funds.';
 
 // Masumi's published Preprod Web3CardanoV2 defaults (payment-core config.ts at release 0.29.0). The service derives
 // the escrow address from these; `seed` refuses a source whose address differs.

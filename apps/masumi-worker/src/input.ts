@@ -2,7 +2,9 @@ import * as z from 'zod';
 
 export const MAX_INPUT_BYTES = 16_384;
 export const MAX_INPUT_DEPTH = 32;
-export const DEFAULT_MANDATE_ID = 'M-001';
+// Mandate used for plain-English Tasks and the /input_schema default. M-001 is the product mandate; set
+// MASUMI_DEFAULT_MANDATE_ID=M-LAB while only the lab mandate is deployed (its engine key goes in AUTHORITY_ENGINE_PUBLIC_KEY).
+export const DEFAULT_MANDATE_ID = process.env.MASUMI_DEFAULT_MANDATE_ID?.trim() || 'M-001';
 
 export type AuthorityRequest =
   | { mandate_id: string; proposal: { action: Record<string, unknown>; agent_signature: string | null } }
