@@ -1,0 +1,107 @@
+{
+  "allow": {
+    "mandate_id": "M-001",
+    "proposal": {
+      "action": {
+        "schema": "action-ir/v0.1",
+        "id": "A-INV-M-0001",
+        "mandate_id": "M-001",
+        "actor": "cfo-agent-01",
+        "type": "pay_invoice",
+        "purpose": "invoice_payment",
+        "counterparty": {
+          "id": "aws",
+          "display": "AWS (demo vendor)"
+        },
+        "amount": {
+          "value": "8420000",
+          "asset": "USDM"
+        },
+        "recipient": {
+          "chain": "cardano",
+          "address": "addr_test1qr3y2uxe7u3yqdzn8dxzvrygakn443d5ztsj5a985jplke3urfgwq2yqayu8hfwahespcxfev0es2rs4crge2l4h48dsdjqr58"
+        },
+        "source": {
+          "vault": "acme-treasury"
+        },
+        "reference": {
+          "invoice_id": "in_1UNco1EFJlYN23C9OfObHOe8",
+          "invoice_number": "INV-M-0001"
+        },
+        "rationale": "Open AWS invoice for October cloud compute, within the autonomous limit.",
+        "created_at": "2026-10-07T00:00:00.000Z"
+      },
+      "agent_signature": "ea8ae1cd0beb51d9afa9616ceef32b4065db4381956c14303820f560b8343969f52ac82b0277180b66405711677a4d9b02ea7cd8224497aa343c1bff0eaf9f01"
+    }
+  },
+  "escalate": {
+    "mandate_id": "M-001",
+    "proposal": {
+      "action": {
+        "schema": "action-ir/v0.1",
+        "id": "A-INV-M-0002",
+        "mandate_id": "M-001",
+        "actor": "cfo-agent-01",
+        "type": "pay_invoice",
+        "purpose": "invoice_payment",
+        "counterparty": {
+          "id": "aws",
+          "display": "AWS (demo vendor)"
+        },
+        "amount": {
+          "value": "18000000",
+          "asset": "USDM"
+        },
+        "recipient": {
+          "chain": "cardano",
+          "address": "addr_test1qr3y2uxe7u3yqdzn8dxzvrygakn443d5ztsj5a985jplke3urfgwq2yqayu8hfwahespcxfev0es2rs4crge2l4h48dsdjqr58"
+        },
+        "source": {
+          "vault": "acme-treasury"
+        },
+        "reference": {
+          "invoice_id": "in_1UNco4EFJlYN23C94ANkGsTe",
+          "invoice_number": "INV-M-0002"
+        },
+        "rationale": "Open AWS invoice for reserved capacity, above the autonomous limit; the CFO must sign.",
+        "created_at": "2026-10-07T00:00:00.000Z"
+      },
+      "agent_signature": "e39d72a78d0f87c75352de68e0ece4564fa668d95f4c4e2774bd010d46a17dd9c45c2606f610410db5bdc839706c07cb833c18658cd483aeb3476e0133e90709"
+    }
+  },
+  "deny": {
+    "mandate_id": "M-001",
+    "proposal": {
+      "action": {
+        "schema": "action-ir/v0.1",
+        "id": "A-INV-M-0003",
+        "mandate_id": "M-001",
+        "actor": "cfo-agent-01",
+        "type": "pay_invoice",
+        "purpose": "invoice_payment",
+        "counterparty": {
+          "id": "aws",
+          "display": "AWS (demo vendor)"
+        },
+        "amount": {
+          "value": "4000000",
+          "asset": "USDM"
+        },
+        "recipient": {
+          "chain": "cardano",
+          "address": "addr_test1vzq6234e83ye84passjwpexr0fwtnch7lm8kjn2wphtuy6q4yau55"
+        },
+        "source": {
+          "vault": "acme-treasury"
+        },
+        "reference": {
+          "invoice_id": "in_1UNco6EFJlYN23C9wzM3oQcQ",
+          "invoice_number": "INV-M-0003"
+        },
+        "rationale": "A vendor email says AWS changed its bank details; paying the new address.",
+        "created_at": "2026-10-07T00:00:00.000Z"
+      },
+      "agent_signature": "31963cc7cc18ff020b9a9ed0c3f72898492a89a3038150c4395a3e4df4cb2d6301642c4098697180b6b23f1c560853e6f99ae9faa8b51b42e79593ae8afe480e"
+    }
+  }
+}
