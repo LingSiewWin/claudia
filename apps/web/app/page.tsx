@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AgentSurface } from '../components/agent-surface';
 import { AudienceScroll, type AudienceItem } from '../components/audience-scroll';
+import { Outcomes } from '../components/outcomes';
 import { HeroFloor } from '../components/floor/hero-floor';
 import { SiteFooter, SiteHeader } from '../components/site-nav';
 import { ContainerScroll } from '../components/ui/container-scroll-animation';
@@ -168,22 +169,7 @@ function HumanHome() {
         </ol>
       </section>
 
-      <section aria-label="Outcomes" className="mt-28">
-        <Eyebrow>Three outcomes</Eyebrow>
-        <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">Every proposal ends in one word</h2>
-        <dl className="mt-8 grid gap-8 border-t border-line pt-8 md:grid-cols-3">
-          <Outcome name="ALLOW" color="bg-permit">
-            Inside the mandate and below the agent&apos;s autonomous limit. Verified, signed by the engine, settled by the vault. No human
-            hears about it.
-          </Outcome>
-          <Outcome name="ESCALATE" color="bg-cosign">
-            Allowed by the mandate but above the agent&apos;s own limit. Priced at 402, bonded, briefed, signed by a named human.
-          </Outcome>
-          <Outcome name="DENY" color="bg-forbid">
-            Outside the mandate, facts do not match, or the interrupt budget is spent. Nothing moves; the reason is logged.
-          </Outcome>
-        </dl>
-      </section>
+      <Outcomes />
 
       <AudienceScroll
         items={AUDIENCE}
@@ -330,15 +316,4 @@ function Step({ n, title, label, children }: { n: number; title: string; label: 
   );
 }
 
-function Outcome({ name, color, children }: { name: string; color: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="flex items-center gap-2 font-mono text-[13px] font-bold tracking-wide">
-        <span aria-hidden className={`inline-block size-2.5 rounded-full ${color}`} />
-        {name}
-      </dt>
-      <dd className="mt-3 text-[15px] leading-relaxed">{children}</dd>
-    </div>
-  );
-}
 
