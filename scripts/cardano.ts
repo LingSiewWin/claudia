@@ -2,7 +2,7 @@
 // Usage: pnpm --filter @authority/scripts cardano <keys | connect | fund | deploy <M-001|M-LAB> | status <M-001|M-LAB>>
 // M-001 admin transactions are signed by the human in Lace (CIP-30) on a local page; M-LAB is signed here.
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import {
+import { awaitIndexed,
   type AnchorDatum,
   type Chain,
   type Deployment,
@@ -153,6 +153,8 @@ async function run(chain: Chain, id: string, header: Record<string, unknown>, st
   const hash = await submit(chain, await signer.sign(step, unsigned, plan));
   if (hash !== entry.tx_hash) throw new Error(`${step}: submitted ${hash}, built ${entry.tx_hash}`);
   await awaitTx(chain, hash);
+  // The next step snapshots the signer's wallet: wait until its change output is indexed, or it would respend the inputs.
+  await awaitIndexed(chain, signer.address, hash);
   entry.confirmed = true;
   writeManifest(id, header, steps);
   return hash;

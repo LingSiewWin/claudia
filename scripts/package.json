@@ -9,7 +9,9 @@
     "cardano:lab": "tsx cardano-lab.ts",
     "typecheck": "tsc -p tsconfig.json",
     "bond": "tsx bond-demo.ts",
-    "fund": "tsx fund-split.ts"
+    "fund": "tsx fund-split.ts",
+    "split-self": "tsx split-self.ts",
+    "send": "tsx send.ts"
   },
   "dependencies": {
     "@authority/cardano": "workspace:*",

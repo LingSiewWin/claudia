@@ -94,6 +94,20 @@ export async function awaitTx(chain: Chain, txHash: string, timeoutMs = 600_000)
   }
 }
 
+/**
+ * Waits until the address UTxO index shows an output of txHash at address. Blockfrost confirms a tx before its
+ * address index catches up; a snapshot taken in between lists spent inputs and misses the change.
+ */
+export async function awaitIndexed(chain: Chain, address: string, txHash: string, timeoutMs = 120_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const utxos = await chain.provider.fetchAddressUTxOs(address);
+    if (utxos.some((u) => u.input.txHash === txHash)) return;
+    if (Date.now() > deadline) throw new Error(`awaitIndexed ${txHash}: no output at ${address} after ${timeoutMs} ms`);
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+}
+
 export async function tipSlot(chain: Chain): Promise<number> {
   return Number((await chain.provider.fetchLatestBlock()).slot);
 }
