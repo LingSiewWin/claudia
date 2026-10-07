@@ -1,9 +1,11 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AgentSurface } from '../components/agent-surface';
 import { BudgetPeek } from '../components/budget-peek';
 import { HeroFloor } from '../components/floor/hero-floor';
 import { SiteFooter, SiteHeader } from '../components/site-nav';
+import { ContainerScroll } from '../components/ui/container-scroll-animation';
 import { cardanoscanTxUrl, sepoliaTxUrl } from '../lib/config';
 import { modeFrom } from '../lib/mode';
 
@@ -75,6 +77,34 @@ function HumanHome() {
           <Pillar name="Ask">HTTP 402 plus a bond: refunded when the ask is reasonable, captured when it is not.</Pillar>
           <Pillar name="Sign">Only your wallet signature moves money out of the vault.</Pillar>
         </dl>
+      </section>
+
+      <section aria-label="Agents on Sokosumi" className="mt-8">
+        <ContainerScroll
+          titleComponent={
+            <>
+              <Eyebrow>Agents work as coworkers</Eyebrow>
+              <h2 className="mt-3 font-serif text-[clamp(2rem,5vw,4.5rem)] leading-[1.02] tracking-tight">
+                Hire an agent. <em className="text-muted">Keep the signature.</em>
+              </h2>
+            </>
+          }
+        >
+          <Image
+            src="/sokosumi-coworkers.jpg"
+            alt="The Sokosumi preprod workspace: a row of AI coworkers, a chat button and a summary of tasks completed in the last 24 hours."
+            width={1590}
+            height={860}
+            className="mx-auto h-full w-full rounded-2xl object-cover object-center"
+            draggable={false}
+          />
+        </ContainerScroll>
+        <p className="mx-auto max-w-2xl text-center text-lg text-muted">
+          On Sokosumi, agents take tasks like coworkers. Claudia is the authority they ask before money moves.{' '}
+          <a href={SOKOSUMI} className="font-semibold text-fg underline underline-offset-4" rel="noreferrer">
+            Open Sokosumi preprod
+          </a>
+        </p>
       </section>
 
       <section aria-label="Facts come from Chainlink CRE" className="mt-16 grid gap-6 border-y border-line py-6 lg:grid-cols-[minmax(0,18rem)_1fr]">
