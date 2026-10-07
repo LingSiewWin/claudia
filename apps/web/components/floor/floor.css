@@ -1,29 +1,43 @@
 /* The authority floor: palette, faces, and the only motion on the public pages. Every move is driven by a reducer
    state change (a crate's transform, a class on a station); nothing here runs on a timer of its own. */
 .floor {
-  --paper: #eef0ec;
-  --paper-2: #e2e6e0;
-  --slab: #d9ded7;
-  --slab-side: #c3c9c1;
-  --lane: rgb(22 32 28 / 0.22);
-  --beam: #1fa3a3;
-  --glass: rgb(255 255 255 / 0.72);
-  --glass-line: rgb(22 32 28 / 0.1);
+  --paper: var(--mist);
+  --paper-2: #f1e9e0;
+  --slab: #ece3d9;
+  --slab-side: #d6cbbf;
+  --sand: #d8c3a5;
+  --warm-grey: #c9c0b5;
+  --lane: rgb(24 80 121 / 0.28);
+  --beam: var(--accent-4);
+  --glass: rgb(255 255 255 / 0.74);
+  --glass-line: rgb(24 80 121 / 0.12);
+  --floor-ink: #2a3f52;
+  /* The floor is always a lit paper model, also on the navy REPLAY page: its overlays keep the light tokens. */
+  --fg: var(--floor-ink);
+  --heading: var(--ink);
+  --muted: #5e7387;
+  --line: #e3dcd3;
+  --raised: #ffffff;
+  --permit: #237a5e;
+  --cosign: #8c6420;
+  --forbid: #b3463a;
+  --btn-bg: var(--ink);
+  --btn-fg: var(--mist);
   position: relative;
   overflow: hidden;
   border-radius: 18px;
   background:
-    radial-gradient(120% 80% at 10% 0%, #f7f8f5 0%, transparent 55%),
-    radial-gradient(90% 70% at 100% 100%, #dfe4de 0%, transparent 60%),
+    radial-gradient(120% 80% at 10% 0%, #fffdf9 0%, transparent 55%),
+    radial-gradient(90% 70% at 100% 100%, #e9dfd3 0%, transparent 60%),
     linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
-  color: var(--ink);
+  color: var(--floor-ink);
 }
 .floor::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: repeating-linear-gradient(0deg, rgb(22 32 28 / 0.025) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgb(22 32 28 / 0.025) 0 1px, transparent 1px 28px);
+  background-image: repeating-linear-gradient(0deg, rgb(24 80 121 / 0.035) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgb(24 80 121 / 0.035) 0 1px, transparent 1px 28px);
   mask-image: radial-gradient(80% 70% at 50% 50%, #000 30%, transparent 100%);
 }
 .floor-svg {
@@ -40,7 +54,7 @@
   fill: var(--slab-side);
 }
 .floor-slab-side.r {
-  fill: color-mix(in srgb, var(--slab-side) 80%, #000 20%);
+  fill: color-mix(in srgb, var(--slab-side) 82%, #185079 18%);
 }
 .floor-lane {
   fill: none;
@@ -49,7 +63,7 @@
   stroke-dasharray: 4 6;
 }
 .floor-shadow {
-  fill: rgb(22 32 28 / 0.18);
+  fill: rgb(24 80 121 / 0.16);
   filter: url(#floor-blur);
 }
 .floor-label {
@@ -57,10 +71,10 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  fill: #5b6662;
+  fill: #5e7387;
 }
 .floor-wire {
-  stroke: #46524d;
+  stroke: #2a3f52;
   stroke-width: 2;
 }
 
@@ -69,56 +83,56 @@
   fill: var(--top);
 }
 .floor-box .f-left {
-  fill: color-mix(in srgb, var(--top) 72%, #1a2420 28%);
+  fill: color-mix(in srgb, var(--top) 70%, #0f2f49 30%);
 }
 .floor-box .f-right {
-  fill: color-mix(in srgb, var(--top) 86%, #1a2420 14%);
+  fill: color-mix(in srgb, var(--top) 85%, #0f2f49 15%);
 }
 .st-agent {
-  --top: #9fb4cf;
+  --top: var(--accent-1);
 }
 .st-gate {
-  --top: #2b3a34;
+  --top: var(--ink);
 }
 .st-tower {
-  --top: #8fd1d1;
+  --top: var(--accent-2);
 }
 .st-escrow {
-  --top: #e7c77a;
+  --top: var(--sand);
 }
 .st-escrow.locked {
-  --top: #d9a93c;
+  --top: #c9a16a;
 }
 .st-bond {
-  --top: #f1d58f;
+  --top: #e8c77f;
 }
 .st-sink {
-  --top: #aeb3af;
+  --top: var(--warm-grey);
 }
 .st-desk {
-  --top: #d7b28e;
+  --top: var(--sand);
 }
 .st-desk.chair {
-  --top: #8f6a4c;
+  --top: #8a7257;
 }
 .st-vault {
-  --top: #3f8f6a;
+  --top: var(--accent-4);
 }
 .st-vault.rejected {
-  --top: #9e5a52;
+  --top: #b07068;
 }
 .st-ledger {
-  --top: #c9cfc8;
+  --top: var(--accent-3);
 }
 .st-receipt {
-  --top: #fbfbf8;
+  --top: #fffaf4;
 }
 .floor-lock {
-  fill: #5a4410;
+  fill: #5c4a2a;
 }
 .floor-door {
-  fill: #27573f;
-  stroke: #1b3d2b;
+  fill: #185079;
+  stroke: #0f2f49;
   stroke-width: 1;
   transition: transform 700ms var(--ease-settle);
 }
@@ -134,7 +148,7 @@
 }
 
 .floor-lamp {
-  fill: #9aa39f;
+  fill: #b8c4cd;
   stroke: #ffffff;
   stroke-width: 1.5;
   transition: fill 300ms var(--ease-settle);
@@ -177,11 +191,11 @@
     transform 500ms var(--ease-settle);
 }
 .floor-card rect {
-  fill: #fffdf6;
-  stroke: rgb(22 32 28 / 0.25);
+  fill: #fffdf8;
+  stroke: rgb(24 80 121 / 0.3);
 }
 .floor-card line {
-  stroke: rgb(22 32 28 / 0.35);
+  stroke: rgb(24 80 121 / 0.4);
   stroke-width: 2;
   stroke-linecap: round;
 }
@@ -203,7 +217,7 @@
 }
 
 .floor-crate {
-  --top: #f3f4f1;
+  --top: #f6efe6;
   cursor: default;
   transition: transform 900ms var(--ease-settle);
 }
@@ -211,20 +225,20 @@
   cursor: pointer;
 }
 .floor-crate .crate-shadow {
-  fill: rgb(22 32 28 / 0.22);
+  fill: rgb(24 80 121 / 0.2);
   filter: url(#floor-blur);
 }
 .floor-crate .crate-tape {
-  fill: rgb(22 32 28 / 0.35);
+  fill: rgb(24 80 121 / 0.35);
 }
 .floor-crate.tone-permit {
-  --top: #b9e2cb;
+  --top: #bfe0d2;
 }
 .floor-crate.tone-cosign {
-  --top: #f3dc9c;
+  --top: #f0dcab;
 }
 .floor-crate.tone-forbid {
-  --top: #efb2ab;
+  --top: #ecb9b0;
 }
 .floor-crate.selected .f-top {
   stroke: var(--ink);
@@ -236,9 +250,9 @@
   background: var(--glass);
   border: 1px solid var(--glass-line);
   border-radius: 12px;
-  box-shadow: 0 8px 30px rgb(22 32 28 / 0.08);
+  box-shadow: 0 8px 30px rgb(24 80 121 / 0.1);
   backdrop-filter: blur(10px);
-  color: var(--ink);
+  color: var(--floor-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {
