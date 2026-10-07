@@ -1,27 +1,7 @@
-/** The landing page has two readers: a human (the floor) and an agent (the files, verbatim). */
+/** The landing page has two readers: a human (the floor) and an agent (file links, a curl line, five facts). */
 export type SiteMode = 'human' | 'agent';
 
 export const modeFrom = (mode: string | string[] | undefined): SiteMode => (mode === 'agent' ? 'agent' : 'human');
-
-/**
- * Split a Markdown file into copyable blocks at its H2 headings. The blocks concatenate back to the exact file:
- * nothing is trimmed, reflowed or escaped, so what the agent page shows is byte for byte what /llms*.txt serves.
- */
-export function splitBlocks(text: string): string[] {
-  const blocks: string[] = [];
-  let start = 0;
-  const re = /^## /gm;
-  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
-    if (m.index === 0) continue;
-    blocks.push(text.slice(start, m.index));
-    start = m.index;
-  }
-  blocks.push(text.slice(start));
-  return blocks.filter((b) => b.length > 0);
-}
-
-/** First line of a block (its heading) as the copy button's label. */
-export const blockTitle = (block: string) => (block.split('\n')[0] ?? '').replace(/^#+\s*/, '') || 'block';
 
 const FETCHERS = /GPTBot|ClaudeBot|PerplexityBot|Google-Extended|anthropic-ai|Claude-Web|OAI-SearchBot|Bytespider|CCBot/i;
 

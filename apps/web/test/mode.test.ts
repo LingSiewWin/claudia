@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { blockTitle, modeFrom, splitBlocks, wantsPlain } from '../lib/mode';
-
-const pub = (name: string) => readFileSync(new URL(`../public/${name}`, import.meta.url), 'utf8');
+import { modeFrom, wantsPlain } from '../lib/mode';
 
 describe('reader mode', () => {
   it('is human unless the URL says agent', () => {
@@ -13,17 +10,6 @@ describe('reader mode', () => {
     expect(modeFrom('AGENT')).toBe('human');
   });
 
-  it('splits both served files into H2 blocks that concatenate back byte for byte', () => {
-    for (const name of ['llms.txt', 'llms-full.txt']) {
-      const text = pub(name);
-      const blocks = splitBlocks(text);
-      expect(blocks.length, name).toBeGreaterThan(3);
-      expect(blocks.join(''), name).toBe(text);
-      expect(blocks.slice(1).every((b) => b.startsWith('## ')), name).toBe(true);
-    }
-    expect(blockTitle('## Bond rules\n\n- a')).toBe('Bond rules');
-    expect(blockTitle('# Claudia\n\n> x')).toBe('Claudia');
-  });
 });
 
 describe('content negotiation on /', () => {

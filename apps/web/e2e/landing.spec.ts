@@ -34,7 +34,7 @@ test('landing states the thesis, replays a real payment, and points agents and h
   await page.screenshot({ path: 'test-results/landing.png', fullPage: true });
 });
 
-test('the header switch opens the agent reader: the served files verbatim, raw links, a curl line; the footer keeps GitHub and Sokosumi', async ({ page, request }) => {
+test('the header switch opens the agent reader: four file links, a curl line, five facts, nothing inlined; the footer keeps GitHub and Sokosumi', async ({ page }) => {
   await page.goto('/');
   const tabs = page.getByRole('tablist', { name: 'Reader' });
   await expect(tabs.getByRole('tab', { name: 'Human' })).toHaveAttribute('aria-selected', 'true');
@@ -42,17 +42,17 @@ test('the header switch opens the agent reader: the served files verbatim, raw l
   await expect(page).toHaveURL(/\?mode=agent$/);
   await expect(tabs.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true');
   const surface = page.getByTestId('agent-surface');
-  for (const p of ['/llms.txt', '/llms-full.txt', '/.well-known/agent.json']) await expect(surface.getByRole('link', { name: p }).first()).toHaveAttribute('href', p);
+  for (const p of ['/llms.txt', '/llms-full.txt', '/.well-known/agent.json', '/openapi.json']) await expect(surface.getByRole('link', { name: p })).toHaveAttribute('href', p);
   await expect(surface).toContainText('curl -s https://claudiahq.vercel.app/llms.txt');
+  await expect(surface.getByRole('button', { name: 'Copy curl example' })).toBeVisible();
+  await expect(surface.getByRole('list', { name: 'Facts' }).getByRole('listitem')).toHaveCount(5);
+  for (const t of ['ALLOW, ESCALATE or DENY', 'HTTP 402', '5 ADA bond', '1 tUSDM', 'POST /v1/authority/check']) await expect(surface).toContainText(t);
+  // The files are not dumped inline: a link opens the raw file.
+  await expect(surface.locator('pre')).toHaveCount(0);
+  await expect(surface).not.toContainText('# Claudia');
   await expect(page.getByTestId('floor')).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Built with' })).toHaveCount(0);
-  for (const path of ['/llms.txt', '/llms-full.txt']) {
-    const served = await (await request.get(path)).text();
-    const shown = (await page.locator(`[data-testid=agent-file][data-path="${path}"] pre`).allTextContents()).join('');
-    expect(shown, path).toBe(served);
-  }
-  expect(await surface.getByRole('button', { name: /^Copy / }).count()).toBeGreaterThan(10);
   await page.screenshot({ path: 'test-results/landing-agent.png', fullPage: true });
   await expect(page.locator('footer').getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/LingSiewWin/claudia');
   await expect(page.locator('footer').getByRole('link', { name: 'Sokosumi' })).toHaveAttribute('href', 'https://preprod.sokosumi.com/');
