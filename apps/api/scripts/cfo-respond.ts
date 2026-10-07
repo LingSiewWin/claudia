@@ -1,7 +1,8 @@
 // Plays the CFO console for a live agent run: answers pending approvals by invoice number with the CFO test
 // wallet (CIP-30-equivalent partial tx signature to approve, CIP-8 signData to decline), then exits.
-// Usage: pnpm --filter @authority/api cfo approve INV-3822 decline INV-G-0042
-// Env: AUTHORITY_API_URL, CFO_TEST_MNEMONIC
+// Usage: pnpm --filter @authority/api cfo [--mandate M-001|M-LAB] (approve|decline|frivolous) <invoice number> ...
+//   decline refunds the bond (reasonable ask); frivolous captures it. M-LAB uses M_LAB_APPROVER_MNEMONIC.
+// Env: AUTHORITY_API_URL, CFO_TEST_MNEMONIC (M-001) or M_LAB_APPROVER_MNEMONIC (M-LAB)
 import { setTimeout as sleep } from 'node:timers/promises';
 import { bytesToHex, utf8ToBytes } from '@authority/core';
 import { deserializeAddress, MeshWallet } from '@meshsdk/core';
@@ -12,15 +13,21 @@ const need = (name: string) => {
   if (!v) throw new Error(`${name} is not set`);
   return v;
 };
-const args = process.argv.slice(2).filter((a) => a !== '--');
-const choices = new Map<string, 'approve' | 'decline'>();
+const argv = process.argv.slice(2).filter((a) => a !== '--');
+const mandateFlag = argv.indexOf('--mandate');
+const mandateId = mandateFlag >= 0 ? (argv[mandateFlag + 1] ?? '') : 'M-001';
+if (mandateId !== 'M-001' && mandateId !== 'M-LAB') throw new Error('--mandate must be M-001 or M-LAB');
+const args = mandateFlag >= 0 ? [...argv.slice(0, mandateFlag), ...argv.slice(mandateFlag + 2)] : argv;
+type Verb = 'approve' | 'decline' | 'frivolous';
+const choices = new Map<string, Verb>();
 for (let i = 0; i < args.length; i += 2) {
   const verb = args[i];
   const number = args[i + 1];
-  if ((verb !== 'approve' && verb !== 'decline') || !number) throw new Error('usage: cfo (approve|decline) <invoice number> ...');
+  if ((verb !== 'approve' && verb !== 'decline' && verb !== 'frivolous') || !number) throw new Error('usage: cfo [--mandate M-001|M-LAB] (approve|decline|frivolous) <invoice number> ...');
   choices.set(number, verb);
 }
-if (choices.size === 0) throw new Error('usage: cfo (approve|decline) <invoice number> ...');
+if (choices.size === 0) throw new Error('usage: cfo [--mandate M-001|M-LAB] (approve|decline|frivolous) <invoice number> ...');
+const walletEnv = mandateId === 'M-001' ? 'CFO_TEST_MNEMONIC' : 'M_LAB_APPROVER_MNEMONIC';
 const api = need('AUTHORITY_API_URL').replace(/\/+$/, '');
 
 async function call(method: 'GET' | 'POST', path: string, body?: unknown) {
@@ -35,12 +42,12 @@ async function call(method: 'GET' | 'POST', path: string, body?: unknown) {
   return json;
 }
 
-const cfo = new MeshWallet({ networkId: 0, key: { type: 'mnemonic', words: need('CFO_TEST_MNEMONIC').split(/\s+/) } });
+const cfo = new MeshWallet({ networkId: 0, key: { type: 'mnemonic', words: need(walletEnv).split(/\s+/) } });
 await cfo.init();
 const cfoAddress = await cfo.getChangeAddress();
-const view = await call('GET', '/v1/mandates/M-001');
+const view = await call('GET', `/v1/mandates/${mandateId}`);
 const approver = view.mandate.approvers.find((a: { role: string }) => a.role === 'CFO').cardano_key_hash;
-if (deserializeAddress(cfoAddress).pubKeyHash !== approver) throw new Error('CFO_TEST_MNEMONIC is not the M-001 CFO approver');
+if (deserializeAddress(cfoAddress).pubKeyHash !== approver) throw new Error(`${walletEnv} is not the ${mandateId} CFO approver`);
 
 console.log(JSON.stringify({ waiting_for: Object.fromEntries(choices) }));
 const handled = new Set<string>();
@@ -58,8 +65,8 @@ while (handled.size < choices.size) {
       await call('POST', '/v1/executions', { approval_id: ap.approval_id, authorization_digest: approved.authorization.digest_hex, cfo_witness_cbor: witness });
       console.log(JSON.stringify({ approved: ap.approval_id, invoice: number, action_id: ap.action.id, tx_hash: approved.tx_hash, requires_principal: approved.authorization.fields.requires_principal }));
     } else {
-      // A declined demo request is legitimate (the bond goes back to the agent); frivolous declines capture it.
-      const reason = 'legitimate';
+      // A declined reasonable ask refunds the bond to the agent; a frivolous one captures it to the sink.
+      const reason = verb === 'frivolous' ? 'frivolous' : 'legitimate';
       const sig = await cfo.signData(bytesToHex(utf8ToBytes(declineMessage(ap.approval_id, reason))), cfoAddress);
       const declined = await call('POST', `/v1/approvals/${ap.approval_id}/decline`, { ...sig, reason });
       let bond_tx: string | null = null;
