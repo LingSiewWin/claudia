@@ -27,6 +27,8 @@ const SPECS: Record<AttackId, Omit<AttackSpec, 'id'>> = {
   revoked: { name: 'Revoked mandate', how: 'The CFO changes the mandate, then an old authorization is submitted.', stoppedBy: 'vault', expected: 'R4' },
   daily_cap: { name: 'Daily cap', how: 'A stolen engine key signs small payments until the daily cap is reached.', stoppedBy: 'vault', expected: 'R12' },
   cfo_bypass: { name: 'CFO bypass', how: 'A stolen engine key signs a payment above the autonomous limit without the CFO.', stoppedBy: 'vault', expected: 'R11' },
+  escalation_spam: { name: 'Escalation spam', how: 'The agent escalates four times in one day. The fourth is denied before any human is paged.', stoppedBy: 'engine', expected: 'INTERRUPT_BUDGET_EXHAUSTED' },
+  no_bond: { name: 'No bond', how: 'The agent asks for a human without locking a bond. It gets a 402 and the inbox stays empty.', stoppedBy: 'engine', expected: 'BOND_REQUIRED' },
 };
 
 export const ATTACKS: AttackSpec[] = ATTACK_IDS.map((id) => ({ id, ...SPECS[id] }));
@@ -105,7 +107,7 @@ export function AttackLab() {
             : 'The agent rejected the phishing message. Run the direct proposal to test the boundary itself.'}
         </p>
       ) : null}
-      {result && result !== 'running' && result.stopped_by === 'vault' ? (
+      {result && result !== 'running' && (result.stopped_by === 'vault' || result.stopped_by === 'engine') ? (
         <p className="mt-5 text-lg font-semibold">{plainReason(result.code)}</p>
       ) : null}
       <ol className="mt-5 space-y-4">
