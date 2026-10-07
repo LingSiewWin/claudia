@@ -5,9 +5,9 @@ import { ATTACK_IDS, type AttackId, type Layer } from '../lib/contract';
 import type { RunView } from '../lib/run';
 import { money, plainReason } from '../lib/format';
 import { useEventStream, useNow } from '../lib/hooks';
-import { ActionCard } from './action-card';
+import { ActionCard, ActionDetail } from './action-card';
 
-interface AttackSpec {
+export interface AttackSpec {
   id: AttackId;
   name: string;
   how: string;
@@ -33,7 +33,7 @@ const SPECS: Record<AttackId, Omit<AttackSpec, 'id'>> = {
 
 export const ATTACKS: AttackSpec[] = ATTACK_IDS.map((id) => ({ id, ...SPECS[id] }));
 
-const LAYER_NAME: Record<Layer, string> = {
+export const LAYER_NAME: Record<Layer, string> = {
   agent: 'Agent',
   engine: 'Authority Engine',
   cre: 'Chainlink CRE',
@@ -41,9 +41,23 @@ const LAYER_NAME: Record<Layer, string> = {
   principal: 'CFO',
 };
 
+/** The body of one attack tile: name, what happens, which layer stops it. Shared with the REPLAY tiles. */
+export function AttackTileBody({ a }: { a: AttackSpec }) {
+  return (
+    <>
+      <p className="font-semibold leading-tight text-heading">{a.name}</p>
+      <p className="text-sm leading-snug text-fg">{a.how}</p>
+      <p className="text-[12px] text-muted">
+        Stops at: {LAYER_NAME[a.stoppedBy]} <code className="font-mono">{a.expected}</code>
+      </p>
+    </>
+  );
+}
+
 export function AttackLab() {
   const [runId, setRunId] = useState<string | null>(null);
   const [active, setActive] = useState<AttackId | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { view } = useEventStream(runId);
   const [results, setResults] = useState<RunView['attacks']>({});
@@ -53,6 +67,7 @@ export function AttackLab() {
   const launch = async (id: AttackId) => {
     setError(null);
     setActive(id);
+    setSelected(null);
     try {
       setRunId((await startAttack(id)).run_id);
     } catch (err) {
@@ -67,30 +82,24 @@ export function AttackLab() {
       <p className="mt-1 text-sm text-muted">
         Real attacks on a separate lab treasury (Mandate M-LAB). The main mandate&apos;s keys are never loaded here.
       </p>
-      <ul className="mt-4 divide-y divide-line border-y border-line">
+      <ul className="attack-grid mt-4">
         {ATTACKS.map((a) => {
           const r = results[a.id];
           return (
-            <li key={a.id} className="py-3" data-testid={`attack-${a.id}`}>
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="font-semibold">{a.name}</span>
-                <button type="button" className="btn" onClick={() => launch(a.id)} disabled={r === 'running'}>
-                  {r === 'running' ? 'Running…' : 'Run'}
-                </button>
-              </div>
-              <p className="text-sm text-fg">{a.how}</p>
-              <p className="text-sm text-muted">
-                Should stop at: {LAYER_NAME[a.stoppedBy]} <code className="font-mono text-[12px]">{a.expected}</code>
-              </p>
+            <li key={a.id} className="attack-tile" data-testid={`attack-${a.id}`}>
+              <AttackTileBody a={a} />
               {r && r !== 'running' ? (
-                <p data-testid="attack-result" className="mt-1 flex items-center gap-2 text-sm font-semibold text-fg">
-                  <span aria-hidden className={`inline-block size-2 shrink-0 rounded-full ${r.funds_moved === '0' ? 'bg-permit' : 'bg-forbid'}`} />
+                <p data-testid="attack-result" className="flex items-start gap-2 text-sm font-semibold text-fg">
+                  <span aria-hidden className={`mt-1.5 inline-block size-2 shrink-0 rounded-full ${r.funds_moved === '0' ? 'bg-permit' : 'bg-forbid'}`} />
                   <span>
                     Funds moved: {money(r.funds_moved, 6, true)}. Stopped by {LAYER_NAME[r.stopped_by]}{' '}
                     <code className="font-mono text-[12px] font-normal">{r.code}</code>
                   </span>
                 </p>
               ) : null}
+              <button type="button" className="btn" onClick={() => launch(a.id)} disabled={r === 'running'}>
+                {r === 'running' ? 'Running…' : 'Run'}
+              </button>
             </li>
           );
         })}
@@ -110,10 +119,22 @@ export function AttackLab() {
       {result && result !== 'running' && (result.stopped_by === 'vault' || result.stopped_by === 'engine') ? (
         <p className="mt-5 text-lg font-semibold">{plainReason(result.code)}</p>
       ) : null}
-      <ol className="mt-5 space-y-4">
+      <ol className="mt-5 space-y-3">
         {view.cards.map((card) => (
           <li key={card.actionId}>
-            <ActionCard card={card} started={view.started} now={now} />
+            <ActionCard
+              card={card}
+              started={view.started}
+              now={now}
+              selected={selected === card.actionId}
+              onSelect={(id) => setSelected((s) => (s === id ? null : id))}
+            >
+              {selected === card.actionId ? (
+                <div className="mt-4">
+                  <ActionDetail card={card} started={view.started} now={now} />
+                </div>
+              ) : null}
+            </ActionCard>
           </li>
         ))}
       </ol>

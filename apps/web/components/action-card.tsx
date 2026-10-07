@@ -28,73 +28,115 @@ const DOT: Record<RowTone, string> = {
 };
 
 /**
- * One agent action. The face shows the business object (what, how much, where it falls on the boundary, what
- * happened). WHY? opens the technical layer: MAY? / TRUE? / ENFORCED, the authority chain, and the Protocol view.
- * `unanchored`: in REPLAY, this action has evidence after the log head committed on Cardano.
+ * The face of one agent action: what, how much, where it falls on the boundary, what happened, and two buttons.
+ * WHY? selects the card (`onSelect`); the owner shows its `ActionDetail` where it fits (the side panel on /live, or
+ * inline through `children`). `unanchored`: in REPLAY, this action has evidence after the log head committed on Cardano.
  */
 export function ActionCard({
   card,
   started,
   now,
+  index = null,
   unanchored = false,
+  selected = false,
+  onSelect,
+  children,
 }: {
   card: CardView;
   started: Started | null;
   now: number;
+  /** Position in the run, shown as a small counter. */
+  index?: { n: number; of: number } | null;
   unanchored?: boolean;
+  selected?: boolean;
+  onSelect?: (actionId: string) => void;
+  children?: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const [protocol, setProtocol] = useState(false);
   const a = card.action;
-  const auth = card.authorization;
-  const amount = a?.amount.value ?? auth?.fields.amount ?? null;
+  const amount = a?.amount.value ?? card.authorization?.fields.amount ?? null;
   const decimals = started?.limits.decimals ?? 6;
   const status = statusLine(card);
   const denied = card.state === 'DENIED';
-  const settledOrProven = card.state === 'SETTLED' || card.state === 'PROVEN';
-  const authValid = useMemo(
-    () => (auth && started ? verifyAuthorizationRecord(auth, started.engine_public_key) : null),
-    [auth, started],
-  );
 
   return (
     <article
       data-testid="action-card"
       data-state={card.state}
       data-action-id={card.actionId}
+      data-active={selected || undefined}
       data-unanchored={unanchored || undefined}
-      className={`rounded-[10px] border border-line bg-raised p-5 ${unanchored ? 'opacity-60' : ''}`}
+      className="stage-card"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h3 className="text-xl font-semibold text-fg">{a ? actionTitle(a) : 'Payment outside the mandate'}</h3>
-        <p className="text-2xl font-extrabold tabular-nums text-fg">{amount === null ? '—' : money(amount, decimals)}</p>
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0">
+          <p className="stage-index">
+            {index ? `${String(index.n).padStart(2, '0')} / ${String(index.of).padStart(2, '0')} · ` : null}
+            {a?.reference ? `${a.reference.invoice_number} · ` : null}
+            <time dateTime={card.proposedAt}>{clock(card.proposedAt)}</time>
+          </p>
+          <h3 className="mt-1 text-[22px] font-semibold leading-tight text-heading">{a ? actionTitle(a) : 'Payment outside the mandate'}</h3>
+        </div>
+        <p className="stage-amount shrink-0">{amount === null ? '—' : money(amount, decimals)}</p>
       </div>
-      <p className="mt-0.5 text-sm text-muted">
-        {a?.reference ? <span className="font-mono text-[13px]">{a.reference.invoice_number} · </span> : null}
-        {started?.delegate ?? a?.actor ?? 'agent'} · <time dateTime={card.proposedAt}>{clock(card.proposedAt)}</time>
-        {card.bond ? (
-          <span className="ml-3">
-            <BondChip bond={card.bond} now={now} />
-          </span>
-        ) : null}
-        {unanchored ? (
-          <span data-testid="not-anchored" className="ml-3 rounded-sm border border-line px-1.5 py-px text-[11px] font-bold uppercase tracking-wider text-fg">
-            not anchored
-          </span>
-        ) : null}
-      </p>
+      {card.bond || unanchored ? (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+          {card.bond ? <BondChip bond={card.bond} now={now} /> : null}
+          {unanchored ? (
+            <span data-testid="not-anchored" className="rounded-sm border border-line px-1.5 py-px text-[11px] font-bold uppercase tracking-wider text-fg">
+              not anchored
+            </span>
+          ) : null}
+        </p>
+      ) : null}
       {started ? (
-        <div className="mt-4">
+        <div className="mt-5">
           <BoundaryRail limits={started.limits} amount={amount} placed={card.evaluation !== null || card.compromisedEngine} />
         </div>
       ) : null}
 
-      <p data-testid="status" data-tone={status.tone} className="mt-4 flex items-center gap-2 font-semibold text-fg">
+      <p data-testid="status" data-tone={status.tone} className="mt-5 flex items-center gap-2 font-semibold text-fg">
         <span aria-hidden className={`inline-block size-2.5 shrink-0 rounded-full ${DOT[status.tone]}`} />
         {status.text}
       </p>
+
+      <div className="stage-actions">
+        <button type="button" onClick={() => onSelect?.(card.actionId)} aria-expanded={selected} className="btn">
+          WHY?
+        </button>
+        {card.receipt ? (
+          <Link href={`/receipt/${encodeURIComponent(card.receipt.id)}`} className="btn btn-primary">
+            PROVE
+          </Link>
+        ) : (
+          <button type="button" className="btn btn-primary" disabled title={denied ? 'Nothing to prove: no money moved' : 'PROVE after settlement'}>
+            PROVE
+          </button>
+        )}
+      </div>
+      {children}
+    </article>
+  );
+}
+
+/**
+ * Everything behind WHY?: the outcome in plain words, the Decision Brief, the agent's claim, MAY? / TRUE? / ENFORCED,
+ * the settlement steps, the authority chain, and the Protocol view.
+ */
+export function ActionDetail({ card, started, now }: { card: CardView; started: Started | null; now: number }) {
+  const [protocol, setProtocol] = useState(false);
+  const a = card.action;
+  const auth = card.authorization;
+  const decimals = started?.limits.decimals ?? 6;
+  const denied = card.state === 'DENIED';
+  const authValid = useMemo(
+    () => (auth && started ? verifyAuthorizationRecord(auth, started.engine_public_key) : null),
+    [auth, started],
+  );
+
+  return (
+    <section data-testid="technical" data-action-id={card.actionId} aria-label="How this was decided">
       {denied && card.denied ? (
-        <div data-testid="denied" className="mt-2 border-l-[3px] border-fg pl-3">
+        <div data-testid="denied" className="border-l-[3px] border-fg pl-3">
           <p className="text-fg">{plainReason(card.denied.reason)}</p>
           {card.approval?.declineReason ? <p className="text-sm text-muted">{DECLINE_REASON_TEXT[card.approval.declineReason]}</p> : null}
           {budgetExhausted(card) ? (
@@ -105,6 +147,12 @@ export function ActionCard({
           <p className="text-sm text-muted">Funds moved: {money(0n, decimals, true)}</p>
         </div>
       ) : null}
+      {a ? (
+        <p className="mt-3 text-[15px] leading-relaxed text-muted">
+          <span className="font-semibold text-fg">Why the agent wants this: </span>
+          <q className="font-serif text-[17px] italic">{a.rationale}</q>
+        </p>
+      ) : null}
       {card.approval?.brief ? (
         <details data-testid="brief-details" open={card.state === 'ESCALATED'} className="mt-3">
           <summary className="cursor-pointer text-sm font-semibold">Decision brief</summary>
@@ -114,42 +162,18 @@ export function ActionCard({
         </details>
       ) : null}
       {card.state === 'EXECUTING' ? <Progress card={card} authValid={authValid} now={now} /> : null}
-      {a ? (
-        <p className="mt-3 text-[15px] leading-relaxed text-muted">
-          <span className="font-semibold text-fg">Why the agent wants this: </span>
-          <q>{a.rationale}</q>
-        </p>
-      ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="btn">
-          WHY?
-        </button>
-        <span className="flex-1" />
-        {card.receipt ? (
-          <Link href={`/receipt/${encodeURIComponent(card.receipt.id)}`} className="btn-strong">
-            PROVE
-          </Link>
-        ) : (
-          <span className="text-sm text-muted">{denied ? 'Nothing to prove: no money moved' : 'PROVE after settlement'}</span>
-        )}
-      </div>
-
-      {open ? (
-        <section data-testid="technical" aria-label="How this was decided" className="mt-4">
-          <dl className="divide-y divide-line border-y border-line">
-            <RowLine name="MAY?" system="Authority Engine" row={mayRow(card)} testId="row-may" />
-            <RowLine name="TRUE?" system="Chainlink CRE" row={trueRow(card)} testId="row-true" />
-            <RowLine name="ENFORCED" system="Cardano Vault" row={enforcedRow(card)} testId="row-enforced" />
-          </dl>
-          {settledOrProven ? <Progress card={card} authValid={authValid} now={now} /> : null}
-          <button type="button" onClick={() => setProtocol((p) => !p)} aria-pressed={protocol} className="btn-quiet mt-4">
-            {protocol ? 'Human view' : 'Protocol view'}
-          </button>
-          {protocol ? <ProtocolView card={card} started={started} /> : <AuthorityChain card={card} started={started} />}
-        </section>
-      ) : null}
-    </article>
+      <dl className="mt-4 divide-y divide-line border-y border-line">
+        <RowLine name="MAY?" system="Authority Engine" row={mayRow(card)} testId="row-may" />
+        <RowLine name="TRUE?" system="Chainlink CRE" row={trueRow(card)} testId="row-true" />
+        <RowLine name="ENFORCED" system="Cardano Vault" row={enforcedRow(card)} testId="row-enforced" />
+      </dl>
+      {card.state === 'SETTLED' || card.state === 'PROVEN' ? <Progress card={card} authValid={authValid} now={now} /> : null}
+      <button type="button" onClick={() => setProtocol((p) => !p)} aria-pressed={protocol} className="btn-quiet mt-4">
+        {protocol ? 'Human view' : 'Protocol view'}
+      </button>
+      {protocol ? <ProtocolView card={card} started={started} /> : <AuthorityChain card={card} started={started} />}
+    </section>
   );
 }
 

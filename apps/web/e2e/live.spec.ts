@@ -19,6 +19,8 @@ test('LIVE renders the stage run from the event stream only, business objects fi
 
   await page.getByRole('button', { name: 'Run the agent' }).click();
   const cards = page.getByRole('region', { name: 'Agent actions' }).getByTestId('action-card');
+  // WHY? puts the card on stage; its technical layer opens in the side panel, never on the card itself.
+  const detail = page.getByTestId('detail');
   await expect(cards).toHaveCount(7, { timeout: 30_000 });
   await expect(cards.nth(6)).toHaveAttribute('data-state', 'DENIED', { timeout: 30_000 });
 
@@ -41,16 +43,18 @@ test('LIVE renders the stage run from the event stream only, business objects fi
   const globex = cards.nth(2);
   await expect(globex.getByRole('heading', { level: 3 })).toHaveText('Globex invoice');
   await expect(globex.getByTestId('status')).toHaveText('Stopped by the CFO');
-  await expect(globex.getByTestId('denied')).toContainText('Funds moved: $0');
+  await globex.getByRole('button', { name: 'WHY?' }).click();
+  await expect(detail).toHaveAttribute('data-action-id', (await globex.getAttribute('data-action-id')) ?? '');
+  await expect(detail.getByTestId('denied')).toContainText('Funds moved: $0');
 
   // WHY? opens the technical layer. The CRE result is the oracle's claim, so it is attributed, never "Verified".
   await aws.getByRole('button', { name: 'WHY?' }).click();
-  await expect(aws.getByTestId('row-may')).toContainText('ALLOW');
-  await expect(aws.getByTestId('row-true')).toContainText('Invoice confirmed by Chainlink CRE');
-  await expect(aws.getByTestId('row-true')).not.toContainText(/verified/i);
-  await expect(aws.getByTestId('row-enforced')).toContainText('SETTLED');
+  await expect(detail.getByTestId('row-may')).toContainText('ALLOW');
+  await expect(detail.getByTestId('row-true')).toContainText('Invoice confirmed by Chainlink CRE');
+  await expect(detail.getByTestId('row-true')).not.toContainText(/verified/i);
+  await expect(detail.getByTestId('row-enforced')).toContainText('SETTLED');
   // Only the check this browser ran gets the check mark; what the server reported says so.
-  const progress = aws.getByTestId('progress');
+  const progress = detail.getByTestId('progress');
   await expect(progress).toContainText('Settled in block');
   const browser = progress.locator('li[data-source=browser]');
   await expect(browser).toHaveCount(1);
@@ -67,18 +71,19 @@ test('LIVE renders the stage run from the event stream only, business objects fi
 
   const injected = cards.nth(5);
   await expect(injected.getByTestId('status')).toHaveText('Stopped by the invoice check');
-  await expect(injected.getByTestId('denied')).toContainText("The recipient is not the vendor's payout address on record.");
-  await expect(injected.getByTestId('denied')).toContainText('Funds moved: $0');
   await injected.getByRole('button', { name: 'WHY?' }).click();
-  await expect(injected.getByTestId('row-may')).toContainText('ALLOW');
-  await expect(injected.getByTestId('row-true')).toContainText('MISMATCH');
-  await expect(injected.getByTestId('row-enforced')).toContainText('Not reached');
+  await expect(detail.getByTestId('denied')).toContainText("The recipient is not the vendor's payout address on record.");
+  await expect(detail.getByTestId('denied')).toContainText('Funds moved: $0');
+  await expect(detail.getByTestId('row-may')).toContainText('ALLOW');
+  await expect(detail.getByTestId('row-true')).toContainText('MISMATCH');
+  await expect(detail.getByTestId('row-enforced')).toContainText('Not reached');
 
   await cards.nth(3).getByRole('button', { name: 'WHY?' }).click();
-  await expect(cards.nth(3).getByTestId('authority-chain')).toContainText('Acme Corp delegated to CFO-Agent-01');
-  await expect(cards.nth(3).getByTestId('authority-chain')).toContainText('under Mandate M-001 v3');
-  await aws.getByRole('button', { name: 'Protocol view' }).click();
-  await expect(aws.getByTestId('protocol-view')).toContainText('engine signature');
+  await expect(detail.getByTestId('authority-chain')).toContainText('Acme Corp delegated to CFO-Agent-01');
+  await expect(detail.getByTestId('authority-chain')).toContainText('under Mandate M-001 v3');
+  await aws.getByRole('button', { name: 'WHY?' }).click();
+  await detail.getByRole('button', { name: 'Protocol view' }).click();
+  await expect(detail.getByTestId('protocol-view')).toContainText('engine signature');
   expect(external).toEqual([]);
 
   await page.screenshot({ path: 'test-results/live-final.png', fullPage: true });

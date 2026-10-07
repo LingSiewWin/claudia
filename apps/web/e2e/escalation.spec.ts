@@ -27,6 +27,7 @@ test('mandate page shows the interrupt budget next to the limits', async ({ page
 test('REPLAY: metrics strip from the recorded events, bond chips and the brief on escalated cards', async ({ page }) => {
   await page.goto('/live?mode=replay&run=run-stage-0001');
   const cards = page.getByRole('region', { name: 'Agent actions' }).getByTestId('action-card');
+  const detail = page.getByTestId('detail');
   await expect(cards.first()).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Skip to the end' }).click();
   await expect(cards).toHaveCount(7);
@@ -45,18 +46,19 @@ test('REPLAY: metrics strip from the recorded events, bond chips and the brief o
   await expect(approved.getByTestId('bond-chip').first()).toHaveAttribute('data-status', 'refunded');
   await expect(approved.getByTestId('bond-chip').first()).toContainText('Bond refunded');
   await expect(approved.getByTestId('bond-chip').first().getByRole('link')).toHaveAttribute('href', /^https:\/\/preprod\.cardanoscan\.io\/transaction\/(b1){31}01$/);
-  await approved.getByTestId('brief-details').locator('summary').click();
-  await expect(approved.getByTestId('brief')).toContainText('What the engine checked');
-  await expect(approved.getByTestId('will-happen')).toContainText('Release 18 USDM from vault acme-treasury');
-  await expect(approved.getByTestId('budget')).toHaveText('Interrupt budget 0 of 3 used today');
+  await approved.getByRole('button', { name: 'WHY?' }).click();
+  await detail.getByTestId('brief-details').locator('summary').click();
+  await expect(detail.getByTestId('brief')).toContainText('What the engine checked');
+  await expect(detail.getByTestId('will-happen')).toContainText('Release 18 USDM from vault acme-treasury');
+  await expect(detail.getByTestId('budget')).toHaveText('Interrupt budget 0 of 3 used today');
 
   const declined = cards.nth(2);
   await expect(declined.getByTestId('status')).toHaveText('Stopped by the CFO');
-  await expect(declined.getByTestId('denied')).toContainText('Declined as a reasonable ask. Bond refunded to the agent.');
   await expect(declined.getByTestId('bond-chip').first()).toHaveAttribute('data-status', 'refunded');
   await expect(cards.nth(0).getByTestId('bond-chip')).toHaveCount(0);
   await declined.getByRole('button', { name: 'WHY?' }).click();
-  await expect(declined.getByTestId('row-may')).toContainText('ESCALATE');
+  await expect(detail.getByTestId('denied')).toContainText('Declined as a reasonable ask. Bond refunded to the agent.');
+  await expect(detail.getByTestId('row-may')).toContainText('ESCALATE');
   await expect(page.getByRole('region', { name: 'Agent actions' })).not.toContainText(/requires approval/i);
   await page.screenshot({ path: 'test-results/replay-metrics.png', fullPage: true });
 });
@@ -64,17 +66,20 @@ test('REPLAY: metrics strip from the recorded events, bond chips and the brief o
 test('REPLAY: escalation spam ends with a denial that paged nobody', async ({ page }) => {
   await page.goto('/live?mode=replay&run=run-lab-escalation_spam');
   const cards = page.getByRole('region', { name: 'Agent actions' }).getByTestId('action-card');
+  const detail = page.getByTestId('detail');
   await expect(cards.first()).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Skip to the end' }).click();
   await expect(cards).toHaveCount(4);
   for (let i = 0; i < 3; i++) {
     await expect(cards.nth(i).getByTestId('bond-chip').first()).toHaveAttribute('data-status', 'captured');
-    await expect(cards.nth(i).getByTestId('denied')).toContainText('Declined as frivolous. Bond captured.');
+    await cards.nth(i).getByRole('button', { name: 'WHY?' }).click();
+    await expect(detail.getByTestId('denied')).toContainText('Declined as frivolous. Bond captured.');
   }
   const fourth = cards.nth(3);
   await expect(fourth).toHaveAttribute('data-state', 'DENIED');
-  await expect(fourth.getByTestId('denied')).toContainText("The agent has used today's interrupt budget.");
-  await expect(fourth.getByTestId('nobody-paged')).toHaveText('Nobody was paged.');
+  await fourth.getByRole('button', { name: 'WHY?' }).click();
+  await expect(detail.getByTestId('denied')).toContainText("The agent has used today's interrupt budget.");
+  await expect(detail.getByTestId('nobody-paged')).toHaveText('Nobody was paged.');
   await expect(fourth.getByTestId('bond-chip')).toHaveCount(0);
   await expect(page.getByTestId('metric-interruptions')).toHaveText(/^\d+ of \d+$/);
   await expect(page.getByTestId('metric-budget')).toHaveText('1');
