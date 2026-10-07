@@ -120,8 +120,8 @@ export interface ReleaseInput {
   nowMs: number;
   /** "M-001@3": metadata `mandate`. */
   mandateLabel: string;
-  /** Evidence-log head at submit time; null only where no evidence log exists yet. */
-  logHead: string | null;
+  /** Evidence-log head at submit time; `{ seq, hash }` on the wire. null only where no evidence log exists yet. */
+  logHead: string | { seq: number; hash: string } | null;
 }
 
 /** Fails fast on anything the vault would reject for an honest executor, and on recipients it must not pay. */

@@ -32,6 +32,10 @@ export interface Wallet {
   utxos: UTxO[];
 }
 
+/** Settlement metadata 1694: `log_head` is the evidence-log `{ seq, hash }` (a nested map). */
+export type TxMetadatum = string | number | { seq: number; hash: string };
+export type TxMetadata = Record<string, TxMetadatum>;
+
 /** A complete, explicit description of one transaction. Builders produce it; attacks edit it. */
 export interface TxPlan {
   scriptInputs: ScriptInput[];
@@ -41,7 +45,7 @@ export interface TxPlan {
   outputs: PlanOutput[];
   requiredSigners: string[];
   validity: { lowerSlot: number; upperSlot: number } | null;
-  metadata: Record<string, string> | null;
+  metadata: TxMetadata | null;
   wallet: Wallet;
 }
 

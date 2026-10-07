@@ -3,6 +3,7 @@ export * from './build';
 export * from './chain';
 export * from './data';
 export * from './deployment';
+export * from './port';
 export * from './state';
 export * from './txs';
 export * from './wallet';
