@@ -154,6 +154,7 @@ export const EVENT_TYPES: readonly EventType[] = [
   'AttackResult',
   'MandateUpdated',
   'MandateRevoked',
+  'RunCompleted',
 ];
 
 /** Pure reducer: one event in, a new view out. Duplicate or out-of-order events (seq <= lastSeq) are ignored. */
@@ -182,6 +183,8 @@ function applyKnown(view: RunView, e: RunEvent): RunView {
       return { ...next, attacks: { ...next.attacks, [e.payload.attack]: 'running' } };
     case 'AttackResult':
       return { ...next, attacks: { ...next.attacks, [e.payload.attack]: e.payload } };
+    case 'RunCompleted':
+      return next;
     case 'MandateUpdated':
     case 'MandateRevoked':
       return { ...next, mandateTxs: [...next.mandateTxs, { type: e.type, version: e.payload.version, txHash: e.payload.tx_hash }] };

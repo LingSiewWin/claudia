@@ -15,7 +15,7 @@ const TYPES = new Set([
   'RunStarted', 'ActionProposed', 'AuthorityEvaluationStarted', 'AuthorityEvaluated', 'CREVerificationStarted',
   'CREVerificationCompleted', 'AuthorizationIssued', 'ApprovalRequested', 'CFOApproved', 'CFODeclined', 'ActionDenied',
   'TransactionBuilt', 'TransactionSubmitted', 'TransactionConfirmed', 'TransactionRejected', 'ReceiptProven',
-  'AttackStarted', 'AttackResult', 'MandateUpdated', 'MandateRevoked',
+  'AttackStarted', 'AttackResult', 'MandateUpdated', 'MandateRevoked', 'RunCompleted',
 ]);
 
 const { runs } = await get<{ runs: RunSummary[] }>('/v1/runs?kind=all');

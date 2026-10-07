@@ -67,6 +67,7 @@ export interface Payloads {
   AttackResult: { attack: AttackId; stopped_by: Layer; code: string; funds_moved: string; tx_hash: string | null };
   MandateUpdated: { mandate_id: string; version: number; tx_hash: string };
   MandateRevoked: { mandate_id: string; version: number; tx_hash: string };
+  RunCompleted: { status: 'finished' };
 }
 export type EventType = keyof Payloads;
 

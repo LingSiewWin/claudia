@@ -146,6 +146,15 @@ export async function decide(
     await emit('AuthorityEvaluated', { evaluation: denied });
     return final(denied, null, 'engine');
   }
+  // A live authorization for this exact action already binds one verification report. Re-verifying would return a
+  // fresh report whose hash differs from that authorization's verification_ref, so the evidence on record is reused.
+  const bound = await boundVerification(eng, row.mandate.id, action.reference.invoice_id, canonicalHash(action));
+  if (bound !== null) {
+    blockTimeMs = bound.verified.block_time_ms;
+    await emit('CREVerificationCompleted', bound.verification);
+    const again = await evaluateNow(bound.verified);
+    if (again.outcome !== 'NEEDS_VERIFICATION') return final(again, bound.verification);
+  }
   const triggerId = randomUUID();
   await emit('CREVerificationStarted', { trigger_id: triggerId });
   const out = await eng.verify(action, triggerId);
@@ -159,6 +168,29 @@ export async function decide(
   await emit('ActionDenied', { reason: 'VERIFICATION_UNAVAILABLE', layer: 'cre' });
   const why = out.status === 'unavailable' ? out.error : 'the report read back from Sepolia is not usable';
   throw new HttpError(503, `verification unavailable: ${why}`, { 'retry-after': '30' });
+}
+
+/** The verification report bound by a live authorization for this action, read back from this log, or null. */
+async function boundVerification(
+  eng: Engine,
+  mandateId: string,
+  invoiceId: string,
+  actionHash: string,
+): Promise<{ verified: VerifiedReport; verification: Decided['verification'] & object } | null> {
+  const [row] = await eng.db.query<{ payload: string; created_ms: string }>(
+    `select e.payload, (extract(epoch from e.created_at) * 1000)::bigint::text as created_ms
+       from invoice_reservations v
+       join authorizations a on a.id = v.authorization_id
+       join events e on e.run_id = a.run_id and e.action_id = a.action_id and e.type = 'CREVerificationCompleted'
+      where v.mandate_id = $1 and v.invoice_id = $2 and a.action_hash = $3
+        and a.status in ('issued', 'awaiting_cfo', 'queued', 'submitted') and a.valid_until > $4
+        and (e.payload::json ->> 'report_hash') = (a.record::json -> 'fields' ->> 'verification_ref')
+      order by e.seq desc limit 1`,
+    [mandateId, invoiceId, actionHash, eng.now()],
+  );
+  if (!row) return null;
+  const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
 }
 
 /** The decision hash of the evaluation this response carries. */

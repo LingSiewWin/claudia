@@ -92,7 +92,7 @@ export class AuthorityContractError extends Error {}
 
 export interface AuthorityClient {
   // deadlineMs: when the result must be delivered; Retry-After hints are clamped to it.
-  check(request: AuthorityRequest, idempotencyKey: string, opts?: { deadlineMs?: number }): Promise<AuthorityResponse>;
+  check(request: AuthorityRequest, idempotencyKey: string, opts?: { deadlineMs?: number; nowMs?: number }): Promise<AuthorityResponse>;
 }
 
 const signedByAgent = (r: AuthorityRequest) => 'proposal' in r && typeof r.proposal.agent_signature === 'string';
@@ -139,7 +139,7 @@ export function createAuthorityClient(opts: {
         body: JSON.stringify({ ...request, execute: false }),
       });
       if (!res.ok) {
-        const wait = retryAfterMs(res.headers.get('retry-after'), checkOpts?.deadlineMs);
+        const wait = retryAfterMs(res.headers.get('retry-after'), checkOpts?.deadlineMs, checkOpts?.nowMs);
         throw new AuthorityError(`authority check HTTP ${res.status}`, res.status, wait);
       }
       const parsed = AuthorityResponseSchema.safeParse(await res.json().catch(() => null));

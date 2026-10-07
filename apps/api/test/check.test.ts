@@ -66,28 +66,27 @@ describe('authority check: evaluate, verify, evaluate, issue', () => {
       expect(r.json.evaluation.outcome).toBe('ALLOW');
       expect(r.json.authorization.digest_hex).toBe(first.json.authorization.digest_hex);
     }
-    // every re-evaluation ran a fresh CRE verification with its own trigger id; none reused a report
-    expect(api.cre.calls).toHaveLength(3);
-    expect(new Set(api.cre.calls.map((c) => c.triggerId)).size).toBe(3);
+    // the live authorization binds one report; re-evaluations reuse it instead of writing a new one to Sepolia
+    expect(api.cre.calls).toHaveLength(1);
     const [counter] = await api.db.query<{ counter: string }>('select counter::text as counter from nonces');
     expect(counter?.counter).toBe('1');
     expect(api.cardano.built).toHaveLength(0);
     expect(api.chains.get(api.b001.vaultHash)!.balance).toBe(BigInt(usdm('135')));
   });
 
-  it('a reused authorization receipt binds verification_id to the signed ref, not the new report', async () => {
+  it('a reused authorization is answered with the report it signed over, so the reply is internally consistent', async () => {
     const proposal = signed(action({ id: 'A-1', invoice: inv('INV-3821') }));
     const first = await masumi(proposal);
     const again = await masumi(proposal);
     const signedRef = first.json.authorization.fields.verification_ref as string;
-    expect(again.json.verification.report_hash).not.toBe(signedRef);
+    expect(again.json.verification.report_hash).toBe(signedRef);
+    expect(again.json.evaluation.verification_hash).toBe(signedRef);
     expect(again.json.authorization.fields.verification_ref).toBe(signedRef);
     const firstBody = (await api.get(`/v1/receipts/${first.json.receipt_id}`)).json.receipt;
     const againBody = (await api.get(`/v1/receipts/${again.json.receipt_id}`)).json.receipt;
     const signedId = `V-${signedRef.slice(0, 12)}`;
     expect(firstBody.authorization.verification_id).toBe(signedId);
     expect(againBody.authorization.verification_id).toBe(signedId);
-    expect(againBody.authorization.verification_id).not.toBe(`V-${again.json.verification.report_hash.slice(0, 12)}`);
     expect(againBody.verification.report_hash).toBe(again.json.verification.report_hash);
   });
 

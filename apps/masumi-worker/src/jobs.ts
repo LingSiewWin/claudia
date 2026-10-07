@@ -255,7 +255,7 @@ export async function advanceJob(start: JobRecord, deps: JobDeps): Promise<JobRe
             return job;
           }
           if (lostHold(deps)) return inspect(job, deps, 'lease generation changed before the authority check');
-          const { resultText } = buildOutput(await deps.authority.check(job.request, `masumi:${job.identifier}`, { deadlineMs: submitBy }), deps.webUrl);
+          const { resultText } = buildOutput(await deps.authority.check(job.request, `masumi:${job.identifier}`, { deadlineMs: submitBy, nowMs: deps.now() }), deps.webUrl);
           save({ stage: 'result-saved', resultText, resultHash: mip004ResultHashEscaped(resultText, job.identifier) });
           continue;
         }
