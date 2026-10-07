@@ -16,6 +16,9 @@ importers:
       '@authority/masumi':
         specifier: workspace:*
         version: link:../../packages/masumi
+      '@authority/stripe':
+        specifier: workspace:*
+        version: link:../../packages/stripe
       tsx:
         specifier: 4.23.15
         version: 4.23.15

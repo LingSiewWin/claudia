@@ -6,12 +6,15 @@
   "scripts": {
     "start": "node --env-file-if-exists=../../.env --import tsx src/main.ts",
     "evidence": "node --env-file-if-exists=../../.env --import tsx scripts/evidence.ts",
+    "examples": "node --env-file-if-exists=../../.env --import tsx scripts/examples.ts",
+    "smoke:api": "node --env-file-if-exists=../../.env --import tsx scripts/smoke-api.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@authority/core": "workspace:*",
     "@authority/masumi": "workspace:*",
+    "@authority/stripe": "workspace:*",
     "tsx": "4.23.15",
     "zod": "4.6.5"
   },
