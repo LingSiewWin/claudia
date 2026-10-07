@@ -11,7 +11,7 @@ export function GET(request: Request) {
     description:
       'The human authority layer for AI agents. Send a signed Action IR; receive ALLOW, ESCALATE or DENY with a Decision Brief. ESCALATE answers HTTP 402: lock a bond in Cardano escrow to interrupt the named human. Reasonable asks are refunded; only the human signature moves funds.',
     url: site,
-    documentation: { summary: `${site}/llms.txt`, protocol: `${site}/llms-full.txt`, human: `${site}/protocol` },
+    documentation: { summary: `${site}/llms.txt`, protocol: `${site}/llms-full.txt`, human: `${site}/protocol`, openapi: `${site}/openapi.json` },
     network: 'cardano-preprod',
     mode: config.publicApiUrl ? 'live' : 'fixture',
     endpoints: {
@@ -30,7 +30,7 @@ export function GET(request: Request) {
         refund: 'approved or declined as a reasonable ask',
         capture: 'declined as frivolous, paid to an unspendable sink',
       },
-      masumi_fee: { amount: '1', asset: 'tUSDM', per: 'job', listing: 'Human Authority Endpoint', marketplace: 'https://preprod.sokosumi.com/', standard: 'MIP-003' },
+      masumi_fee: { amount: '1', asset: 'tUSDM', per: 'job', listing: 'Human Authority Endpoint', marketplace: 'https://preprod.sokosumi.com/', standard: 'MIP-003', openapi: `${site}/openapi.json` },
     },
     outcomes: ['ALLOW', 'ESCALATE', 'DENY'],
     schemas: ['action-ir/v0.1', 'mandate/v0.1', 'escalation-price/v0.1', 'bond/v0.1', 'brief/v0.1', 'verification/v0.1'],

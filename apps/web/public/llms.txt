@@ -9,6 +9,7 @@ Claudia is the human authority layer for AI agents: an authorization layer betwe
 - [Full protocol](/llms-full.txt): outcomes, Action IR, mandate and interrupt budget, the 402 flow (PAYMENT-REQUIRED, PAYMENT-SIGNATURE, PAYMENT-RESPONSE), EscalationPrice, bond rules, Decision Brief, endpoints, Masumi job shape.
 - [Protocol, rendered](/protocol): the same document for humans.
 - [Agent card](/.well-known/agent.json): name, endpoints, pricing, network.
+- [OpenAPI 3.1](/openapi.json): the Masumi MIP-003 job API (/availability, /input_schema, /start_job, /status) with the result shape.
 
 ## Endpoints
 

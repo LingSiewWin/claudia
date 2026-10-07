@@ -1,5 +1,5 @@
 // Masumi registration of the Human Authority Endpoint on the local payment service (admin key, setup only).
-// Usage: pnpm --filter @authority/masumi-payment register <seed | info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>
+// Usage: pnpm --filter @authority/masumi-payment register <seed | info | register <apiBaseUrl> | status | key | update <apiBaseUrl> | enrich>
 // Writes public values to ../registration.preprod.json, local ids to ../registration.local.json, and the scoped worker key into the repo-root .env.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ const LOCAL_FILE = fileURLToPath(new URL('../registration.local.json', import.me
 const ENV_FILE = fileURLToPath(new URL('../../../.env', import.meta.url));
 const MPS_RELEASE = '0.29.0 (71455701ac22c3380c50da54089e1b7363f6825d)';
 const TEST_USDM_UNIT = '16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde0014df10745553444d';
+const SITE = 'https://claudiahq.vercel.app';
 // The registry caps description at 250 characters (MPS 0.29.0 validation).
 const LISTING =
   'Agents pay to interrupt a named human. Send the action your agent wants to take; get ALLOW, ESCALATE or DENY with a decision brief. ' +
@@ -153,7 +154,11 @@ const metadata = (apiBaseUrl: string): Json => ({
   name: 'Human Authority Endpoint',
   description: LISTING,
   Capability: { name: 'human-authority', version: '0.2.0' },
-  Author: { name: 'Authority Layer' },
+  Author: { name: 'Claudia', contactOther: SITE },
+  Legal: { privacyPolicy: `${SITE}/privacy`, terms: `${SITE}/terms` },
+  // Standard (MIP-003) entries carry apiBaseUrl only: MPS 0.29.0 rejects openApiSpecUrl, x402ResourcesUrl and
+  // a2aAgentCardUrl unless type is OpenApi, X402 or A2A respectively (getRegistryEndpointError). The OpenAPI
+  // document is served at ${SITE}/openapi.json and linked from llms.txt and the agent card instead.
   apiBaseUrl,
 });
 
@@ -225,6 +230,13 @@ async function update(apiBaseUrl: string): Promise<void> {
   console.log(JSON.stringify({ registrationId: updated.id, state: updated.state }));
 }
 
+// Re-issues the current metadata (Legal, Author, Tags) for the saved apiBaseUrl. Same on-chain UpdateAction as update.
+async function enrich(): Promise<void> {
+  const r = load();
+  if (typeof r.apiBaseUrl !== 'string') throw new Error('no saved apiBaseUrl; run update <apiBaseUrl>');
+  await update(r.apiBaseUrl);
+}
+
 const [command, arg] = process.argv.slice(2);
 if (command === 'seed') await seed();
 else if (command === 'info') await info();
@@ -232,4 +244,5 @@ else if (command === 'register' && arg) await register(arg);
 else if (command === 'status') await status();
 else if (command === 'key') await key();
 else if (command === 'update' && arg) await update(arg);
-else throw new Error('usage: register.ts <seed | info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>');
+else if (command === 'enrich') await enrich();
+else throw new Error('usage: register.ts <seed | info | register <apiBaseUrl> | status | key | update <apiBaseUrl> | enrich>');

@@ -1,0 +1,705 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Human Authority Endpoint (Masumi MIP-003)",
+    "version": "0.2.0",
+    "summary": "Agents pay to interrupt a named human.",
+    "description": "Masumi agentic service API (MIP-003) of the Claudia human authority layer. A buyer starts a job with a mandate id and either a signed Action IR proposal or a plain-English request, pays 1 tUSDM into Masumi escrow, and receives the decision (ALLOW, ESCALATE or DENY) with a decision brief. On ESCALATE the result carries the exact bond price and the endpoint to interrupt the human. Only the human signature moves funds. The job result is canonical JSON and its MIP-004 hash is recorded with the Masumi payment. Not implemented: /provide_input (every job has all its input at /start_job).",
+    "termsOfService": "https://claudiahq.vercel.app/terms",
+    "contact": {
+      "name": "Claudia",
+      "url": "https://claudiahq.vercel.app"
+    },
+    "license": {
+      "name": "Proprietary",
+      "url": "https://claudiahq.vercel.app/terms"
+    }
+  },
+  "externalDocs": {
+    "description": "Protocol (agent-readable)",
+    "url": "https://claudiahq.vercel.app/llms-full.txt"
+  },
+  "servers": [
+    {
+      "url": "https://henrietta-unpoignant-marguerita.ngrok-free.dev",
+      "description": "Cardano preprod. The apiBaseUrl in the Masumi registry entry is authoritative; this address can rotate."
+    }
+  ],
+  "security": [],
+  "tags": [
+    {
+      "name": "mip-003",
+      "description": "Masumi Agentic Service API Standard"
+    }
+  ],
+  "paths": {
+    "/availability": {
+      "get": {
+        "tags": [
+          "mip-003"
+        ],
+        "operationId": "availability",
+        "summary": "Service availability",
+        "responses": {
+          "200": {
+            "description": "The service accepts jobs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "type"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "available"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "masumi-agent"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "available",
+                  "type": "masumi-agent",
+                  "message": "Human Authority Endpoint is ready"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/input_schema": {
+      "get": {
+        "tags": [
+          "mip-003"
+        ],
+        "operationId": "inputSchema",
+        "summary": "Input fields for /start_job (MIP-003 Attachment 01)",
+        "description": "Three fields: mandate_id (text, default M-001), proposal (textarea, JSON {\"action\": <Action IR>, \"agent_signature\": \"<hex>\" | null}) and request_text (textarea, plain English). Exactly one of proposal and request_text is sent.",
+        "responses": {
+          "200": {
+            "description": "Field list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "input_data"
+                  ],
+                  "properties": {
+                    "input_data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "type",
+                          "name"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "mandate_id",
+                              "proposal",
+                              "request_text"
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "text",
+                              "textarea"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "data": {
+                            "type": "object",
+                            "properties": {
+                              "default": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "validations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "validation",
+                                "value"
+                              ],
+                              "properties": {
+                                "validation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "min",
+                                    "max",
+                                    "optional"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/start_job": {
+      "post": {
+        "tags": [
+          "mip-003"
+        ],
+        "operationId": "startJob",
+        "summary": "Start a job and receive the Masumi payment terms",
+        "description": "Idempotent per identifier_from_purchaser: a retry with the same input returns the stored terms and never requests a second payment. The job runs once the buyer's payment is FundsLocked in the Masumi escrow (1 tUSDM, unit 16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde0014df10745553444d, amount 1000000). Body limit 16 KiB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartJobRequest"
+              },
+              "examples": {
+                "signedProposal": {
+                  "summary": "Signed Action IR against mandate M-001",
+                  "value": {
+                    "identifier_from_purchaser": "a1b2c3d4e5f60718",
+                    "input_data": {
+                      "mandate_id": "M-001",
+                      "proposal": {
+                        "action": {
+                          "schema": "action-ir/v0.1",
+                          "id": "A-INV-M-0001",
+                          "mandate_id": "M-001",
+                          "actor": "cfo-agent-01",
+                          "type": "pay_invoice",
+                          "purpose": "invoice_payment",
+                          "counterparty": {
+                            "id": "aws",
+                            "display": "AWS (demo vendor)"
+                          },
+                          "amount": {
+                            "value": "8420000",
+                            "asset": "USDM"
+                          },
+                          "recipient": {
+                            "chain": "cardano",
+                            "address": "addr_test1..."
+                          },
+                          "source": {
+                            "vault": "acme-treasury"
+                          },
+                          "reference": {
+                            "invoice_id": "in_1UNco1EFJlYN23C9OfObHOe8",
+                            "invoice_number": "INV-M-0001"
+                          },
+                          "rationale": "Open AWS invoice for October cloud compute, within the autonomous limit.",
+                          "created_at": "2026-10-07T00:00:00.000Z"
+                        },
+                        "agent_signature": "<128 hex chars, ed25519 over the canonical action>"
+                      }
+                    }
+                  }
+                },
+                "plainEnglish": {
+                  "summary": "Unsigned request in plain English (evaluation only, no authorization)",
+                  "value": {
+                    "identifier_from_purchaser": "0123456789abcdef",
+                    "input_data": {
+                      "mandate_id": "M-001",
+                      "request_text": "Pay AWS invoice INV-M-0001"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment terms signed by the seller. Pay by payByTime; the result is submitted before submitResultTime.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "description": "identifier_from_purchaser was already used with a different input, is in progress, or belongs to a job that did not finish.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "502": {
+            "description": "The Masumi payment service did not return signed terms.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Masumi registration is not confirmed yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "tags": [
+          "mip-003"
+        ],
+        "operationId": "jobStatus",
+        "summary": "Job status and, once completed, the result",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The id returned by /start_job."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current MIP-003 status. result is present only when status is completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "awaiting_payment",
+                        "running",
+                        "completed",
+                        "failed"
+                      ]
+                    },
+                    "result": {
+                      "type": "string",
+                      "description": "Canonical JSON (RFC 8785 key order) of an AuthorityResult. Its MIP-004 hash is the resultHash recorded on the Masumi payment."
+                    }
+                  }
+                },
+                "examples": {
+                  "running": {
+                    "value": {
+                      "status": "running"
+                    }
+                  },
+                  "completed": {
+                    "value": {
+                      "status": "completed",
+                      "result": "{\"authorization\":null,\"brief\":{...},\"decision\":\"ESCALATE\",\"escalation\":{\"amount\":\"5000000\",\"approval_endpoint\":\"https://claudiahq.vercel.app/authority/CFO\"},\"summary\":\"...\"}"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/demo": {
+      "get": {
+        "tags": [
+          "mip-003"
+        ],
+        "operationId": "demo",
+        "summary": "A recorded real run: input, output and ready-to-send examples",
+        "responses": {
+          "200": {
+            "description": "Recorded run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "input",
+                    "output",
+                    "examples"
+                  ],
+                  "properties": {
+                    "input": {
+                      "$ref": "#/components/schemas/InputData"
+                    },
+                    "output": {
+                      "type": "object",
+                      "required": [
+                        "result"
+                      ],
+                      "properties": {
+                        "result": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "examples": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InputData"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No demo recorded yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "Error": {
+        "description": "Request rejected.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Proposal": {
+        "type": "object",
+        "required": [
+          "action",
+          "agent_signature"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "object",
+            "description": "Action IR (schema action-ir/v0.1). Validated by the Authority Engine; see /llms-full.txt."
+          },
+          "agent_signature": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256,
+            "description": "Hex ed25519 signature by the mandate delegate. Null evaluates unsigned (no authorization is issued)."
+          }
+        }
+      },
+      "InputData": {
+        "type": "object",
+        "required": [
+          "mandate_id"
+        ],
+        "additionalProperties": false,
+        "description": "Exactly one of proposal and request_text. Nested at most 32 levels; 16 KiB in total.",
+        "properties": {
+          "mandate_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]{1,64}$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "structured",
+              "text"
+            ]
+          },
+          "proposal": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Proposal"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "The same object as a JSON string (Sokosumi textarea)."
+              }
+            ]
+          },
+          "request_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Plain English. Converted by an LLM into an untrusted interpreted action, shown verbatim in the result."
+          }
+        }
+      },
+      "StartJobRequest": {
+        "type": "object",
+        "required": [
+          "identifier_from_purchaser",
+          "input_data"
+        ],
+        "properties": {
+          "identifier_from_purchaser": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{14,26}$",
+            "description": "Buyer-chosen nonce. Reusing it with the same input returns the same terms."
+          },
+          "input_data": {
+            "$ref": "#/components/schemas/InputData"
+          }
+        }
+      },
+      "StartJobResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "blockchainIdentifier",
+          "payByTime",
+          "submitResultTime",
+          "unlockTime",
+          "externalDisputeUnlockTime",
+          "agentIdentifier",
+          "sellerVKey",
+          "identifierFromPurchaser",
+          "input_hash",
+          "paymentSourceType",
+          "supportedPaymentSourceIndex"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Job id for /status."
+          },
+          "blockchainIdentifier": {
+            "type": "string",
+            "description": "Masumi payment identifier (signed seller terms)."
+          },
+          "payByTime": {
+            "type": "integer",
+            "description": "Unix ms."
+          },
+          "submitResultTime": {
+            "type": "integer",
+            "description": "Unix ms."
+          },
+          "unlockTime": {
+            "type": "integer",
+            "description": "Unix ms."
+          },
+          "externalDisputeUnlockTime": {
+            "type": "integer",
+            "description": "Unix ms."
+          },
+          "agentIdentifier": {
+            "type": "string",
+            "description": "Registry asset id (policy id + asset name)."
+          },
+          "sellerVKey": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{56}$"
+          },
+          "identifierFromPurchaser": {
+            "type": "string"
+          },
+          "input_hash": {
+            "type": "string",
+            "description": "MIP-004 hash of input_data and the purchaser identifier."
+          },
+          "paymentSourceType": {
+            "type": "string",
+            "const": "Web3CardanoV2"
+          },
+          "supportedPaymentSourceIndex": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AuthorityResult": {
+        "type": "object",
+        "description": "Parsed form of the completed result string.",
+        "required": [
+          "decision",
+          "summary",
+          "brief",
+          "escalation",
+          "reason",
+          "checks",
+          "receipt",
+          "decision_hash"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "ESCALATE",
+              "DENY"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Plain-text summary for a human reader."
+          },
+          "brief": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Decision Brief (brief/v0.1)."
+          },
+          "escalation": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "On ESCALATE: the EscalationPrice (escalation-price/v0.1) and approval_endpoint to interrupt the human."
+          },
+          "reason": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "interpreted_action": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Present for request_text jobs: the LLM interpretation, untrusted."
+          },
+          "verification": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "report_hash": {
+                "type": "string"
+              },
+              "sepolia_tx": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "type": "array"
+              }
+            }
+          },
+          "authorization": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Signed authorization on ALLOW for a signed proposal; null otherwise."
+          },
+          "receipt": {
+            "type": "object",
+            "required": [
+              "id",
+              "url",
+              "hash"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "hash": {
+                "type": "string"
+              }
+            }
+          },
+          "decision_hash": {
+            "type": "string"
+          },
+          "notice": {
+            "type": "string",
+            "const": "unsigned: evaluation only"
+          }
+        }
+      }
+    }
+  }
+}
