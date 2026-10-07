@@ -35,7 +35,8 @@ import type { UTxO } from '@meshsdk/core';
 process.loadEnvFile(new URL('../.env', import.meta.url));
 
 const lab = deployment('M-LAB');
-const m001 = deployment('M-001'); // public deployment record only: its vault is a target, its keys are never read
+// Public deployment record only: its vault is a target, its keys are never read. Absent until M-001 is deployed.
+const m001 = (() => { try { return deployment('M-001'); } catch { return null; } })();
 scriptsOf(lab);
 const engineHex = process.env.M_LAB_ENGINE_SECRET_KEY ?? '';
 if (!/^[0-9a-f]{64}$/.test(engineHex)) throw new Error('M_LAB_ENGINE_SECRET_KEY must be 32 bytes of lowercase hex');
@@ -64,8 +65,9 @@ async function context(): Promise<LabContext> {
 }
 
 async function targets(): Promise<string[]> {
-  const [a, v, w] = await Promise.all([readAnchor(chain.provider, lab), readVault(chain.provider, lab), readVault(chain.provider, m001)]);
-  return [ref(a.utxo), ref(v.utxo), ref(w.utxo)];
+  const [a, v] = await Promise.all([readAnchor(chain.provider, lab), readVault(chain.provider, lab)]);
+  const w = m001 ? await readVault(chain.provider, m001) : null;
+  return [ref(a.utxo), ref(v.utxo), ...(w ? [ref(w.utxo)] : [])];
 }
 
 /** A real, settled transaction. */
@@ -113,9 +115,13 @@ if (c.vault.balance !== 10_000_000n || c.vault.datum.spent_today !== 0n || c.vau
 // 1. Compromised-engine, executor and wrong-key attacks that need no prior state.
 await attack('R10 hard cap 6.00', ATTACKS.hard_cap(c));
 await attack('R9 wrong asset', ATTACKS.wrong_asset(c));
-await attack('R5 authorization for the M-001 vault', ATTACKS.cross_vault(c, m001.vault.hash));
-const [m001Anchor, m001Vault, m001Ref] = await Promise.all([readAnchor(chain.provider, m001), readVault(chain.provider, m001), readRefScript(chain.provider, m001)]);
-await attack('R4 M-LAB authorization against the M-001 vault', ATTACKS.cross_mandate(c, { deployment: m001, anchor: m001Anchor, vault: m001Vault, refScript: m001Ref }));
+if (m001) {
+  await attack('R5 authorization for the M-001 vault', ATTACKS.cross_vault(c, m001.vault.hash));
+  const [m001Anchor, m001Vault, m001Ref] = await Promise.all([readAnchor(chain.provider, m001), readVault(chain.provider, m001), readRefScript(chain.provider, m001)]);
+  await attack('R4 M-LAB authorization against the M-001 vault', ATTACKS.cross_mandate(c, { deployment: m001, anchor: m001Anchor, vault: m001Vault, refScript: m001Ref }));
+} else {
+  console.log('R4/R5 cross-vault attacks skipped: M-001 is not deployed yet');
+}
 await attack('R11 CFO bypass 1.80', ATTACKS.cfo_bypass(c));
 await attack('R11 flagged 1.80 co-signed by the admin key instead of the approver', ATTACKS.principal_cosign(c));
 await attack('W1 withdraw without the principal', ATTACKS.withdraw_without_principal(c));
