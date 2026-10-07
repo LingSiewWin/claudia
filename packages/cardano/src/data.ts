@@ -1,6 +1,5 @@
 import { type AuthorizationRecord, bytesToHex, parseShelleyAddress } from '@authority/core';
 import { deserializeDatum } from '@meshsdk/core';
-import type { BondDatum } from './bond';
 
 /** Plutus data in Mesh's "JSON" form (constructor index + fields, bytes as hex, ints). */
 export type PlutusJson = { constructor: number; fields: PlutusJson[] } | { bytes: string } | { int: number | bigint };
@@ -92,7 +91,20 @@ export const MINT_REDEEMER: PlutusJson = con(0);
 /** R16: the recipient output carries the authorization digest as inline datum. */
 export const digestDatum = (r: AuthorizationRecord): PlutusJson => bytes(r.digest_hex);
 
-/** Escrow `BondDatum` (contracts/cardano/lib/authority/types.ak), `agent_stake` as Option. */
+/** Escrow datum (contracts/cardano/lib/authority/types.ak `BondDatum`, same field order). */
+export interface BondDatum {
+  /** sha256(utf8(approval_id)) */
+  approval_ref: string;
+  action_hash: string;
+  mandate_ref: string;
+  agent_pkh: string;
+  agent_stake: string | null;
+  approver_pkh: string;
+  amount: bigint;
+  locked_until_ms: number;
+}
+
+/** `BondDatum` as Plutus data, `agent_stake` as Option. */
 export function bondDatumData(d: BondDatum): PlutusJson {
   return con(0, [
     bytes(d.approval_ref),

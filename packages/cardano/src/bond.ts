@@ -3,7 +3,9 @@ import { type UTxO, pubKeyAddress, resolveTxHash, serializeAddressObj } from '@m
 import { escrowScript, sinkScript } from './blueprint';
 import { type Wallet, buildTx } from './build';
 import { type Chain, slotAt } from './chain';
-import { BOND_CAPTURE, BOND_REFUND, bondDatumData, parseBondDatum } from './data';
+import { BOND_CAPTURE, BOND_REFUND, type BondDatum, bondDatumData, parseBondDatum } from './data';
+
+export type { BondDatum } from './data';
 import { quantityOf } from './state';
 import { UPPER_OFFSET_MS, emptyPlan } from './txs';
 import { type SigningWallet, signAndSubmit } from './wallet';
@@ -16,18 +18,6 @@ import { type SigningWallet, signAndSubmit } from './wallet';
  * Nobody but the agent (refund) or the sink (capture) can ever receive the bond. The approver receives nothing.
  */
 
-export interface BondDatum {
-  /** sha256(utf8(approval_id)) */
-  approval_ref: string;
-  action_hash: string;
-  mandate_ref: string;
-  agent_pkh: string;
-  agent_stake: string | null;
-  approver_pkh: string;
-  amount: bigint;
-  locked_until_ms: number;
-}
-
 export interface BondUtxo {
   tx_hash: string;
   output_index: number;
@@ -39,7 +29,7 @@ export interface BondUtxo {
 export type BondOutcome = 'refund' | 'capture';
 
 type ChainTag = 0 | 1;
-type BondPrice = Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash'> & Partial<Pick<EscalationPrice, 'asset'>>;
+type BondPrice = Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash' | 'network'> & Partial<Pick<EscalationPrice, 'asset'>>;
 
 /** Bonds carry no mandate_ref in the 402 price yet; the datum field is zero until the price binds one. */
 const NO_MANDATE_REF = '00'.repeat(28);
@@ -124,13 +114,14 @@ export function matchBonds(utxos: UTxO[], price: BondPrice, escrow_address: stri
 
 /** The live escrow UTxO for this approval at the escrow address, or null. Verifies datum fields against the price. */
 export async function readBond(chain: Chain, price: BondPrice): Promise<BondUtxo | null> {
-  const address = escrowAddress(0);
+  const address = escrowAddress(chainTagOf(price));
   return matchBonds((await chain.provider.fetchAddressUTxOs(address)) as UTxO[], price, address)[0] ?? null;
 }
 
 /** The spend plan: Refund pays the agent, Capture pays the sink. Pure, so tests evaluate it offline. */
 export function bondSpendPlan(utxo: UTxO, bond: BondUtxo, outcome: BondOutcome, wallet: Wallet, nowMs: number) {
-  const tag: ChainTag = 0;
+  // The escrow address names the network; the agent address and sink are rebuilt on the same one.
+  const tag = parseShelleyAddress(bond.escrow_address).network;
   const d = bond.datum;
   // Same rule as the validator: the one native token the escrow UTxO holds, or lovelace.
   const unit = utxo.output.amount.find((a) => a.unit !== 'lovelace')?.unit ?? 'lovelace';
