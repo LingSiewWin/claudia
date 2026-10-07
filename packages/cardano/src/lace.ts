@@ -94,7 +94,7 @@ async function body(req: IncomingMessage): Promise<string> {
 }
 
 /** Serves the signing page on 127.0.0.1 under a one-time random path. One job at a time. */
-export async function openLaceSession(port = 0, timeoutMs = 15 * 60_000): Promise<LaceSession> {
+export async function openLaceSession(port = 0, timeoutMs = Number(process.env.LACE_SIGN_TIMEOUT_MS ?? 60 * 60_000)): Promise<LaceSession> {
   const token = randomBytes(16).toString('hex');
   let job: Job | null = null;
   let serial = 0;
