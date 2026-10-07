@@ -1,0 +1,15 @@
+**/node_modules
+.git
+.env
+.env.*
+!.env.example
+*.pem
+*.skey
+docs
+.superpowers
+.claude
+cre
+contracts/**/out
+contracts/**/cache
+**/*.md
+!README.md
