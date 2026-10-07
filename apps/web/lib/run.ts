@@ -1,5 +1,5 @@
-import type { ActionIR, ApprovalRequirement, AuthorizationRecord, Evaluation, VerificationReport } from '@authority/core';
-import type { AttackId, EventType, Layer, Payloads, RunEvent } from './contract';
+import type { ActionIR, ApprovalRequirement, AuthorizationRecord, DecisionBrief, Evaluation, VerificationReport } from '@authority/core';
+import type { AttackId, EventType, Layer, Payloads, RunEvent, BondRef, DeclineReason } from './contract';
 
 export type CardState =
   | 'PROPOSED'
@@ -24,7 +24,8 @@ export interface CardView {
   verification: { report: VerificationReport; reportHash: string; sepoliaTx: string } | null;
   authorization: AuthorizationRecord | null;
   compromisedEngine: boolean;
-  approval: { id: string; status: 'pending' | 'approved' | 'declined'; required: ApprovalRequirement[] } | null;
+  approval: { id: string; status: 'pending' | 'approved' | 'declined'; required: ApprovalRequirement[]; brief: DecisionBrief | null; declineReason: DeclineReason | null } | null;
+  bond: BondRef | null;
   denied: { reason: string; layer: Layer } | null;
   tx: { hash: string | null; bodyCbor: string | null; submittedAt: string | null; confirmedAt: string | null; block: number | null };
   receipt: { id: string; hash: string } | null;
@@ -68,6 +69,7 @@ const newCard = (actionId: string, at: string): CardView => ({
   authorization: null,
   compromisedEngine: false,
   approval: null,
+  bond: null,
   denied: null,
   tx: { hash: null, bodyCbor: null, submittedAt: null, confirmedAt: null, block: null },
   receipt: null,
@@ -101,14 +103,33 @@ function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
     case 'ApprovalRequested':
       return {
         state: 'ESCALATED',
-        approval: { id: e.payload.approval_id, status: 'pending', required: e.payload.approvals_required },
+        approval: { id: e.payload.approval_id, status: 'pending', required: e.payload.approvals_required, brief: e.payload.brief ?? null, declineReason: null },
+        bond: e.payload.bond ?? c.bond,
       };
+    case 'BondRequired':
+      return {
+        bond: {
+          amount: e.payload.price.amount,
+          asset: e.payload.price.asset.symbol,
+          escrow_address: e.payload.price.escrow_address,
+          locked_until_ms: e.payload.price.locked_until_ms,
+          tx_hash: null,
+          output_index: null,
+          status: 'required',
+        },
+      };
+    case 'BondLocked':
+      return { bond: c.bond && { ...c.bond, tx_hash: e.payload.tx_hash, output_index: e.payload.output_index, status: 'locked' } };
+    case 'BondRefunded':
+      return { bond: c.bond && { ...c.bond, status: 'refunded' } };
+    case 'BondCaptured':
+      return { bond: c.bond && { ...c.bond, status: 'captured' } };
     case 'CFOApproved':
       return { approval: c.approval && { ...c.approval, status: 'approved' } };
     case 'CFODeclined':
       return {
         state: 'DENIED',
-        approval: c.approval && { ...c.approval, status: 'declined' },
+        approval: c.approval && { ...c.approval, status: 'declined', declineReason: e.payload.reason ?? null },
         denied: { reason: 'PRINCIPAL_DECLINED', layer: 'principal' },
       };
     case 'ActionDenied':

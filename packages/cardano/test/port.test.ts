@@ -25,6 +25,9 @@ const CARDANO_METHODS = [
   'readAnchor',
   'readVaultState',
   'releaseOf',
+  'bondAddresses',
+  'readBond',
+  'buildBondSpend',
   'submit',
 ] as const;
 

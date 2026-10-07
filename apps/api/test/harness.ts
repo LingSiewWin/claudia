@@ -22,7 +22,7 @@ import type { Engine } from '../src/check';
 import { createExecutor } from '../src/executor';
 import { createLog } from '../src/log';
 import { insertMandate } from '../src/mandates';
-import { CardanoError, type CardanoPort, type LabDeps, type SettlementMetadata } from '../src/ports';
+import { type BondOutcome, type BondUtxo, CardanoError, type CardanoPort, type LabDeps, type SettlementMetadata } from '../src/ports';
 
 // Fixed TEST keys (no funds anywhere). The CFO is a Mesh wallet from a fixed CLI signing key, so CIP-8 and
 // CIP-30 witnesses in tests come from a real wallet implementation.
@@ -188,6 +188,9 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
   const executed = new Map<string, string>(); // authorization digest -> tx that paid its recipient
   let height = 5_000_000;
   const faults: CardanoError[] = [];
+  // Fake escrow: bonds the test locked, keyed by approval id; spends built by outcome.
+  const bonds = new Map<string, BondUtxo>();
+  const bondSpends = new Map<string, { bond: BondUtxo; outcome: BondOutcome }>();
   let reads = 0;
   let readsFail = false;
   const chain = (b: { vaultHash: string }) => {
@@ -219,6 +222,19 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
       const txHash = sha256Hex(`release:${c.utxo}:${authorization.digest_hex}`);
       txs.set(txHash, { vault: b.vaultHash, auth: authorization, metadata, cfo: cfoKeyHash, utxo: c.utxo });
       built.push({ metadata, txHash, cfo: cfoKeyHash });
+      return { txCbor: `84a4${txHash}`, txHash };
+    },
+    bondAddresses() {
+      return { escrow: 'addr_test1wq' + 'e5c4'.repeat(12) + 'ab', sink: 'addr_test1wq' + 'dead'.repeat(12) + 'ab' };
+    },
+    async readBond(price) {
+      const bond = bonds.get(price.approval_id);
+      if (!bond || bond.datum.action_hash !== price.action_hash || bond.amount !== BigInt(price.amount)) return null;
+      return bond;
+    },
+    async buildBondSpend(bond, outcome) {
+      const txHash = sha256Hex(`bond:${outcome}:${bond.tx_hash}#${bond.output_index}`);
+      bondSpends.set(txHash, { bond, outcome });
       return { txCbor: `84a4${txHash}`, txHash };
     },
     async buildAnchorUpdate({ binding: b, mandate: m }) {

@@ -1,4 +1,5 @@
-import type { AuthorizationFields, AuthorizationRecord, ChainBinding, Mandate } from '@authority/core';
+import type { AuthorizationFields, AuthorizationRecord, ChainBinding, EscalationPrice, Mandate } from '@authority/core';
+import { type BondOutcome, type BondUtxo, buildBondSpend as buildBondSpendTx, escrowAddress, readBond as readBondUtxo, sinkAddress } from './bond';
 import { hexOfLength } from '@authority/core';
 import { resolveTxHash, serializeData } from '@meshsdk/core';
 import { FIXED_BUDGET, type TxPlan, type Wallet, buildTx } from './build';
@@ -67,6 +68,9 @@ export interface CardanoPort {
   submit(input: { txCbor: string; witnessSets: string[] }): Promise<string>;
   awaitConfirmation(txHash: string, untilMs: number): Promise<{ block_height: number } | null>;
   releaseOf(binding: ChainBinding, authorization: AuthorizationRecord): Promise<string | null>;
+  bondAddresses(): { escrow: string; sink: string };
+  readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash'>): Promise<BondUtxo | null>;
+  buildBondSpend(bond: BondUtxo, outcome: BondOutcome): Promise<UnsignedTx>;
 }
 
 export type VaultAttack = 'recipient_swap' | 'amount_swap' | 'replay' | 'expired' | 'revoked' | 'daily_cap' | 'cfo_bypass';
@@ -318,6 +322,16 @@ export function createCardanoPort(env: Env): CardanoPort {
         async (txHash) => (await txOnChain(chain, txHash)) !== null,
         authorization,
       );
+    },
+    bondAddresses() {
+      return { escrow: escrowAddress(0), sink: sinkAddress(0) };
+    },
+    async readBond(price) {
+      return readBondUtxo(await chainOf(), price);
+    },
+    async buildBondSpend(bond, outcome) {
+      const chain = await chainOf();
+      return buildBondSpendTx(chain, await feeOf(), bond, outcome);
     },
   };
 }
