@@ -2,7 +2,8 @@
 // and one unit of the day's interrupt budget (3), so three are priced (402, paid, approver paged) and the fourth
 // is denied by the engine before any human hears of it.
 // Usage: pnpm --filter @authority/agent escalation-spam            (offline, against the in-memory fake authority)
-//        pnpm --filter @authority/agent escalation-spam -- --live  (against AUTHORITY_API_URL; locks real preprod bonds)
+//        pnpm --filter @authority/agent escalation-spam -- --live [--mandate M-001|M-LAB]  (against AUTHORITY_API_URL; locks real preprod bonds)
+//        M-LAB proposes an open invoice of an unlisted vendor (escalates on counterparty) and executes.
 // Live env: AUTHORITY_API_URL, AUTHORITY_AGENT_KEY, M001_AGENT_SECRET_KEY, STRIPE_READ_KEY, STRIPE_ACME_CUSTOMER_ID,
 //           AGENT_WALLET_MNEMONIC, BLOCKFROST_PROJECT_ID_PREPROD, AGENT_MAX_BOND_LOVELACE
 import { canonicalHash, type Mandate, signProposal } from '@authority/core';
@@ -48,16 +49,25 @@ async function offlineTarget(): Promise<Target> {
 
 async function liveTarget(): Promise<Target> {
   const cfg = loadConfig(process.env);
-  const secretKey = cfg.agentKeys.get('M-001');
-  if (!secretKey) throw new Error('M001_AGENT_SECRET_KEY is not set');
+  const flag = process.argv.indexOf('--mandate');
+  const mandateId = flag >= 0 ? (process.argv[flag + 1] ?? '') : 'M-001';
+  if (mandateId !== 'M-001' && mandateId !== 'M-LAB') throw new Error('--mandate must be M-001 or M-LAB');
+  const secretKey = cfg.agentKeys.get(mandateId);
+  if (!secretKey) throw new Error(`${mandateId === 'M-001' ? 'M001' : 'M_LAB'}_AGENT_SECRET_KEY is not set`);
   const api = httpAuthority({ url: cfg.apiUrl, key: cfg.apiKey });
-  const view = await api.mandate('M-001');
+  const view = await api.mandate(mandateId);
   const open = await listOpenInvoices(readOnlyStripe(cfg.stripeReadKey), cfg.customerId);
   const limit = BigInt(view.limits.autonomous_limit);
-  const inv = open.find((i) => i.payout_address && i.vendor_id && BigInt(i.amount_usdm) > limit && i.number);
-  if (!inv) throw new Error('no open invoice above the autonomous limit; seed the stage invoices first');
-  const res = await fetch(`${cfg.apiUrl}/v1/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mandate_id: 'M-001' }) });
-  if (!res.ok) throw new Error(`POST /v1/runs: HTTP ${res.status} ${await res.text()}`);
+  const approved = new Set(view.mandate.constraints.flatMap((c) => (c.kind === 'counterparty_in' ? c.values : [])));
+  // M-001: an invoice above the autonomous limit. M-LAB: an open invoice of a vendor the mandate does not list.
+  const inv = open.find((i) => i.payout_address && i.vendor_id && i.number && (mandateId === 'M-001' ? BigInt(i.amount_usdm) > limit : !approved.has(i.vendor_id)));
+  if (!inv) throw new Error('no suitable open invoice; seed the stage or lab invoices first');
+  // Stage runs start under the stage mandate; lab runs are Attack Lab runs (this one: escalation_spam).
+  const res =
+    mandateId === 'M-001'
+      ? await fetch(`${cfg.apiUrl}/v1/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mandate_id: mandateId }) })
+      : await fetch(`${cfg.apiUrl}/v1/lab/attacks`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` }, body: JSON.stringify({ attack: 'escalation_spam' }) });
+  if (!res.ok) throw new Error(`start run: HTTP ${res.status} ${await res.text()}`);
   const { run_id: runId } = (await res.json()) as { run_id: string };
   const claim = await api.claim();
   if (claim?.run_id !== runId) throw new Error(`claimed ${claim?.run_id ?? 'nothing'}, expected ${runId}: stop the agent process and retry`);
@@ -68,8 +78,8 @@ async function liveTarget(): Promise<Target> {
     mandate: view.mandate,
     secretKey,
     runId,
-    // Not executed: the approver is paged but nothing is released even if they approve from the console.
-    execute: false,
+    // M-001 is not executed (the approver is paged, nothing is released even on approve); M-LAB goes through the 402 gate.
+    execute: mandateId === 'M-LAB',
     invoice: { id: inv.id, number: inv.number!, amount: unitsToDecimal(inv.amount_usdm, view.mandate.asset.decimals), vendor_id: inv.vendor_id!, vendor_name: inv.vendor_name ?? inv.vendor_id!, address: inv.payout_address! },
     finish: () => api.finish(runId),
   };
@@ -132,6 +142,7 @@ console.table(rows);
 const paged = rows.filter((r) => r.outcome === 'ESCALATE').length;
 const denied = rows.filter((r) => r.reason === 'INTERRUPT_BUDGET_EXHAUSTED').length;
 console.log(JSON.stringify({ mode: live ? 'live' : 'offline', run_id: t.runId, ...ctx.summary, humans_paged: paged, denied_before_human: denied }));
-const expected = paged === 3 && denied === 1 && rows[3]?.reason === 'INTERRUPT_BUDGET_EXHAUSTED';
-console.log(expected ? 'escalation spam stopped at the interrupt budget: 3 priced escalations, 4th denied before any human' : 'unexpected result');
+// Fresh day: three priced escalations, the fourth denied. Budget already spent today: every round denied, nobody paged.
+const expected = (paged === 3 && denied === 1 && rows[3]?.reason === 'INTERRUPT_BUDGET_EXHAUSTED') || (paged === 0 && denied === rows.length);
+console.log(expected ? `escalation spam stopped at the interrupt budget: ${paged} priced escalations, ${denied} denied before any human` : 'unexpected result');
 if (!expected) process.exit(1);
