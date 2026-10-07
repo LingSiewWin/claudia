@@ -8,7 +8,8 @@
     "cardano": "tsx cardano.ts",
     "cardano:lab": "tsx cardano-lab.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "bond": "tsx bond-demo.ts"
+    "bond": "tsx bond-demo.ts",
+    "fund": "tsx fund-split.ts"
   },
   "dependencies": {
     "@authority/cardano": "workspace:*",

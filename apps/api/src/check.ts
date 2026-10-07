@@ -420,7 +420,7 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: P
       approval_id: approvalId,
       ...(brief === null ? {} : { brief }),
       ...(bond === null ? {} : { bond }),
-      ...(price === null || approvalId !== null ? {} : { price }),
+      ...(price === null || approvalId !== null ? {} : { price, escalation: { price, approval_endpoint: `${eng.publicApiUrl}/v1/authority/check` } }),
       receipt_id: receipt.id,
       receipt_hash: receipt.hash,
       events_url: `${eng.publicApiUrl}/v1/runs/${run.run_id}/events`,
