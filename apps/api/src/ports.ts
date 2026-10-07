@@ -123,6 +123,12 @@ export interface LabDeps {
 }
 
 export interface LabRunner {
-  /** Performs one real attempt on preprod. Returns the vault invariant that stopped it and the attempted tx. */
-  run(attack: VaultAttack, ctx: LabContext): Promise<{ code: string; tx_hash: string | null; funds_moved: string }>;
+  /**
+   * Performs one real attempt on preprod. Returns the vault invariant that stopped it and the attempted tx.
+   * `outcome: 'not_primed'` means no attack transaction was submitted; callers must not record that as a result.
+   */
+  run(
+    attack: VaultAttack,
+    ctx: LabContext,
+  ): Promise<{ code: string; tx_hash: string | null; funds_moved: string; outcome?: 'submitted' | 'not_primed' }>;
 }

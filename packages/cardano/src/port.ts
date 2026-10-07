@@ -1,11 +1,11 @@
 import type { AuthorizationFields, AuthorizationRecord, ChainBinding, Mandate } from '@authority/core';
-import { fieldsFromRecord, hexOfLength } from '@authority/core';
+import { hexOfLength } from '@authority/core';
 import { resolveTxHash, serializeData } from '@meshsdk/core';
-import { FIXED_BUDGET, type Wallet, buildTx } from './build';
-import { BLOCKFROST, type Chain, connect, evaluateTx, submit, submitRaw, tipSlot, txOnChain } from './chain';
+import { FIXED_BUDGET, type TxPlan, type Wallet, buildTx } from './build';
+import { BLOCKFROST, type Chain, awaitTx, connect, evaluateTx, submit, submitRaw, tipSlot, txOnChain } from './chain';
 import { digestDatum } from './data';
-import { type Deployment, anchorDatumFor, loadDeployments } from './deployment';
-import { ATTACKS, type LabContext as AttackContext, labRecord } from './lab';
+import { type Deployment, anchorDatumFor, chainBinding, loadDeployments, mandateAt } from './deployment';
+import { ATTACKS, type Attack, type LabContext as AttackContext, dailyCapPrimed, labRecord } from './lab';
 import { type AnchorState as OnchainAnchor, type VaultState as OnchainVault, readAnchor, readRefScript, readVault } from './state';
 import { planAnchorRevoke, planAnchorUpdate, planRelease } from './txs';
 import { addWitnessSet, type SigningWallet, walletFromMnemonic } from './wallet';
@@ -83,8 +83,16 @@ export interface PortLabContext {
   record(type: LabEventType, actionId: string | null, payload: Record<string, unknown>): Promise<void>;
 }
 
+export interface LabAttemptResult {
+  code: string;
+  tx_hash: string | null;
+  funds_moved: string;
+  /** `not_primed` means no attack transaction was built or submitted. */
+  outcome: 'submitted' | 'not_primed';
+}
+
 export interface LabRunner {
-  run(attack: VaultAttack, ctx: PortLabContext): Promise<{ code: string; tx_hash: string | null; funds_moved: string }>;
+  run(attack: VaultAttack, ctx: PortLabContext): Promise<LabAttemptResult>;
 }
 
 type Env = NodeJS.ProcessEnv | Record<string, string | undefined>;
@@ -116,6 +124,17 @@ function toCardanoError(error: unknown, txCbor: string | null): CardanoError {
   return new CardanoError('SUBMIT_FAILED', message, invariant, txCbor);
 }
 
+/**
+ * Classifies an evaluation failure. Contention (a spent or missing input) stays CONTENTION so the
+ * executor can retry it. Every other evaluation failure is SCRIPT_FAILED, with the trace's invariant kept.
+ */
+export function evaluationFailure(message: string, logs: string[], txCbor: string): CardanoError {
+  const text = [...logs, message].join('\n');
+  const classified = toCardanoError(new Error(text), txCbor);
+  if (classified.code === 'CONTENTION') return classified;
+  return new CardanoError('SCRIPT_FAILED', message, invariantFrom(text), txCbor);
+}
+
 async function built(chain: Chain, plan: Parameters<typeof buildTx>[1], fixedBudget: { mem: number; steps: number } | null = null): Promise<UnsignedTx> {
   try {
     const txCbor = await buildTx(chain, plan, fixedBudget);
@@ -140,11 +159,68 @@ async function snapshot(chain: Chain, d: Deployment, fee: SigningWallet): Promis
   return { anchor, vault, refScript, wallet };
 }
 
-async function blockfrostJson<T>(chain: Chain, path: string): Promise<{ status: number; body: T | null; text: string }> {
+async function blockfrostGet(chain: Chain, path: string): Promise<{ status: number; body: unknown }> {
   const res = await fetch(`${BLOCKFROST}${path}`, { headers: { project_id: chain.projectId } });
   const text = await res.text();
-  if (!res.ok) return { status: res.status, body: null, text };
-  return { status: res.status, body: JSON.parse(text) as T, text };
+  if (!res.ok) return { status: res.status, body: null };
+  return { status: res.status, body: JSON.parse(text) as unknown };
+}
+
+const RELEASE_PAGE = 100;
+/** Past this many full pages the lookup throws. Returning null would let authorize issue again. */
+const RELEASE_PAGE_LIMIT = 50;
+
+function listedTxs(body: unknown): { tx_hash: string }[] {
+  if (!Array.isArray(body)) throw new Error('release lookup: expected a transaction list');
+  return body.map((row) => {
+    if (!row || typeof row !== 'object' || typeof (row as { tx_hash?: unknown }).tx_hash !== 'string') {
+      throw new Error('release lookup: transaction row has no tx_hash');
+    }
+    return { tx_hash: (row as { tx_hash: string }).tx_hash };
+  });
+}
+
+function utxoOutputs(body: unknown): { address: string; inline_datum: string | null }[] {
+  if (!body || typeof body !== 'object' || !Array.isArray((body as { outputs?: unknown }).outputs)) {
+    throw new Error('release lookup: expected transaction outputs');
+  }
+  return (body as { outputs: unknown[] }).outputs.map((o) => {
+    if (!o || typeof o !== 'object') throw new Error('release lookup: bad output');
+    const out = o as { address?: unknown; inline_datum?: unknown };
+    if (typeof out.address !== 'string') throw new Error('release lookup: output has no address');
+    if (out.inline_datum != null && typeof out.inline_datum !== 'string') throw new Error('release lookup: inline datum is not hex');
+    return { address: out.address, inline_datum: typeof out.inline_datum === 'string' ? out.inline_datum : null };
+  });
+}
+
+/**
+ * Confirmed tx whose recipient output carries this authorization's digest.
+ * Null only for a real empty list or a 404. Any other HTTP status throws, and pages continue until a
+ * confirmed hit or a short page, so a blip or an older release cannot look like "no release."
+ */
+export async function findConfirmedRelease(
+  get: (path: string) => Promise<{ status: number; body: unknown }>,
+  confirmed: (txHash: string) => Promise<boolean>,
+  authorization: AuthorizationRecord,
+): Promise<string | null> {
+  const want = serializeData(digestDatum(authorization), 'JSON');
+  const recipient = authorization.fields.recipient;
+  for (let page = 1; page <= RELEASE_PAGE_LIMIT; page++) {
+    const listed = await get(`/addresses/${encodeURIComponent(recipient)}/transactions?order=desc&count=${RELEASE_PAGE}&page=${page}`);
+    if (listed.status === 404 && page === 1) return null;
+    if (listed.status !== 200) throw new Error(`release lookup failed (${listed.status})`);
+    const rows = listedTxs(listed.body);
+    for (const row of rows) {
+      const utxos = await get(`/txs/${row.tx_hash}/utxos`);
+      if (utxos.status !== 200) throw new Error(`release lookup utxos ${row.tx_hash} failed (${utxos.status})`);
+      const hit = utxoOutputs(utxos.body).some(
+        (o) => o.address === recipient && (o.inline_datum === want || (o.inline_datum?.includes(authorization.digest_hex) ?? false)),
+      );
+      if (hit && (await confirmed(row.tx_hash))) return row.tx_hash;
+    }
+    if (rows.length < RELEASE_PAGE) return null;
+  }
+  throw new Error(`release lookup did not finish within ${RELEASE_PAGE_LIMIT} pages`);
 }
 
 /** Authority Cardano port: existing readers, plan* builders, and submit. Connects on first use. */
@@ -218,10 +294,7 @@ export function createCardanoPort(env: Env): CardanoPort {
         tx = await fee.sign(txCbor);
         for (const set of witnessSets) tx = addWitnessSet(tx, set);
         const ev = await evaluateTx(chain, tx);
-        if (!ev.ok) {
-          const text = [...ev.logs, ev.message].join('\n');
-          throw new CardanoError('SCRIPT_FAILED', ev.message, invariantFrom(text), tx);
-        }
+        if (!ev.ok) throw evaluationFailure(ev.message, ev.logs, tx);
         return await submit(chain, tx);
       } catch (error) {
         throw toCardanoError(error, tx);
@@ -240,31 +313,72 @@ export function createCardanoPort(env: Env): CardanoPort {
     async releaseOf(binding, authorization) {
       const chain = await chainOf();
       deploymentOf(binding);
-      const want = serializeData(digestDatum(authorization), 'JSON');
-      const listed = await blockfrostJson<{ tx_hash: string }[]>(
-        chain,
-        `/addresses/${authorization.fields.recipient}/transactions?order=desc&count=100`,
+      return findConfirmedRelease(
+        (path) => blockfrostGet(chain, path),
+        async (txHash) => (await txOnChain(chain, txHash)) !== null,
+        authorization,
       );
-      if (listed.status !== 200 || !listed.body) return null;
-      for (const row of listed.body) {
-        const utxos = await blockfrostJson<{ outputs: { address: string; inline_datum: string | null }[] }>(chain, `/txs/${row.tx_hash}/utxos`);
-        const hit = utxos.body?.outputs.some(
-          (o) => o.address === authorization.fields.recipient && (o.inline_datum === want || (o.inline_datum?.includes(authorization.digest_hex) ?? false)),
-        );
-        if (hit && (await txOnChain(chain, row.tx_hash))) return row.tx_hash;
-      }
-      return null;
     },
   };
 }
 
-function attackPlan(attack: VaultAttack, lab: AttackContext, issued: AuthorizationRecord) {
-  if (attack === 'replay') return ATTACKS.replay(lab, issued);
-  if (attack === 'revoked') return ATTACKS.revoked(lab, issued);
-  return ATTACKS[attack](lab);
+export type PreparedAttack =
+  | { kind: 'attack'; attack: Attack; record: AuthorizationRecord | null }
+  | { kind: 'revoke_then_attack'; revoke: TxPlan; record: AuthorizationRecord }
+  | { kind: 'not_primed'; code: 'NOT_PRIMED' };
+
+/**
+ * Chooses the transaction a lab attack may submit. Replay uses a nonce that is already spent.
+ * Revoked builds the pre-revoke record, then a `planAnchorRevoke` — the record is not a release plan yet.
+ * daily_cap returns not_primed until `dailyCapPrimed`, so the runner does not submit and does not pretend it did.
+ * Neither replay nor revoked asks the engine to authorize an open invoice.
+ */
+export function prepareLabAttack(attack: VaultAttack, lab: AttackContext): PreparedAttack {
+  if (attack === 'replay') {
+    const record = labRecord(lab, { nonce: lab.vault.datum.last_nonce.toString() });
+    if (BigInt(record.fields.nonce) > lab.vault.datum.last_nonce) throw new Error('replay nonce is still spendable');
+    return { kind: 'attack', attack: ATTACKS.replay(lab, record), record };
+  }
+  if (attack === 'revoked') {
+    return { kind: 'revoke_then_attack', revoke: planAnchorRevoke(lab.deployment, lab.anchor, lab.executor), record: labRecord(lab) };
+  }
+  if (attack === 'daily_cap' && !dailyCapPrimed(lab)) return { kind: 'not_primed', code: 'NOT_PRIMED' };
+  return { kind: 'attack', attack: attackOf(attack, lab), record: null };
 }
 
-/** M-LAB vault attacks. Reads only M_LAB_*, the fee wallet, Blockfrost, and the demo vendor address. */
+function attackOf(attack: Exclude<VaultAttack, 'replay' | 'revoked'>, lab: AttackContext): Attack {
+  switch (attack) {
+    case 'recipient_swap':
+      return ATTACKS.recipient_swap(lab);
+    case 'amount_swap':
+      return ATTACKS.amount_swap(lab);
+    case 'expired':
+      return ATTACKS.expired(lab);
+    case 'daily_cap':
+      return ATTACKS.daily_cap(lab);
+    case 'cfo_bypass':
+      return ATTACKS.cfo_bypass(lab);
+  }
+}
+
+/** Runs a prepared attack. The pre-revoke record is submitted only after the anchor read comes back revoked. */
+export async function runPrepared(
+  prepared: PreparedAttack,
+  io: {
+    revoke(plan: TxPlan): Promise<AttackContext>;
+    submit(attack: Attack): Promise<LabAttemptResult>;
+  },
+): Promise<LabAttemptResult> {
+  if (prepared.kind === 'not_primed') return { code: prepared.code, tx_hash: null, funds_moved: '0', outcome: 'not_primed' };
+  if (prepared.kind === 'attack') return io.submit(prepared.attack);
+  const next = await io.revoke(prepared.revoke);
+  if (next.anchor.datum.status !== 'revoked') {
+    throw new Error('anchor revoke did not leave the anchor revoked; the pre-revoke release was not submitted');
+  }
+  return io.submit(ATTACKS.revoked(next, prepared.record));
+}
+
+/** M-LAB vault attacks. Reads M_LAB_*, the fee wallet, Blockfrost, and the demo vendor address. */
 export function createLabRunner(env: Env, cardano: CardanoPort): LabRunner | null {
   return {
     async run(attack, ctx) {
@@ -272,44 +386,74 @@ export function createLabRunner(env: Env, cardano: CardanoPort): LabRunner | nul
       const fee = await walletFromMnemonic(chain, env.FEE_WALLET_MNEMONIC, 'FEE_WALLET_MNEMONIC');
       const d = loadDeployments()['M-LAB'];
       if (!d) throw new Error('no M-LAB deployment');
-      const s = await snapshot(chain, d, fee);
-      const lab: AttackContext = {
-        deployment: d,
-        anchor: s.anchor,
-        vault: s.vault,
-        refScript: s.refScript,
-        executor: s.wallet,
-        engineSecretKey: hexOfLength(env.M_LAB_ENGINE_SECRET_KEY ?? '', 32, 'M_LAB_ENGINE_SECRET_KEY'),
-        payee: env.DEMO_VENDOR_AWS_ADDRESS ?? '',
-        actionHash: '00'.repeat(32),
-        nowMs: Date.now(),
+      const engineSecretKey = hexOfLength(env.M_LAB_ENGINE_SECRET_KEY ?? '', 32, 'M_LAB_ENGINE_SECRET_KEY');
+      const payee = env.DEMO_VENDOR_AWS_ADDRESS ?? '';
+      const readLab = async (): Promise<AttackContext> => {
+        const s = await snapshot(chain, d, fee);
+        return {
+          deployment: d,
+          anchor: s.anchor,
+          vault: s.vault,
+          refScript: s.refScript,
+          executor: s.wallet,
+          engineSecretKey,
+          payee,
+          actionHash: '00'.repeat(32),
+          nowMs: Date.now(),
+        };
       };
-      const invoice = env.M_LAB_INVOICE_NUMBER ?? '';
-      const issued =
-        attack === 'replay' || attack === 'revoked'
-          ? invoice
-            ? await ctx.authorize(invoice)
-            : await ctx.forge(fieldsFromRecord(labRecord(lab)))
-          : labRecord(lab);
-      const a = attackPlan(attack, lab, issued);
-      const tx = await buildTx(chain, a.plan, FIXED_BUDGET);
-      const txHash = resolveTxHash(tx);
-      await ctx.record('TransactionBuilt', null, { attack, tx_hash: txHash, trace: a.trace });
-      const signed = await fee.sign(tx);
-      const result = await submitRaw(chain, signed);
-      const code = invariantFrom(a.trace) ?? invariantFrom(`${result.body}\n${a.trace}`) ?? a.trace;
-      if (result.ok) await ctx.record('TransactionSubmitted', null, { attack, tx_hash: txHash });
-      else await ctx.record('TransactionRejected', null, { attack, tx_hash: txHash, body: result.body, code });
-      const after = await cardano.readVaultState({
-        chainTag: d.chain_tag,
-        vaultHash: d.vault.hash,
-        mandateRef: d.anchor.policy,
-        assetPolicy: d.asset.policy,
-        assetName: d.asset.name,
-        assetSymbol: d.mandate.asset.symbol,
-      });
-      const funds_moved = (s.vault.balance - after.balance).toString();
-      return { code, tx_hash: txHash, funds_moved };
+      const lab = await readLab();
+      const prepared = prepareLabAttack(attack, lab);
+      const principalBox: { wallet?: SigningWallet } = {};
+      let revoked = false;
+      try {
+        return await runPrepared(prepared, {
+          async revoke(plan) {
+            const principal = await walletFromMnemonic(chain, env.M_LAB_PRINCIPAL_MNEMONIC, 'M_LAB_PRINCIPAL_MNEMONIC');
+            if (principal.pkh !== lab.anchor.datum.principal_pkh) throw new Error('M_LAB_PRINCIPAL_MNEMONIC is not the M-LAB admin key');
+            principalBox.wallet = principal;
+            let signed = await fee.sign(await buildTx(chain, plan));
+            signed = await principal.sign(signed);
+            const txHash = await submit(chain, signed);
+            await awaitTx(chain, txHash);
+            revoked = true;
+            await ctx.record('MandateUpdated', null, { attack, tx_hash: txHash, status: 'revoked' });
+            return readLab();
+          },
+          async submit(built) {
+            const tx = await buildTx(chain, built.plan, FIXED_BUDGET);
+            const txHash = resolveTxHash(tx);
+            await ctx.record('TransactionBuilt', null, { attack, tx_hash: txHash, trace: built.trace });
+            const posted = await submitRaw(chain, await fee.sign(tx));
+            const code = invariantFrom(built.trace) ?? invariantFrom(`${posted.body}\n${built.trace}`) ?? built.trace;
+            if (posted.ok) await ctx.record('TransactionSubmitted', null, { attack, tx_hash: txHash });
+            else await ctx.record('TransactionRejected', null, { attack, tx_hash: txHash, body: posted.body, code });
+            const after = await cardano.readVaultState(chainBinding(d));
+            return { code, tx_hash: txHash, funds_moved: (lab.vault.balance - after.balance).toString(), outcome: 'submitted' };
+          },
+        });
+      } finally {
+        const principal = principalBox.wallet;
+        if (revoked && principal) {
+          try {
+            const now = await readLab();
+            if (now.anchor.datum.status === 'revoked') {
+              const next = anchorDatumFor(mandateAt(d, now.anchor.datum.version + 1), d.asset);
+              let signed = await fee.sign(await buildTx(chain, planAnchorUpdate(d, now.anchor, next, now.executor)));
+              signed = await principal.sign(signed);
+              const txHash = await submit(chain, signed);
+              await awaitTx(chain, txHash);
+              await ctx.record('MandateUpdated', null, { attack, tx_hash: txHash, status: 'active' });
+            }
+          } catch (error) {
+            await ctx.record('TransactionRejected', null, {
+              attack,
+              step: 'reactivate',
+              error: error instanceof Error ? error.message : String(error),
+            }).catch(() => undefined);
+          }
+        }
+      }
     },
   };
 }

@@ -82,6 +82,20 @@ describe('Attack Lab runs', () => {
     expect((await api.post('/v1/lab/attacks', { attack: 'replay' })).status).toBe(200); // the previous run finished
   });
 
+  it('a not-primed daily cap is not recorded as a submitted attack', async () => {
+    const runner: LabRunner = {
+      async run() {
+        return { code: 'NOT_PRIMED', tx_hash: null, funds_moved: '0', outcome: 'not_primed' };
+      },
+    };
+    api = await startApi({ labRunner: runner });
+    const { run_id } = (await api.post('/v1/lab/attacks', { attack: 'daily_cap' })).json;
+    const events = await wait(run_id, 'AttackNotPrimed');
+    expect(events.some((e) => e.type === 'AttackResult')).toBe(false);
+    expect(events.some((e) => e.type === 'TransactionRejected')).toBe(false);
+    expect(events.filter((e) => e.type === 'AttackNotPrimed').map((e) => e.payload)).toEqual([{ attack: 'daily_cap', code: 'NOT_PRIMED' }]);
+  });
+
   it('vault attacks need the lab runner; unknown attacks are 400', async () => {
     api = await startApi();
     expect((await api.post('/v1/lab/attacks', { attack: 'replay' })).status).toBe(501);
