@@ -1,0 +1,26 @@
+{
+  "name": "@authority/llm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/scripted.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:live": "LLM_LIVE=1 vitest run test/live.test.ts --reporter=verbose",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "0.34.2",
+    "@anthropic-ai/sdk": "0.131.0",
+    "@authority/core": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
