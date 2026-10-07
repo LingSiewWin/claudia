@@ -31,6 +31,9 @@ export function receiptBody(
 ) {
   const vid = ctx.verification ? verificationId(ctx.verification.report_hash) : null;
   const auth = extra.authorization;
+  // The signature binds the authorization's verification_ref. A later report on a reused authorization is a different hash.
+  const signedRef = auth?.record.fields.verification_ref ?? null;
+  const signedVid = signedRef === null ? null : verificationId(signedRef);
   return {
     schema: 'receipt/v0.1',
     principal: row.mandate.principal.name,
@@ -41,7 +44,7 @@ export function receiptBody(
     verification: ctx.verification && vid ? { id: vid, ...ctx.verification } : null,
     authorization: auth && {
       id: authorizationId(auth.id),
-      verification_id: vid,
+      verification_id: signedVid,
       digest: auth.record.digest_hex,
       signature: auth.record.signature_hex,
       engine_public_key: auth.record.engine_public_key,

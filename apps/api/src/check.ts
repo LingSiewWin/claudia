@@ -308,6 +308,13 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
             if (out.kind === 'issued') {
               trail.push(out.event);
               if (body.execute) eng.enqueue(out.id);
+            } else if (body.execute) {
+              // execute:false stored this row as issued. A later execute must queue that same row; the executor ignores issued.
+              const queued = await eng.db.query(
+                `update authorizations set status = 'queued' where id = $1 and status = 'issued' returning id`,
+                [out.id],
+              );
+              if (queued.length === 1) eng.enqueue(out.id);
             }
           }
         } catch (error) {

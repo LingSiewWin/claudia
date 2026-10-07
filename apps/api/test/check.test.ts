@@ -75,6 +75,41 @@ describe('authority check: evaluate, verify, evaluate, issue', () => {
     expect(api.chains.get(api.b001.vaultHash)!.balance).toBe(BigInt(usdm('135')));
   });
 
+  it('a reused authorization receipt binds verification_id to the signed ref, not the new report', async () => {
+    const proposal = signed(action({ id: 'A-1', invoice: inv('INV-3821') }));
+    const first = await masumi(proposal);
+    const again = await masumi(proposal);
+    const signedRef = first.json.authorization.fields.verification_ref as string;
+    expect(again.json.verification.report_hash).not.toBe(signedRef);
+    expect(again.json.authorization.fields.verification_ref).toBe(signedRef);
+    const firstBody = (await api.get(`/v1/receipts/${first.json.receipt_id}`)).json.receipt;
+    const againBody = (await api.get(`/v1/receipts/${again.json.receipt_id}`)).json.receipt;
+    const signedId = `V-${signedRef.slice(0, 12)}`;
+    expect(firstBody.authorization.verification_id).toBe(signedId);
+    expect(againBody.authorization.verification_id).toBe(signedId);
+    expect(againBody.authorization.verification_id).not.toBe(`V-${again.json.verification.report_hash.slice(0, 12)}`);
+    expect(againBody.verification.report_hash).toBe(again.json.verification.report_hash);
+  });
+
+  it('execute after an issued authorization queues that row and does not issue another', async () => {
+    const run = await api.agentRun();
+    const proposal = signed(action({ id: 'A-1', invoice: inv('INV-3821') }, api.now()));
+    const issued = await api.check({ mandate_id: 'M-001', proposal, execute: false, run_id: run });
+    expect(issued.status).toBe(200);
+    expect(issued.json.authorization.fields.nonce).toBe('1');
+    const [before] = await api.db.query<{ status: string }>('select status from authorizations');
+    expect(before!.status).toBe('issued');
+    expect(api.cardano.built).toHaveLength(0);
+
+    const exec = await api.check({ mandate_id: 'M-001', proposal, execute: true, run_id: run });
+    expect(exec.status).toBe(200);
+    expect(exec.json.authorization.digest_hex).toBe(issued.json.authorization.digest_hex);
+    await api.executor.idle();
+    const rows = await api.db.query<{ status: string; nonce: string }>('select status, nonce::text as nonce from authorizations');
+    expect(rows).toEqual([{ status: 'settled', nonce: '1' }]);
+    expect(api.cardano.built).toHaveLength(1);
+  });
+
   it('a second issuance for a reserved invoice is a deterministic DENY INVOICE_NOT_OPEN, logged', async () => {
     const first = await masumi(signed(action({ id: 'A-1', invoice: inv('INV-3821') })));
     const other = await masumi(signed(action({ id: 'A-1b', invoice: inv('INV-3821') })));
