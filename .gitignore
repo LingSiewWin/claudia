@@ -36,6 +36,7 @@ workflows/*/.cre_build_tmp.js
 
 # Web build and test output
 .next/
+out/
 next-env.d.ts
 test-results/
 playwright-report/
@@ -47,7 +48,7 @@ contracts/sepolia/cache/
 contracts/sepolia/broadcast/
 
 # Masumi worker journals
-apps/masumi-worker/.state/
+.state/
 
 # Deploy manifests (unsigned tx bodies, local audit trail)
 packages/cardano/deployments/manifests/
