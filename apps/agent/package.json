@@ -12,9 +12,11 @@
     "once": "node --env-file-if-exists=../../.env --import tsx src/main.ts --once",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "rationale-check": "node --env-file-if-exists=../../.env --import tsx scripts/rationale-check.ts"
+    "rationale-check": "node --env-file-if-exists=../../.env --import tsx scripts/rationale-check.ts",
+    "escalation-spam": "node --env-file-if-exists=../../.env --import tsx scripts/escalation-spam.ts"
   },
   "dependencies": {
+    "@authority/cardano": "workspace:*",
     "@authority/core": "workspace:*",
     "@authority/llm": "workspace:*",
     "@authority/stripe": "workspace:*",

@@ -25,7 +25,7 @@ export function clerk(o: { gullible: boolean; rationale?: (number: string) => st
     for (const r of results) reads.set(r.name, JSON.parse(r.content));
     const invoices = reads.get('list_open_invoices') as unknown as Array<Record<string, string>>;
     const messages = reads.get('read_vendor_messages') as unknown as Array<Record<string, string>>;
-    const invoiceNo = /invoice (\S+)\.$/.exec(prompt)?.[1];
+    const invoiceNo = /: invoice (\S+)\./.exec(prompt)?.[1];
     if (invoiceNo) {
       const inv = invoices.find((i) => i.invoice_number === invoiceNo);
       if (!inv) return say(`${invoiceNo} is not open.`);

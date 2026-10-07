@@ -22,9 +22,15 @@ describe('stage run through the real engine', () => {
     ]);
     expect([fake.state.balance, fake.state.spent]).toEqual([108_580_000n, 26_420_000n]);
     expect(fake.checks.every((c) => c.execute)).toBe(true);
-    expect(fake.checks.map((c) => c.key)).toEqual(result.items.map((i) => `agent:${fake.runId}:${i.action_id}`));
+    // The two escalations are checked twice each: the 402, then the paid retry under the same idempotency key.
+    expect([...new Set(fake.checks.map((c) => c.key))]).toEqual(result.items.map((i) => `agent:${fake.runId}:${i.action_id}`));
+    expect(fake.checks.filter((c) => c.payment).map((c) => [c.key.split(':')[2], c.payment!.payload.approval_id])).toEqual([
+      ['A-0f0e0d0c-2', 'AP-1'],
+      ['A-0f0e0d0c-3', 'AP-2'],
+    ]);
+    expect(result.summary).toEqual({ escalations: 2, bonds_paid: 2, bonds_refunded: 2, budget_denials: 0 });
     expect(fake.finished()).toBe(1);
-    expect(lines.at(-1)).toMatchObject({ event: 'run_finished', items: 7, proposals: 7 });
+    expect(lines.at(-1)).toMatchObject({ event: 'run_finished', items: 7, proposals: 7, escalations: 2, bonds_paid: 2, bonds_refunded: 2, budget_denials: 0 });
   });
 
   it('a model that ignores the phishing email pays INV-3823 to the vendor of record', async () => {
