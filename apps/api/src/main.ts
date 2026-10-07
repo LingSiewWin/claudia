@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { createCardanoPort, createLabRunner } from '@authority/cardano';
 import { simulateBroadcast, verificationRequestFor, verifyInvoice } from '@authority/chainlink';
 import { migrate, pgDb } from '@authority/db';
+import { createInterpreter, guardModel, modelConfigured, modelFromEnv, secretsFromEnv } from '@authority/llm';
 import { getInvoice, listOpenInvoices, readOnlyStripe } from '@authority/stripe';
 import { markPaidOutOfBand } from '@authority/stripe/vendor';
 import Stripe from 'stripe';
@@ -57,7 +58,13 @@ const eng: Engine = {
   readInvoice,
   engineKeys: cfg.engineKeys,
   enqueue: (id) => executor.enqueue(id),
-  interpret: null,
+  // Plain-English requests use the same model and secret guard as the agent; off when no model is configured.
+  interpret: modelConfigured(process.env)
+    ? createInterpreter({
+        model: guardModel(modelFromEnv(process.env), secretsFromEnv(process.env)),
+        findInvoice: async (number) => (await listOpenInvoices(reader, cfg.stripeCustomerId)).find((i) => i.number === number) ?? null,
+      })
+    : null,
   publicApiUrl: cfg.publicApiUrl,
 };
 

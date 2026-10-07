@@ -122,6 +122,12 @@ create table if not exists cre_jobs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists run_work (
+  run_id     uuid primary key,
+  body       text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists pending_txs (
   tx_hash    text primary key,
   mandate_id text not null,

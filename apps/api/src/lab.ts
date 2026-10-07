@@ -13,6 +13,7 @@ import {
 import * as z from 'zod';
 import { checkInProcess, type Engine } from './check';
 import { HttpError, parseJson, type Reply } from './http';
+import { labInjectionWork, storeWork } from './inbox';
 import { mandateOfKind, readChain, vaultSummary } from './mandates';
 import type { LabDeps, LabKeys, VaultAttack } from './ports';
 import { assertNoLiveRun, createRun, finishRun } from './runs';
@@ -91,6 +92,7 @@ export async function startAttack(eng: Engine, lab: LabDeps, rawBody: string): P
     vault: vaultSummary(vault, eng.now()),
   });
   await eng.log.emit({ run_id: runId, action_id: null, type: 'AttackStarted', payload: { attack, mandate_id: row.mandate.id } });
+  if (agentDriven) await storeWork(eng.db, runId, labInjectionWork(eng.now()));
   // The lab engine knows only the M-LAB key, whatever the shared engine holds.
   const labEng: Engine = { ...eng, engineKeys: new Map([[row.mandate.id, lab.keys.engine]]) };
   if (!agentDriven) void runVaultAttack(labEng, lab, runId, attack as VaultAttack);

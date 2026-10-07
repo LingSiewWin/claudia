@@ -4,6 +4,7 @@ import { prepareRevoke, prepareUpdate, submitMandateTx } from './admin';
 import { approve, decline, pendingApprovals, submitApproved } from './approvals';
 import { type Caller, type Engine, handleCheck } from './check';
 import { bearer, HttpError, idempotencyKey, parseJson, readBody, type Reply, send } from './http';
+import { agentDecisions, readWork, stageWork, storeWork } from './inbox';
 import { startAttack } from './lab';
 import { currentMandate, limitsOf, mandateOfKind, readChain, vaultSummary } from './mandates';
 import type { LabDeps } from './ports';
@@ -96,6 +97,7 @@ export function createApp(deps: AppDeps) {
           status: 'pending',
           vault: vaultSummary(vault, eng.now()),
         });
+        await storeWork(eng.db, runId, stageWork(eng.now()));
         return ok({ run_id: runId });
       },
     },
@@ -186,6 +188,25 @@ export function createApp(deps: AppDeps) {
       handler: async ({ req, params }) => {
         relayOnly(req);
         return completeJob(eng.db, params[0]!, await readBody(req, 1024 * 1024));
+      },
+    },
+    // Agent work queue and decision history (agent key only)
+    {
+      method: 'GET',
+      path: /^\/v1\/agent\/runs\/([0-9a-f-]{36})\/work$/,
+      handler: async ({ req, params }) => {
+        agentOnly(req);
+        return ok(await readWork(eng.db, params[0]!));
+      },
+    },
+    {
+      method: 'GET',
+      path: /^\/v1\/agent\/decisions$/,
+      handler: async ({ req, url }) => {
+        agentOnly(req);
+        const mandateId = url.searchParams.get('mandate_id') ?? '';
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(mandateId)) throw new HttpError(400, 'mandate_id is required');
+        return ok({ decisions: await agentDecisions(eng.db, mandateId) });
       },
     },
   ];
