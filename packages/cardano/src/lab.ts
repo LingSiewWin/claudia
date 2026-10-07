@@ -109,6 +109,14 @@ export interface Attack {
 
 const release = (ctx: LabContext, overrides: Partial<AuthorizationRecordFields> = {}) => releasePlan(labRelease(ctx, labRecord(ctx, overrides)));
 
+/** 0.90 USDM, the amount the R12 attack tries to add once today's spend is already against the cap. */
+const DAILY_CAP_ATTACK = 900_000n;
+
+/** True when one more 0.90 would exceed today's cap. That is the only state `ATTACKS.daily_cap` can run in. */
+export function dailyCapPrimed(ctx: LabContext): boolean {
+  return ctx.vault.datum.spent_today + DAILY_CAP_ATTACK > ctx.anchor.datum.daily_cap;
+}
+
 /** Single-transaction attacks against the M-LAB vault and anchor. Each must fail with `trace`. */
 export const ATTACKS = {
   /** R8: an authorization whose nonce is no longer above the vault's (it settled, or a higher one did). */
@@ -119,8 +127,8 @@ export const ATTACKS = {
   revoked: (ctx: LabContext, issued: AuthorizationRecord): Attack => ({ trace: 'r3 ? False', plan: releasePlan(labRelease(ctx, issued)), cosigner: null }),
   /** R12 (stolen engine key): one more 0.90 once today's spend leaves less than 0.90 under the cap. */
   daily_cap: (ctx: LabContext): Attack => {
-    if (ctx.vault.datum.spent_today + 900_000n <= ctx.anchor.datum.daily_cap) throw new Error('daily cap attack needs today\'s spend within 0.90 of the cap');
-    return { trace: 'r12 ? False', plan: release(ctx, { amount: '900000' }), cosigner: null };
+    if (!dailyCapPrimed(ctx)) throw new Error('daily cap attack needs today\'s spend within 0.90 of the cap');
+    return { trace: 'r12 ? False', plan: release(ctx, { amount: DAILY_CAP_ATTACK.toString() }), cosigner: null };
   },
   /** R16: valid authorization to AWS; the tx pays the executor instead. */
   recipient_swap: (ctx: LabContext): Attack => {

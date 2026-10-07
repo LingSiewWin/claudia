@@ -139,7 +139,12 @@ async function runVaultAttack(eng: Engine, lab: LabDeps, runId: string, attack: 
         await emit(type, actionId, payload);
       },
     });
-    await emit('AttackResult', null, { attack, stopped_by: 'vault', code: result.code, funds_moved: result.funds_moved, tx_hash: result.tx_hash });
+    // A vault that is not primed never submitted. Recording AttackResult with funds_moved 0 would look like a stopped payment.
+    if (result.outcome === 'not_primed' || result.code === 'NOT_PRIMED') {
+      await emit('AttackNotPrimed', null, { attack, code: result.code });
+    } else {
+      await emit('AttackResult', null, { attack, stopped_by: 'vault', code: result.code, funds_moved: result.funds_moved, tx_hash: result.tx_hash });
+    }
   } catch (error) {
     await emit('TransactionRejected', null, { tx_hash: null, invariant: 'LAB_ERROR', error: (error as Error).message, tx_body_cbor: null });
   } finally {

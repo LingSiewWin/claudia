@@ -1,6 +1,8 @@
 import type { VerificationOutcome } from '@authority/chainlink';
 import type { ActionIR, AuthorizationFields, AuthorizationRecord, ChainBinding, Mandate } from '@authority/core';
 
+export { CardanoError, type CardanoErrorCode } from '@authority/cardano';
+
 // Everything the API needs from the outside world. Real implementations are wired in main.ts;
 // tests use in-memory fakes. Cardano is authoritative for vault and anchor state.
 
@@ -37,20 +39,6 @@ export interface SettlementMetadata {
 export interface UnsignedTx {
   txCbor: string;
   txHash: string;
-}
-
-export type CardanoErrorCode = 'SCRIPT_FAILED' | 'CONTENTION' | 'SUBMIT_FAILED';
-
-export class CardanoError extends Error {
-  constructor(
-    readonly code: CardanoErrorCode,
-    message: string,
-    /** Vault or anchor invariant from the script trace, e.g. "R8" */
-    readonly invariant: string | null = null,
-    readonly txCbor: string | null = null,
-  ) {
-    super(message);
-  }
 }
 
 export interface CardanoPort {
@@ -123,6 +111,12 @@ export interface LabDeps {
 }
 
 export interface LabRunner {
-  /** Performs one real attempt on preprod. Returns the vault invariant that stopped it and the attempted tx. */
-  run(attack: VaultAttack, ctx: LabContext): Promise<{ code: string; tx_hash: string | null; funds_moved: string }>;
+  /**
+   * Performs one real attempt on preprod. Returns the vault invariant that stopped it and the attempted tx.
+   * `outcome: 'not_primed'` means no attack transaction was submitted; callers must not record that as a result.
+   */
+  run(
+    attack: VaultAttack,
+    ctx: LabContext,
+  ): Promise<{ code: string; tx_hash: string | null; funds_moved: string; outcome?: 'submitted' | 'not_primed' }>;
 }

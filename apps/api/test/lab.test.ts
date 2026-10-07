@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { CardanoError as PackageCardanoError } from '@authority/cardano';
 import { bytesToHex, fieldsFromRecord, publicKeyFromSecret, verifyAuthorizationRecord } from '@authority/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { forgeAuthorization, labKeys } from '../src/lab';
-import type { LabRunner } from '../src/ports';
+import { CardanoError, type LabRunner } from '../src/ports';
 import { ADDR, action, AGENT_KEY, type Api, inv, LAB_AGENT_SK, LAB_ENGINE_SK, signed, startApi } from './harness';
 
 let api: Api;
@@ -15,6 +16,16 @@ const wait = async (runId: string, type: string) => {
   }
   throw new Error(`no ${type}`);
 };
+
+describe('CardanoError', () => {
+  it('is the class thrown by @authority/cardano', () => {
+    expect(CardanoError).toBe(PackageCardanoError);
+    const err = new PackageCardanoError('CONTENTION', 'already spent', 'R8', 'abcd');
+    expect(err).toBeInstanceOf(CardanoError);
+    expect(err.code).toBe('CONTENTION');
+    expect(err.invariant).toBe('R8');
+  });
+});
 
 describe('Attack Lab isolation', () => {
   it('the lab module reads only M_LAB_* settings and never names the stage keys', () => {
@@ -80,6 +91,20 @@ describe('Attack Lab runs', () => {
     expect(events[0]!.payload.mandate_id).toBe('M-LAB');
     expect(events.at(-1)!.payload).toEqual({ attack: 'cfo_bypass', stopped_by: 'vault', code: 'R11', funds_moved: '0', tx_hash: 'ee'.repeat(32) });
     expect((await api.post('/v1/lab/attacks', { attack: 'replay' })).status).toBe(200); // the previous run finished
+  });
+
+  it('a not-primed daily cap is not recorded as a submitted attack', async () => {
+    const runner: LabRunner = {
+      async run() {
+        return { code: 'NOT_PRIMED', tx_hash: null, funds_moved: '0', outcome: 'not_primed' };
+      },
+    };
+    api = await startApi({ labRunner: runner });
+    const { run_id } = (await api.post('/v1/lab/attacks', { attack: 'daily_cap' })).json;
+    const events = await wait(run_id, 'AttackNotPrimed');
+    expect(events.some((e) => e.type === 'AttackResult')).toBe(false);
+    expect(events.some((e) => e.type === 'TransactionRejected')).toBe(false);
+    expect(events.filter((e) => e.type === 'AttackNotPrimed').map((e) => e.payload)).toEqual([{ attack: 'daily_cap', code: 'NOT_PRIMED' }]);
   });
 
   it('vault attacks need the lab runner; unknown attacks are 400', async () => {
