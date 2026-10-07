@@ -7,6 +7,7 @@
     "start": "node --env-file-if-exists=../../.env --import tsx src/main.ts",
     "seed": "node --env-file-if-exists=../../.env --import tsx scripts/seed.ts",
     "stage": "node --env-file-if-exists=../../.env --import tsx scripts/stage-run.ts",
+    "cfo": "node --env-file-if-exists=../../.env --import tsx scripts/cfo-respond.ts",
     "check-once": "node --env-file-if-exists=../../.env --import tsx scripts/check-once.ts",
     "cre-relay": "node --env-file-if-exists=../../.env --import tsx scripts/cre-relay.ts",
     "verify-log": "node --env-file-if-exists=../../.env --import tsx scripts/verify-log.ts",
