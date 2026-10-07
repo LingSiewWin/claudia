@@ -174,6 +174,8 @@ export async function decide(
   }
   await emit('ActionDenied', { reason: 'VERIFICATION_UNAVAILABLE', layer: 'cre' });
   const why = out.status === 'unavailable' ? out.error : 'the report read back from Sepolia is not usable';
+  // The 503 body carries this too, but the agent is the only one who sees that; the operator needs it in the API log.
+  console.error(`cre verification unavailable, trigger ${triggerId}: ${why}`);
   throw new HttpError(503, `verification unavailable: ${why}`, { 'retry-after': '30' });
 }
 
