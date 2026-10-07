@@ -1,0 +1,14 @@
+local-simulation:
+  user-workflow:
+    workflow-name: cre-fx-basis-local-simulation
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.local-simulation.json"
+sepolia-simulation:
+  user-workflow:
+    workflow-name: cre-fx-basis-sepolia-simulation
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.sepolia-simulation.json"

@@ -2,7 +2,11 @@ local-simulation:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
       url: ${SEPOLIA_RPC_URL}
+    - chain-name: ethereum-mainnet
+      url: ${MAINNET_RPC_URL}
 sepolia-simulation:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
       url: ${SEPOLIA_RPC_URL}
+    - chain-name: ethereum-mainnet
+      url: ${MAINNET_RPC_URL}
