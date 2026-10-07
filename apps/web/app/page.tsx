@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AgentSurface } from '../components/agent-surface';
+import { AudienceScroll, type AudienceItem } from '../components/audience-scroll';
 import { HeroFloor } from '../components/floor/hero-floor';
 import { SiteFooter, SiteHeader } from '../components/site-nav';
 import { ContainerScroll } from '../components/ui/container-scroll-animation';
@@ -10,6 +11,27 @@ import { modeFrom } from '../lib/mode';
 
 
 const SOKOSUMI = 'https://preprod.sokosumi.com/';
+
+const AUDIENCE: AudienceItem[] = [
+  {
+    title: 'Multisig signers',
+    text: 'Let an agent prepare and pay the routine, and reach you only with a bonded, briefed, exact-action request.',
+    art: '/art/multisig-signers-ink.png',
+    artSize: [696, 622],
+  },
+  {
+    title: 'Treasury operators',
+    text: 'Write the mandate once: vendors, limits, daily cap, floor, interrupt budget. The vault enforces it on chain.',
+    art: '/art/treasury-operators-ink.png',
+    artSize: [722, 972],
+  },
+  {
+    title: 'Finance teams running agents',
+    text: 'Give the agent authority, not credentials. Every payment has a receipt that binds action, facts, brief and signature.',
+    art: '/art/finance-teams-ink.png',
+    artSize: [696, 636],
+  },
+];
 /* Chainlink CRE reports on Sepolia: the invoice verification and the FX basis attestation. */
 const CRE_INVOICE_TX = '0x68bdc690cf4338f3009f59487ceeaba4ff8a57f237b044be06a5a21abdcdfd98';
 const CRE_FX_TX = '0x2549899d0f1884b944320919279ce0ce98539aeaa761b9a210bde332071b78a8';
@@ -163,58 +185,52 @@ function HumanHome() {
         </dl>
       </section>
 
-      <section aria-label="Who it is for" className="mt-28 grid gap-10 lg:grid-cols-[1fr_minmax(0,22rem)]">
-        <div>
-          <Eyebrow>Who it is for</Eyebrow>
-          <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">People who already sign for money</h2>
-          <ul className="mt-8 divide-y divide-line border-y border-line">
-            <Audience title="Multisig signers" art="/art/multisig-signers.png" artSize={[696, 622]}>
-              Let an agent prepare and pay the routine, and reach you only with a bonded, briefed, exact-action request.
-            </Audience>
-            <Audience title="Treasury operators" art="/art/treasury-operators.png" artSize={[722, 972]}>
-              Write the mandate once: vendors, limits, daily cap, floor, interrupt budget. The vault enforces it on chain.
-            </Audience>
-            <Audience title="Finance teams running agents" art="/art/finance-teams.png" artSize={[696, 636]}>
-              Give the agent authority, not credentials. Every payment has a receipt that binds action, facts, brief and signature.
-            </Audience>
-          </ul>
-        </div>
-        <div className="border-l-2 border-fg pl-5">
-          <p className="text-sm font-extrabold tracking-wide">START HERE</p>
-          <ul className="mt-3 space-y-3 text-[15px]">
-            <li>
-              <Link href="/live?mode=replay" className="font-bold underline underline-offset-4">
-                Watch it act
-              </Link>
-              <p className="text-muted">A recorded run, hash-checked in your browser, replayed at stage speed.</p>
-            </li>
-            <li>
-              <a href={SOKOSUMI} className="font-bold underline underline-offset-4" rel="noreferrer">
-                Try the authority endpoint on Sokosumi
-              </a>
-              <p className="text-muted">
-                Preprod Coworker <span className="font-semibold text-fg">Human Authority Endpoint</span>. 1 tUSDM per evaluation; on ESCALATE
-                you get the exact bond price and endpoint.
-              </p>
-            </li>
-            <li>
-              <Link href="/protocol" className="font-bold underline underline-offset-4">
-                Read the protocol
-              </Link>
-              <p className="text-muted">Outcomes, Action IR, mandate, the 402 flow, bond rules, Decision Brief, endpoints.</p>
-            </li>
-            <li>
-              <a href="/llms.txt" className="font-bold underline underline-offset-4">
-                For agents
-              </a>
-              <p className="text-muted">
-                <span className="font-mono text-[13px]">/llms.txt</span>, <span className="font-mono text-[13px]">/llms-full.txt</span>,{' '}
-                <span className="font-mono text-[13px]">/.well-known/agent.json</span>.
-              </p>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <AudienceScroll
+        items={AUDIENCE}
+        header={
+          <div>
+            <Eyebrow>Who it is for</Eyebrow>
+            <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">People who already sign for money</h2>
+          </div>
+        }
+        aside={
+          <div className="border-l-2 border-fg pl-5">
+            <p className="text-sm font-extrabold tracking-wide">START HERE</p>
+            <ul className="mt-3 space-y-3 text-[15px]">
+              <li>
+                <Link href="/live?mode=replay" className="font-bold underline underline-offset-4">
+                  Watch it act
+                </Link>
+                <p className="text-muted">A recorded run, hash-checked in your browser, replayed at stage speed.</p>
+              </li>
+              <li>
+                <a href={SOKOSUMI} className="font-bold underline underline-offset-4" rel="noreferrer">
+                  Try the authority endpoint on Sokosumi
+                </a>
+                <p className="text-muted">
+                  Preprod Coworker <span className="font-semibold text-fg">Human Authority Endpoint</span>. 1 tUSDM per evaluation; on ESCALATE
+                  you get the exact bond price and endpoint.
+                </p>
+              </li>
+              <li>
+                <Link href="/protocol" className="font-bold underline underline-offset-4">
+                  Read the protocol
+                </Link>
+                <p className="text-muted">Outcomes, Action IR, mandate, the 402 flow, bond rules, Decision Brief, endpoints.</p>
+              </li>
+              <li>
+                <a href="/llms.txt" className="font-bold underline underline-offset-4">
+                  For agents
+                </a>
+                <p className="text-muted">
+                  <span className="font-mono text-[13px]">/llms.txt</span>, <span className="font-mono text-[13px]">/llms-full.txt</span>,{' '}
+                  <span className="font-mono text-[13px]">/.well-known/agent.json</span>.
+                </p>
+              </li>
+            </ul>
+          </div>
+        }
+      />
 
       <section aria-label="Built with" className="mt-28">
         <Eyebrow>Built with</Eyebrow>
@@ -326,20 +342,3 @@ function Outcome({ name, color, children }: { name: string; color: string; child
   );
 }
 
-function Audience({ title, art, artSize, children }: { title: string; art: string; artSize: [number, number]; children: ReactNode }) {
-  return (
-    <li className="grid grid-cols-[6.5rem_1fr] items-center gap-4 py-5 sm:grid-cols-[14rem_1fr] sm:gap-8">
-      <Image
-        src={art}
-        alt=""
-        width={artSize[0]}
-        height={artSize[1]}
-        className="h-28 w-full object-contain object-left mix-blend-multiply sm:h-56"
-      />
-      <div>
-        <h3 className="text-lg font-bold">{title}</h3>
-        <p className="mt-1 text-[15px] leading-relaxed">{children}</p>
-      </div>
-    </li>
-  );
-}
