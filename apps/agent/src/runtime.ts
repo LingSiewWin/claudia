@@ -112,7 +112,8 @@ export async function runClaimed(deps: RuntimeDeps, claim: Claim): Promise<RunRe
       throw new Error(`the agent key for ${claim.mandate_id} is not the mandate's delegate key`);
     }
     const work = await withRetry(() => deps.authority.work(claim.run_id), { attempts: 5, sleep: deps.sleep });
-    const execute = claim.kind === 'stage';
+    // Lab runs evaluate only, except the escalation attacks: the 402 gate exists only on an execute request.
+    const execute = claim.kind === 'stage' || claim.attack === 'escalation_spam' || claim.attack === 'no_bond';
     const runTag = claim.run_id.replaceAll('-', '').slice(0, 8);
     if (claim.attack === 'prompt_injection_direct') {
       items.push(await directInjection(deps, bonds, claim, work, view.mandate, sk, `A-${runTag}-1`));
