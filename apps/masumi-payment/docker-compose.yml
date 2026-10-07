@@ -17,6 +17,9 @@ services:
     # Release 0.29.0 (git 71455701ac22c3380c50da54089e1b7363f6825d), pinned by digest. The image is linux/amd64 only.
     image: ghcr.io/masumi-network/masumi-payment-service:0.29.0@sha256:c7408906637858f121667e8e7fd973f2bda26c183eefc67eecacf9c09bf36ed9
     platform: linux/amd64
+    # The image's start script does not migrate, and its prisma seed cannot run (workspace package missing from the
+    # image). Migrate here; create the payment source with `pnpm register seed` (admin API) once the service is up.
+    command: ["sh", "-c", "pnpm run prisma:migrate && pnpm run start"]
     depends_on:
       postgres:
         condition: service_healthy

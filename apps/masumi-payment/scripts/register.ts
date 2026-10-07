@@ -1,8 +1,9 @@
 // Masumi registration of the Human Authority Endpoint on the local payment service (admin key, setup only).
-// Usage: pnpm --filter @authority/masumi-payment register <info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>
+// Usage: pnpm --filter @authority/masumi-payment register <seed | info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>
 // Writes public values to ../registration.preprod.json, local ids to ../registration.local.json, and the scoped worker key into the repo-root .env.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { newMnemonic } from '@authority/cardano';
 
 const REGISTRATION_FILE = fileURLToPath(new URL('../registration.preprod.json', import.meta.url));
 const LOCAL_FILE = fileURLToPath(new URL('../registration.local.json', import.meta.url));
@@ -13,6 +14,22 @@ const LISTING =
   'Agents pay to interrupt a named human. Send the action your agent wants to take; get back ALLOW, ESCALATE or DENY with a decision brief ' +
   '(what, why, verified facts, why a human, what will happen). On ESCALATE you get the exact bond price and endpoint to reach the human. ' +
   'Reasonable asks are refunded; only the human signature moves funds.';
+
+// Masumi's published Preprod Web3CardanoV2 defaults (payment-core config.ts at release 0.29.0). The service derives
+// the escrow address from these; `seed` refuses a source whose address differs.
+const PREPROD_V2 = {
+  adminWallets: [
+    'addr_test1qr7pdg0u7vy6a5p7cx9my9m0t63f4n48pwmez30t4laguawge7xugp6m5qgr6nnp6wazurtagjva8l9fc3a5a4scx0rq2ymhl3',
+    'addr_test1qplhs9snd92fmr3tzw87uujvn7nqd4ss0fn8yz7mf3y2mf3a3806uqngr7hvksqvtkmetcjcluu6xeguagwyaxevdhmsuycl5a',
+    'addr_test1qzy7a702snswullyjg06j04jsulldc6yw0m4r4w49jm44f30pgqg0ez34lrdj7dy7ndp2lgv8e35e6jzazun8gekdlsq99mm6w',
+  ],
+  requiredAdminSignatures: 2,
+  cooldownTimeMs: 7 * 60 * 1000,
+  smartContractAddress: 'addr_test1wzs4e6wc95hkwezlccjw9mdvq0r0rsgx6zk34avptga3ftgn37w4g',
+  registryPolicyId: '67ab0c92c4ac1610895a1c965ee50aba41a8f1513b15240723b3bd0b',
+};
+const SELLING_ENV = 'MPS_SELLING_WALLET_PREPROD_MNEMONIC';
+const PURCHASING_ENV = 'MPS_PURCHASING_WALLET_PREPROD_MNEMONIC';
 
 const PUBLIC_KEYS = new Set([
   'network',
@@ -43,7 +60,7 @@ const save = (r: Json): void => {
   writeFileSync(LOCAL_FILE, `${JSON.stringify(local, null, 2)}\n`);
 };
 
-async function mps(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Json> {
+async function mps(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<Json> {
   const res = await fetch(`${base}${path}`, {
     method,
     headers: { token: adminKey, 'content-type': 'application/json' },
@@ -64,6 +81,44 @@ async function balances(address: string): Promise<{ lovelace: string; tusdm: str
   const amount = ((await res.json()) as { amount: { unit: string; quantity: string }[] }).amount;
   const of = (unit: string): string => amount.find((a) => a.unit === unit)?.quantity ?? '0';
   return { lovelace: of('lovelace'), tusdm: of(TEST_USDM_UNIT) };
+}
+
+// The hot wallet mnemonics live only in the local .env (and encrypted in the payment service). Reused on a re-run.
+function walletMnemonic(name: string): string {
+  const current = process.env[name]?.trim();
+  if (current) return current;
+  const env = readFileSync(ENV_FILE, 'utf8');
+  const fromFile = env.match(new RegExp(`^${name}=(.+)$`, 'm'))?.[1]?.trim();
+  if (fromFile) return fromFile;
+  const words = newMnemonic();
+  writeFileSync(ENV_FILE, `${env.replace(/\n?$/, '\n')}${name}=${words}\n`);
+  return words;
+}
+
+// Creates the Preprod Web3CardanoV2 payment source the guide's prisma seed would create (the Docker image cannot
+// run that seed). Idempotent: an existing Preprod V2 source is kept.
+async function seed(): Promise<void> {
+  const { PaymentSources } = await mps('GET', '/payment-source?take=100');
+  const existing = (PaymentSources as Json[]).find((s) => s.network === 'Preprod' && s.paymentSourceType === 'Web3CardanoV2');
+  if (existing) return console.log(JSON.stringify({ seeded: false, smartContractAddress: existing.smartContractAddress, policyId: existing.policyId }));
+  const blockfrost = process.env.BLOCKFROST_PROJECT_ID_PREPROD?.trim();
+  if (!blockfrost) throw new Error('BLOCKFROST_PROJECT_ID_PREPROD must be set in .env');
+  const created = await mps('POST', '/payment-source-extended', {
+    network: 'Preprod',
+    paymentSourceType: 'Web3CardanoV2',
+    PaymentSourceConfig: { rpcProviderApiKey: blockfrost, rpcProvider: 'Blockfrost' },
+    cooldownTime: PREPROD_V2.cooldownTimeMs,
+    AdminWallets: PREPROD_V2.adminWallets.map((walletAddress) => ({ walletAddress })),
+    requiredAdminSignatures: PREPROD_V2.requiredAdminSignatures,
+    PurchasingWallets: [{ walletMnemonic: walletMnemonic(PURCHASING_ENV), collectionAddress: null, note: 'Human Authority Endpoint purchasing wallet' }],
+    SellingWallets: [{ walletMnemonic: walletMnemonic(SELLING_ENV), collectionAddress: null, note: 'Human Authority Endpoint selling wallet' }],
+  });
+  const ok = created.smartContractAddress === PREPROD_V2.smartContractAddress && created.policyId === PREPROD_V2.registryPolicyId;
+  if (!ok) {
+    await mps('DELETE', `/payment-source-extended?id=${encodeURIComponent(String(created.id))}`).catch(() => undefined);
+    throw new Error(`payment source derived ${String(created.smartContractAddress)} / ${String(created.policyId)}; expected Masumi's Preprod V2 escrow. Removed.`);
+  }
+  console.log(JSON.stringify({ seeded: true, smartContractAddress: created.smartContractAddress, policyId: created.policyId }));
 }
 
 async function info(): Promise<void> {
@@ -171,9 +226,10 @@ async function update(apiBaseUrl: string): Promise<void> {
 }
 
 const [command, arg] = process.argv.slice(2);
-if (command === 'info') await info();
+if (command === 'seed') await seed();
+else if (command === 'info') await info();
 else if (command === 'register' && arg) await register(arg);
 else if (command === 'status') await status();
 else if (command === 'key') await key();
 else if (command === 'update' && arg) await update(arg);
-else throw new Error('usage: register.ts <info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>');
+else throw new Error('usage: register.ts <seed | info | register <apiBaseUrl> | status | key | update <apiBaseUrl>>');

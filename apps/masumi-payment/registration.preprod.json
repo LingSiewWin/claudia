@@ -1,0 +1,9 @@
+{
+  "network": "Preprod",
+  "paymentSourceType": "Web3CardanoV2",
+  "mpsRelease": "0.29.0 (71455701ac22c3380c50da54089e1b7363f6825d)",
+  "smartContractAddress": "addr_test1wzs4e6wc95hkwezlccjw9mdvq0r0rsgx6zk34avptga3ftgn37w4g",
+  "policyId": "67ab0c92c4ac1610895a1c965ee50aba41a8f1513b15240723b3bd0b",
+  "sellerVkey": "7112ead078909873d46aadf88d0105d0ca038fc7e9c65aade1f5afb3",
+  "sellerAddress": "addr_test1qpc396ks0zgfsu75d2kl3rgpqhgv5qu0cl5uvk4du866lv7rzm0ywcvak3e5m6hvxlmw66xts8c4xnzkacx0cw7an5hsqav7ca"
+}
