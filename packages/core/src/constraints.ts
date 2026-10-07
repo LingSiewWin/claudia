@@ -163,11 +163,11 @@ function checkFx(c: Constraint, ctx: ConstraintContext): ConstraintOutcome {
       if (r.schema !== 'fx-verification/v0.1') return fail('VERIFICATION_UNAVAILABLE', { report_hash: v.report_hash, report_schema: r.schema });
       const detail: Detail = { report_hash: v.report_hash, quote_id: r.quote_id, quote_hash: r.quote_hash, result: r.result, basis_bps: r.basis_bps, basis_source: r.basis_source };
       if (r.quote_id !== fx.quote_id) return fail('QUOTE_NOT_FOUND', detail);
+      if (r.result !== 'VERIFIED') return fail(r.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
       if (c.kind === 'fx_basis_lte') {
         if (r.basis_bps === null) return fail('QUOTE_OFF_MARKET', { ...detail, limit_bps: m.max_basis_bps });
         return verdict(r.basis_bps <= m.max_basis_bps, 'QUOTE_OFF_MARKET', { ...detail, limit_bps: m.max_basis_bps });
       }
-      if (r.result !== 'VERIFIED') return fail(r.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
       const broken = FX_FACT_REASONS.find(([fact]) => !r.facts[fact]);
       if (broken) return fail(broken[1], detail);
       if (r.verified_rate !== fx.locked_rate) return fail('RATE_MISMATCH', detail);

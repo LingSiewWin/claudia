@@ -19,6 +19,7 @@
     "@authority/cardano": "workspace:*",
     "@authority/chainlink": "workspace:*",
     "@authority/core": "workspace:*",
+    "@authority/crebit": "workspace:*",
     "@authority/db": "workspace:*",
     "@authority/llm": "workspace:*",
     "@authority/stripe": "workspace:*",

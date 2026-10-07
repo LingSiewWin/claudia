@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { VerificationOutcome } from '@authority/chainlink';
+import { loadReferenceFixtures, type Quote } from '@authority/crebit';
 import {
   type ActionIR,
   type AuthorizationRecord,
@@ -21,6 +22,7 @@ import { MeshWallet } from '@meshsdk/core';
 import { createApp } from '../src/app';
 import type { Engine } from '../src/check';
 import { createExecutor } from '../src/executor';
+import { fxVerifier } from '../src/fx';
 import { createLog } from '../src/log';
 import { BOND_LOCK_MS } from '../src/escalation';
 import { insertMandate } from '../src/mandates';
@@ -90,6 +92,66 @@ export function mandate(o: { id: string; version: number; engine: Uint8Array; ag
       { id: 'invoice_facts', kind: 'verified_facts', source: 'stripe', on_violation: 'DENY' },
     ],
   });
+}
+
+/** A treasury hedging mandate: fx_lock only, options only, USD-BRL up to 50k USDC notional, 30 days, 50 bps basis. */
+export function fxMandate(o: { id: string; engine: Uint8Array; agent: Uint8Array; cfoPkh: string }): Mandate {
+  return parseMandate({
+    schema: 'mandate/v0.1',
+    id: o.id,
+    version: 1,
+    status: 'active',
+    principal: { type: 'organization', id: 'acme', name: 'Acme Corp', cardano_key_hash: ADMIN_PKH },
+    delegate: { type: 'agent', id: 'cfo-agent-01', public_key: `ed25519:${pk(o.agent)}` },
+    approvers: [{ role: 'CFO', cardano_key_hash: o.cfoPkh }],
+    authority_engine: { public_key: `ed25519:${pk(o.engine)}` },
+    asset: { symbol: 'USDC', decimals: 6 },
+    validity: { starts_at: '2026-10-06T00:00:00Z', expires_at: '2026-11-06T00:00:00Z' },
+    delegation: { allowed: false },
+    interrupt_budget: { per_day: 3 },
+    fx: { corridors: ['USD-BRL'], max_notional: usdm('50000'), max_tenor_hours: 24 * 30, max_basis_bps: 50, counterparty: 'crebit' },
+    constraints: [
+      { id: 'purpose', kind: 'purpose_in', values: ['fx_hedge'], on_violation: 'DENY' },
+      { id: 'action', kind: 'action_in', values: ['fx_lock'], on_violation: 'DENY' },
+      { id: 'asset', kind: 'asset_eq', value: 'USDC', on_violation: 'DENY' },
+      { id: 'counterparty', kind: 'counterparty_in', values: ['crebit'], on_violation: 'DENY' },
+      { id: 'autonomous', kind: 'amount_lte', value: usdm('2000'), on_violation: 'ESCALATE', approver: 'CFO' },
+      { id: 'hard_cap', kind: 'amount_lte', value: usdm('10000'), on_violation: 'DENY' },
+      { id: 'daily_cap', kind: 'daily_spend_lte', value: usdm('10000'), on_violation: 'DENY' },
+      { id: 'treasury_floor', kind: 'balance_after_gte', value: usdm('1000'), on_violation: 'DENY' },
+      { id: 'fx_corridor', kind: 'fx_corridor_in', on_violation: 'DENY' },
+      { id: 'fx_notional', kind: 'fx_notional_lte', on_violation: 'ESCALATE', approver: 'CFO' },
+      { id: 'fx_tenor', kind: 'fx_tenor_lte', on_violation: 'DENY' },
+      { id: 'fx_type', kind: 'fx_contract_type_in', on_violation: 'DENY' },
+      { id: 'fx_fresh', kind: 'fx_quote_fresh', on_violation: 'DENY' },
+      { id: 'fx_basis', kind: 'fx_basis_lte', on_violation: 'DENY' },
+      { id: 'quote_facts', kind: 'verified_facts', source: 'crebit', on_violation: 'DENY' },
+    ],
+  });
+}
+
+// ---- Crebit stand-in: quotes the fake partner API would read back (the reference example, re-dated to NOW) ----
+export const REFERENCE_QUOTE = (loadReferenceFixtures().find((f) => f.route === 'GET /fx/quotes/{quote_id}')!.body as Quote);
+export function stageQuote(nowMs: number, patch: Partial<Quote> = {}): Quote {
+  return {
+    ...REFERENCE_QUOTE,
+    contract_type: 'option',
+    direction: 'USD_TO_BRL',
+    notional_currency: 'USD',
+    notional_amount: '20000.00',
+    market_rate: '5.4180',
+    premium_amount: '200.00',
+    deposit_amount: null,
+    total_amount: '200.00',
+    amount_due: '200.00',
+    chain: 'solana',
+    payout_wallet_address: 'So11111111111111111111111111111111111111112',
+    window_start: new Date(nowMs + 3_600_000).toISOString().replace('.000', ''),
+    window_end: new Date(nowMs + 3_600_000 + 7 * 86_400_000).toISOString().replace('.000', ''),
+    expires_at: new Date(nowMs + 14 * 60_000).toISOString().replace('.000', ''),
+    created_at: new Date(nowMs - 60_000).toISOString().replace('.000', ''),
+    ...patch,
+  };
 }
 
 export const binding = (vault: string, ref: string): ChainBinding => ({
@@ -350,10 +412,13 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
   const { pkh } = await cfoWallet();
   const m001 = mandate({ id: 'M-001', version: 3, engine: ENGINE_SK, agent: AGENT_SK, cfoPkh: pkh, limits: ['10', '50', '50', '100'], vendors: ['aws', 'stripe'] });
   const mlab = mandate({ id: 'M-LAB', version: 1, engine: LAB_ENGINE_SK, agent: LAB_AGENT_SK, cfoPkh: pkh, limits: ['1', '5', '5', '1'], vendors: ['aws'] });
+  const mfx = fxMandate({ id: 'M-FX', engine: ENGINE_SK, agent: AGENT_SK, cfoPkh: pkh });
   const b001 = binding('aa', 'bb');
   const blab = binding('a2', 'b2');
+  const bfx = { ...binding('a3', 'b3'), assetSymbol: 'USDC' };
   await insertMandate(db, m001, b001, 'CFO-Agent-01', 'stage');
   await insertMandate(db, mlab, blab, 'CFO-Agent-01', 'lab');
+  await insertMandate(db, mfx, bfx, 'CFO-Agent-01', 'stage');
   const chainOf = (m: Mandate, balance: string): Chain => ({
     balance: BigInt(usdm(balance)),
     spent: 0n,
@@ -369,7 +434,12 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
   const chains = new Map([
     [b001.vaultHash, chainOf(m001, '135')],
     [blab.vaultHash, chainOf(mlab, '10')],
+    [bfx.vaultHash, chainOf(mfx, '50000')],
   ]);
+  // Quotes Crebit would read back. Empty map + keys = "no such quote"; crebitKeys false = keys not configured.
+  const quotes = new Map<string, Quote>([[REFERENCE_QUOTE.id, stageQuote(NOW)]]);
+  let crebitKeys = true;
+  const verifyFx = fxVerifier(async (id) => (crebitKeys ? (quotes.get(id) ?? null) : Promise.reject(new Error('unreachable'))), now);
   const cardano = fakeCardano(chains, now);
   const invoices = new Map(STAGE_INVOICES.map((i) => [i.id, { ...i }]));
   const cre = fakeVerify(invoices, now);
@@ -392,6 +462,7 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     now,
     cardano: cardano.port,
     verify: cre.verify,
+    verifyFx: (action, triggerId, o) => (crebitKeys ? verifyFx(action, triggerId, o) : fxVerifier(null, now)(action, triggerId, o)),
     readInvoice: async (id) => {
       invoiceReads.push(id);
       const inv = invoices.get(id);
@@ -400,6 +471,7 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     engineKeys: new Map([
       ['M-001', ENGINE_SK],
       ['M-LAB', LAB_ENGINE_SK],
+      ['M-FX', ENGINE_SK],
     ]),
     enqueue: (id) => executor.enqueue(id),
     interpret: o.interpret ?? null,
@@ -452,6 +524,9 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     settled,
     m001,
     mlab,
+    mfx,
+    quotes,
+    setCrebitKeys: (v: boolean) => void (crebitKeys = v),
     b001,
     blab,
     chains,

@@ -57,6 +57,9 @@ importers:
       '@authority/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@authority/crebit':
+        specifier: workspace:*
+        version: link:../../packages/crebit
       '@authority/db':
         specifier: workspace:*
         version: link:../../packages/db
