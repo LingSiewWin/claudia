@@ -22,10 +22,8 @@ test('landing states the thesis, replays a real payment, and points agents and h
   await expect(floor.locator('[data-testid=floor-steps] li[data-step=human]')).toHaveAttribute('data-status', 'failed');
   await expect(floor.locator('[data-testid=floor-steps] li[data-step=bond]')).toContainText('bond captured');
   await expect(floor.getByTestId('metric-bonds')).toContainText('1 captured');
-  await expect(page.getByTestId('budget-peek')).toContainText('1 of 3 interruptions left');
   await expect(page.getByRole('region', { name: 'How it works' }).getByRole('listitem')).toHaveCount(6);
   for (const o of ['ALLOW', 'ESCALATE', 'DENY']) await expect(page.getByRole('region', { name: 'Outcomes' })).toContainText(o);
-  await expect(page.getByRole('link', { name: /29cd8f8ce51ee103/ })).toHaveAttribute('href', /preprod\.cardanoscan\.io\/transaction\/29cd8f8c/);
   const facts = page.getByRole('region', { name: 'Facts come from Chainlink CRE' });
   await expect(facts.getByRole('listitem')).toHaveCount(3);
   await expect(facts.getByRole('link', { name: 'Invoice report on Sepolia' })).toHaveAttribute('href', 'https://sepolia.etherscan.io/tx/0x68bdc690cf4338f3009f59487ceeaba4ff8a57f237b044be06a5a21abdcdfd98');

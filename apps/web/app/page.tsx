@@ -2,28 +2,17 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AgentSurface } from '../components/agent-surface';
-import { BudgetPeek } from '../components/budget-peek';
 import { HeroFloor } from '../components/floor/hero-floor';
 import { SiteFooter, SiteHeader } from '../components/site-nav';
 import { ContainerScroll } from '../components/ui/container-scroll-animation';
-import { cardanoscanTxUrl, sepoliaTxUrl } from '../lib/config';
+import { sepoliaTxUrl } from '../lib/config';
 import { modeFrom } from '../lib/mode';
 
+
 const SOKOSUMI = 'https://preprod.sokosumi.com/';
-
-/* Real preprod transactions from the end-to-end run. Each row is a link anyone can open. */
-const ONCHAIN: { what: string; hash: string; note: string }[] = [
-  { what: 'Bond refunded', hash: '29cd8f8ce51ee103f3c3c57a912fa4573f7084d905f54e47843d53a930c1ecae', note: 'Approver signed the refund. Approver balance unchanged.' },
-  { what: 'Bond captured', hash: 'cd77ade3de312471ac725ef8f0f31ba53ab00fd640e491946d4de974e6fcd88e', note: '5 ADA paid to the always-fail sink. Approver balance unchanged.' },
-  { what: 'Vault minted', hash: 'ab5b303c1c416efaed2d99683d93ba05ef4f494f6b21994767357bf554f1e200', note: 'Mandate M-LAB vault, 10 tUSDM, enforcing mandate hash 43b25a12… v1.' },
-  { what: 'Mandate anchored', hash: 'fe05f66e17676d1973e3c89de350b5397f43c985a1717cd9698414d9529575ab', note: 'Anchor token under policy 145572c0…19fb. The vault reads it on every release.' },
-];
-
 /* Chainlink CRE reports on Sepolia: the invoice verification and the FX basis attestation. */
 const CRE_INVOICE_TX = '0x68bdc690cf4338f3009f59487ceeaba4ff8a57f237b044be06a5a21abdcdfd98';
 const CRE_FX_TX = '0x2549899d0f1884b944320919279ce0ce98539aeaa761b9a210bde332071b78a8';
-
-const ATTACKS = ['Above hard cap', 'Wrong asset', 'Approver bypass', 'Withdraw by anyone', 'Update by anyone', 'Revoke by approver', 'Second mandate mint', 'Second vault mint'];
 
 /** `/` has two readers. `?mode=agent` renders the machine-readable files verbatim; everything else is the human page. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ mode?: string | string[] }> }) {
@@ -172,60 +161,6 @@ function HumanHome() {
             Outside the mandate, facts do not match, or the interrupt budget is spent. Nothing moves; the reason is logged.
           </Outcome>
         </dl>
-      </section>
-
-      <section aria-label="Interrupt budget" className="mt-28 grid gap-8 lg:grid-cols-[minmax(0,18rem)_1fr]">
-        <div>
-          <Eyebrow>Interrupt budget</Eyebrow>
-          <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">Attention is budgeted like money</h2>
-        </div>
-        <div className="max-w-2xl">
-          <p className="text-lg leading-snug">
-            Each mandate sets how many times per day its approver may be paged. Past that, escalations are denied and nobody is
-            notified. Poor requests cost the agent bonds and budget, so it learns to plan.
-          </p>
-          <div className="mt-5">
-            <BudgetPeek />
-          </div>
-        </div>
-      </section>
-
-      <section aria-label="Live on Cardano preprod" className="mt-28">
-        <Eyebrow>Live on Cardano preprod</Eyebrow>
-        <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">Real transactions, not a mockup</h2>
-        <ul className="mt-8 divide-y divide-line border-y border-line">
-          {ONCHAIN.map((row) => (
-            <li key={row.hash} className="grid gap-1 py-4 sm:grid-cols-[14rem_1fr] sm:gap-6">
-              <p className="font-bold">{row.what}</p>
-              <div>
-                <a href={cardanoscanTxUrl(row.hash)} className="font-mono text-[13px] underline underline-offset-4" rel="noreferrer">
-                  {row.hash.slice(0, 16)}…{row.hash.slice(-8)}
-                </a>
-                <p className="text-[15px] text-muted">{row.note}</p>
-              </div>
-            </li>
-          ))}
-          <li className="grid gap-1 py-4 sm:grid-cols-[14rem_1fr] sm:gap-6">
-            <p className="font-bold">Attack lab</p>
-            <div>
-              <p className="text-[15px]">Eight forged releases against the live M-LAB vault, each rejected by the Cardano node with no funds moved:</p>
-              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[13px] text-muted">
-                {ATTACKS.map((a) => (
-                  <span key={a}>{a}</span>
-                ))}
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                <Link href="/live?mode=replay" className="underline">
-                  Replay the recorded attacks
-                </Link>
-              </p>
-            </div>
-          </li>
-        </ul>
-        <p className="mt-3 text-sm text-muted">
-          Escrow <code className="font-mono text-[13px]">addr_test1wqplkq2g…lx093f</code>, sink{' '}
-          <code className="font-mono text-[13px]">addr_test1wq3vnggr…wsu3l3</code>. The approver never receives bond money.
-        </p>
       </section>
 
       <section aria-label="Who it is for" className="mt-28 grid gap-10 lg:grid-cols-[1fr_minmax(0,22rem)]">
