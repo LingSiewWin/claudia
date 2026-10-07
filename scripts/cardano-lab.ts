@@ -1,7 +1,7 @@
 // Runs every vault and anchor attack against the M-LAB mandate on preprod, plus the honest releases they need.
 // Usage: pnpm --filter @authority/scripts cardano:lab
 // Reads only M_LAB_* keys, the fee wallet and Blockfrost; never an M-001 key.
-import {
+import { awaitIndexed,
   type Chain,
   FIXED_BUDGET,
   PREPROD_USDM,
@@ -75,6 +75,8 @@ async function settle(step: string, plan: TxPlan, signers: SigningWallet[]): Pro
   const unsigned = await buildTx(chain, plan);
   const local = await evaluateTx(chain, unsigned);
   const hash = await signAndSubmit(chain, unsigned, signers);
+  // The next context() must see this tx's outputs, or an attack is built on a spent UTxO and fails in phase 1 instead of in the script.
+  for (const address of new Set(plan.outputs.map((o) => o.address))) await awaitIndexed(chain, address, hash);
   console.log(json({ step, settled: hash, exec_units: local.ok ? local.budgets : local }));
   return hash;
 }
