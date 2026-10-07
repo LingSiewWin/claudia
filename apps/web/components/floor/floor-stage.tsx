@@ -6,7 +6,7 @@ import { DECLINE_REASON_TEXT, actionTitle, clock, money, plainReason } from '../
 import { type CardView, type RunView, enforcedRow, mayRow, statusLine, trueRow } from '../../lib/run';
 import { BondChip } from '../brief';
 import { type StepView, type Step } from './model';
-import { Scene } from './scene';
+import { Scene } from '../floor3d';
 import { useFloor } from './use-floor';
 
 const STEP_LABEL: Record<Step, string> = {

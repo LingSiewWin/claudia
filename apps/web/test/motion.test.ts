@@ -6,7 +6,7 @@ const root = new URL('../', import.meta.url);
 const css = readFileSync(new URL('app/globals.css', root), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import[^\n]*floor\.css[^\n]*\n/, '');
 const sources = ['app', 'components'].flatMap((dir) =>
   readdirSync(new URL(`${dir}/`, root), { recursive: true, encoding: 'utf8' })
-    .filter((f) => /\.tsx?$/.test(f) && !f.startsWith('floor/'))
+    .filter((f) => /\.tsx?$/.test(f) && !/^floor(3d)?\//.test(f))
     .map((f) => ({ file: `${dir}/${f}`, text: readFileSync(new URL(`${dir}/${f}`, root), 'utf8') })),
 );
 /** Innermost CSS rules: selector and declarations (nested @media bodies match their inner rule). */

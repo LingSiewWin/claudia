@@ -255,3 +255,95 @@
     animation: none;
   }
 }
+
+/* The 3D floor (components/floor3d). Tokens here are read by the canvas on mount (palette.ts); the SVG floor keeps its own faces above. */
+.floor {
+  --floor-paper: #fbf6f1;
+  --floor-grid: #e3dcd3;
+  --floor-tint-1: #bbd6e1;
+  --floor-tint-2: #95bfd1;
+  --floor-tint-3: #6ba1bc;
+  --floor-tint-4: #3885ab;
+  --floor-warm-1: #e9e2d8;
+  --floor-warm-2: #cfc4b6;
+  --floor-vault: #0f2f49;
+  --floor-vault-glow: #3885ab;
+  --crate-proposed: #95bfd1;
+  --crate-escalated: #6ba1bc;
+  --crate-bond: #3885ab;
+  --crate-settled: #2f8f5b;
+  --crate-denied: #b23a3a;
+  --crate-captured: #8a8378;
+}
+.floor-3d {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  width: 100%;
+  aspect-ratio: 1120 / 660;
+  touch-action: none;
+}
+.floor-3d canvas {
+  display: block;
+  outline: none;
+}
+.floor-pin {
+  pointer-events: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.78);
+  border: 1px solid rgb(24 80 121 / 0.14);
+  box-shadow: 0 4px 14px rgb(24 80 121 / 0.1);
+  backdrop-filter: blur(6px);
+}
+.floor-pin b {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  text-align: center;
+  font-weight: 800;
+  color: #fff;
+  background: var(--ink);
+}
+.floor-pin[data-state='scanning'] b,
+.floor-pin[data-state='open'] b,
+.floor-pin[data-state='releasing'] b {
+  background: var(--floor-tint-4);
+}
+.floor-crate-hit {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  opacity: 0;
+  cursor: pointer;
+}
+.floor-crate-hit:focus-visible {
+  opacity: 1;
+  background: transparent;
+  outline: 2px solid var(--ink);
+}
+.floor-reset {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.78);
+  border: 1px solid rgb(24 80 121 / 0.14);
+  backdrop-filter: blur(6px);
+}
