@@ -1,16 +1,52 @@
 # Authority Layer
 
-Delegated, verifiable authority for AI agents. An agent proposes an action; a deterministic engine checks it against a mandate the organization granted; external facts are verified; and an on-chain vault releases funds only for the exact action that was authorized.
+Agents are infinite. Human attention is not. Authority Layer sits between an AI agent and consequential execution: the agent proposes, a deterministic engine checks the proposal against a mandate, external facts are verified, and funds move only for the exact action a human signed. Interrupting that human costs the agent a bond.
 
-Status: under active development.
+## What it does
 
-## Invoice verification workflow
+- An agent proposes an action as a canonical Action IR (what, how much, to whom, why, under which mandate).
+- The authority engine returns one of three outcomes: ALLOW, ESCALATE, DENY. Same inputs, same answer, no model in the loop.
+- ESCALATE answers HTTP 402. The agent locks a bond in a Cardano escrow before the request reaches a person. A reasonable request is refunded; a frivolous one is captured by an unspendable sink. The approver never receives bond money.
+- Each mandate carries an interrupt budget. Past it, escalations are denied and nobody is paged.
+- The human reads a Decision Brief built from the evaluation, not from a chat transcript, and signs with a wallet on their own device.
+- A Cardano vault enforces the signed authorization: exact amount, recipient, nonce, expiry, mandate version, approver signature.
+- A Chainlink CRE workflow verifies the invoice facts and writes a report to Sepolia. Every decision lands in a hash-chained event log with a receipt anyone can recompute.
 
-A Chainlink CRE workflow in `workflows/cre-verifier` fetches the Stripe invoice, compares it with the requested payment, and writes a signed report to the Sepolia verification registry.
+## Layout
+
+| Path | Role |
+|---|---|
+| `packages/core` | Mandate, Action IR, engine, authorization bytes, Decision Brief, bond schemas |
+| `contracts/cardano` | Aiken validators: mandate anchor, vault, escalation bond escrow, sink |
+| `packages/cardano` | Transaction building, chain reads, bond lock and spend |
+| `apps/api` | Authority API: check, 402 gate, approvals, receipts, metrics, attack lab |
+| `apps/agent` | Agent runtime that proposes actions and pays bonds |
+| `apps/web` | Console: live run, approvals with brief, mandate, receipts, public authority page |
+| `workflows/cre-verifier`, `packages/chainlink`, `contracts/sepolia` | CRE verification and the Sepolia registry |
+| `apps/masumi-worker`, `apps/masumi-payment`, `packages/masumi` | Masumi listing of the human authority endpoint |
+
+## Run
+
+Requirements: Node 24+, pnpm, Postgres, Aiken 1.1.24 for contract changes.
 
 ```sh
-cp workflows/secrets.yaml.example workflows/secrets.yaml   # secret names only; values come from .env
-cd workflows && cre workflow simulate cre-verifier --target local-simulation -e ../.env
+pnpm install
+cp .env.example .env            # fill values locally; the env file is never committed
+pnpm -r typecheck && pnpm -r test
+
+pnpm --filter @authority/api start          # Authority API
+pnpm --filter @authority/agent start        # agent runtime
+pnpm --filter @authority/web dev            # console
+pnpm --filter @authority/web dev:fixture    # console on recorded fixtures, no backend
 ```
 
-Simulation targets can only be run by the operator. A deployed target must list the engine's EVM signing addresses in `authorizedKeys`; the workflow refuses to start without them.
+Cardano preprod: `pnpm --filter @authority/scripts cardano` deploys the anchor and vault for a mandate; `pnpm --filter @authority/scripts bond refund|capture` locks a bond and spends it. CRE: `cd workflows && cre workflow simulate cre-verifier --target local-simulation -e ../.env`.
+
+## How a payment flows
+
+1. The agent signs an Action IR and calls `POST /v1/authority/check`.
+2. The engine evaluates mandate constraints. If a `verified_facts` constraint needs evidence, the API triggers the CRE workflow and evaluates again with the report.
+3. ALLOW: the engine signs an authorization; the executor submits the vault release. DENY: the reason is logged, nothing moves.
+4. ESCALATE: the API replies 402 with a `PAYMENT-REQUIRED` header. The agent locks the bond and retries with `PAYMENT-SIGNATURE`. The API verifies the escrow UTxO, builds the brief, and puts the approval in the human's inbox.
+5. The human approves (signs the release, bond refunded) or declines with a reason (bond refunded or captured).
+6. The vault validator checks every field of the authorization on chain. The receipt binds action, mandate, verification, brief, decision, and settlement.
