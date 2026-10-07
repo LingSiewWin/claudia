@@ -28,6 +28,7 @@ const CARDANO_METHODS = [
   'bondAddresses',
   'readBond',
   'buildBondSpend',
+  'submitSigned',
   'submit',
 ] as const;
 

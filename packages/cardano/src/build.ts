@@ -15,6 +15,8 @@ export interface PlanOutput {
   /** Leave lovelace out to let the builder add the minimum ADA. */
   amount: Asset[];
   datum?: PlutusJson;
+  /** An inline datum already serialized (CBOR hex), attached verbatim; used instead of `datum` when set. */
+  datumCbor?: string;
   referenceScript?: string;
 }
 
@@ -103,7 +105,8 @@ export async function buildTx(env: TxEnv, plan: TxPlan, fixedBudget: { mem: numb
   }
   for (const o of plan.outputs) {
     tx.txOut(o.address, o.amount.map((a) => ({ ...a })));
-    if (o.datum) tx.txOutInlineDatumValue(o.datum, 'JSON');
+    if (o.datumCbor) tx.txOutInlineDatumValue(o.datumCbor, 'CBOR');
+    else if (o.datum) tx.txOutInlineDatumValue(o.datum, 'JSON');
     if (o.referenceScript) tx.txOutReferenceScript(o.referenceScript, 'V3');
   }
   for (const pkh of plan.requiredSigners) tx.requiredSignerHash(pkh);

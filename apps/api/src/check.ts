@@ -10,6 +10,7 @@ import {
   type DecisionBrief,
   type DecisionOutcome,
   type EscalationPrice,
+  EscalationPriceSchema,
   decisionHash,
   type Evaluation,
   evaluate,
@@ -20,11 +21,12 @@ import {
   type State,
   type AnyVerificationReport,
   type VerifiedReport,
+  parseShelleyAddress,
 } from '@authority/core';
 import type { Db, StoredEvent } from '@authority/db';
 import * as z from 'zod';
 import { issueOnce } from './authorize';
-import { BOND_ASSET, bondOf, briefFor, escalationsToday, type PaymentProof, paymentResponse, priceFor, reply402, withBudget } from './escalation';
+import { BOND_ASSET, bondOf, briefFor, escalationsToday, exactRequirements, type PaymentProof, paymentResponse, priceFor, reply402, settleViaFacilitator, withBudget, x402Network } from './escalation';
 import type { VerifyFx } from './fx';
 import { HttpError, parseJson, type Reply } from './http';
 import { idempotent } from './idempotency';
@@ -53,6 +55,8 @@ export interface Engine {
   publicApiUrl: string;
   /** Escalation bond in lovelace (ESCALATION_BOND_LOVELACE). */
   bondLovelace: string;
+  /** x402 facilitator for exact-scheme locks (X402_FACILITATOR_URL); null = the API submits the signed lock itself. */
+  facilitatorUrl: string | null;
 }
 
 export interface Proposal {
@@ -73,6 +77,15 @@ const FACT_REASONS = new Set([
 const FX_FACT_REASONS = new Set(['QUOTE_NOT_FOUND', 'RATE_MISMATCH', 'PREMIUM_MISMATCH', 'EXPIRY_MISMATCH', 'QUOTE_OFF_MARKET']);
 export const layerOf = (reason: string): Layer => (FACT_REASONS.has(reason) ? 'cre' : FX_FACT_REASONS.has(reason) ? 'crebit' : 'engine');
 
+function isKeyAddress(address: string): boolean {
+  try {
+    const a = parseShelleyAddress(address);
+    return a.payment.tag === 'key' && (a.stake === null || a.stake.tag === 'key');
+  } catch {
+    return false;
+  }
+}
+
 export const CheckBodySchema = z
   .strictObject({
     mandate_id: IdSchema,
@@ -80,6 +93,8 @@ export const CheckBodySchema = z
     request_text: z.string().min(1).max(2000).optional(),
     execute: z.boolean().default(false),
     run_id: z.uuid().optional(),
+    /** Where a bond refund goes (a key address); lets the 402 carry the complete lock datum (x402 extra.datum). */
+    bond_refund_address: z.string().min(1).max(200).refine(isKeyAddress, 'bond_refund_address must be a key address').optional(),
   })
   .refine((b) => (b.proposal === undefined) !== (b.request_text === undefined), 'send exactly one of proposal or request_text');
 export type CheckBody = z.infer<typeof CheckBodySchema>;
@@ -404,7 +419,7 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: P
     brief = briefFor({ action, evaluation: e, row, verification: d.verification, bond: { amount: price.amount, asset: BOND_ASSET }, expiresAtMs: price.locked_until_ms });
   } else if (e.signed && action) {
     if (e.outcome === 'ESCALATE') {
-      const gate = await escalationGate(eng, { row, run, action, evaluation: e, proposal, approverPkh: chain.anchor.approver_pkh, verification: d.verification, payment, emit });
+      const gate = await escalationGate(eng, { row, run, action, evaluation: e, proposal, approverPkh: chain.anchor.approver_pkh, verification: d.verification, payment, refundAddress: body.bond_refund_address, emit });
       if (gate.kind === 'priced') return gate.reply;
       if (gate.kind === 'denied') {
         // The bond is locked and comes back at locked_until (expireApprovals); the human is never paged.
@@ -501,7 +516,7 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: P
       decision_hash: responseDecisionHash(e),
       ...(e.signed ? {} : { notice: 'unsigned: evaluation only' }),
     },
-    ...(bond?.tx_hash && price ? { headers: { 'payment-response': paymentResponse(price.network, bond.tx_hash) } } : {}),
+    ...(bond?.tx_hash && price ? { headers: { 'payment-response': paymentResponse(payment?.exact ? x402Network(price.network) : price.network, bond.tx_hash) } } : {}),
   };
 }
 
@@ -527,6 +542,7 @@ async function escalationGate(
     approverPkh: string;
     verification: Decided['verification'];
     payment: PaymentProof | null;
+    refundAddress: string | undefined;
     emit: Emit;
   },
 ): Promise<Gate> {
@@ -558,15 +574,17 @@ async function escalationGate(
     }
   }
   const proof = i.payment;
-  const utxo = proof && proof.approval_id === price.approval_id ? await eng.cardano.readBond(price) : null;
+  // An exact-scheme proof is a signed lock nobody has broadcast: submit it first, then read it back like any other.
+  const txHash = proof?.approval_id !== price.approval_id ? null : proof.exact ? await submitLock(eng, proof.exact) : proof.tx_hash;
+  const utxo = txHash === null ? null : await eng.cardano.readBond(price);
   const valid =
     utxo !== null &&
-    utxo.tx_hash === proof!.tx_hash &&
-    utxo.output_index === proof!.output_index &&
+    utxo.tx_hash === txHash &&
+    (proof!.exact !== undefined || utxo.output_index === proof!.output_index) &&
     utxo.datum.action_hash === actionHash &&
     utxo.datum.approver_pkh === price.approver_key_hash &&
     utxo.amount >= BigInt(price.amount);
-  if (!valid) return { kind: 'priced', reply: reply402(eng.publicApiUrl, price, action.id) };
+  if (!valid) return { kind: 'priced', reply: reply402(eng.publicApiUrl, price, action.id, i.refundAddress) };
   const bond = bondOf(price, row.mandate.id, utxo);
   const brief = briefFor({ action, evaluation: e, row, verification: i.verification, bond: { amount: bond.amount, asset: bond.asset }, expiresAtMs: price.locked_until_ms });
   // The engine counted the budget before this bond was read back from Cardano. The claim takes the budget unit under
@@ -591,6 +609,18 @@ async function escalationGate(
   if (claimed.used !== null) return { kind: 'denied', evaluation: budgetDenial(e, { used: claimed.used, per_day: perDay }), bond };
   await emit('ApprovalRequested', { approval_id: bond.approval_id, approvals_required: e.approvals_required, brief, bond });
   return { kind: 'locked', approvalId: bond.approval_id, price, brief, bond };
+}
+
+/** Broadcasts the exact-scheme lock, through the facilitator when one is configured. The hash to read back, or null when refused. */
+async function submitLock(eng: Engine, exact: NonNullable<PaymentProof['exact']>): Promise<string | null> {
+  if (eng.facilitatorUrl !== null) {
+    const price = exact.payload.accepted.extra.escalation;
+    return settleViaFacilitator(eng.facilitatorUrl, exact.payload, exactRequirements(EscalationPriceSchema.parse(price)));
+  }
+  const r = await eng.cardano.submitSigned(exact.transaction_hex);
+  // A node rejection after the lock landed (inputs already spent) is the re-presented payload of a settled lock.
+  if (!r.accepted) console.warn(`exact lock ${r.tx_hash} not accepted by the node: ${r.detail.slice(0, 300)}`);
+  return r.tx_hash;
 }
 
 export function handleCheck(eng: Engine, caller: Caller, idempotencyKey: string, rawBody: string, payment: PaymentProof | null): Promise<Reply> {

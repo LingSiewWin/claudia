@@ -1,14 +1,14 @@
 import { type EscalationPrice, bytesToHex, parseShelleyAddress, sha256Hex } from '@authority/core';
-import { type UTxO, pubKeyAddress, resolveTxHash, serializeAddressObj } from '@meshsdk/core';
+import { type UTxO, pubKeyAddress, resolveTxHash, serializeAddressObj, serializeData } from '@meshsdk/core';
 import { escrowScript, sinkScript } from './blueprint';
 import { type Wallet, buildTx } from './build';
-import { type Chain, slotAt } from './chain';
+import { type Chain, awaitTx, slotAt, submit } from './chain';
 import { BOND_CAPTURE, BOND_REFUND, type BondDatum, bondDatumData, parseBondDatum } from './data';
 
 export type { BondDatum } from './data';
 import { quantityOf } from './state';
 import { UPPER_OFFSET_MS, emptyPlan } from './txs';
-import { type SigningWallet, signAndSubmit } from './wallet';
+import type { SigningWallet } from './wallet';
 
 /*
  * Escalation bond (escrow). The agent locks a bond before a human is interrupted. The escrow validator
@@ -74,6 +74,9 @@ export function bondDatumFor(price: EscalationPrice, agent: { pkh: string; stake
   };
 }
 
+/** The inline datum of the lock as CBOR hex, for a 402 that names the payer's refund address (x402 `extra.datum`). */
+export const bondDatumCbor = (price: EscalationPrice, refundAddress: string): string => serializeData(bondDatumData(bondDatumFor(price, agentKeys(refundAddress))), 'JSON');
+
 /** The lock output: the bond at the escrow address with its inline datum (output 0 of the lock tx). */
 export function bondLockOutput(price: EscalationPrice, agent: { pkh: string; stake: string | null }) {
   const tag = chainTagOf(price);
@@ -82,12 +85,29 @@ export function bondLockOutput(price: EscalationPrice, agent: { pkh: string; sta
   return { datum, output: { address: price.escrow_address, amount: [{ unit: unitOf(price.asset), quantity: price.amount }], datum: bondDatumData(datum) } };
 }
 
+/**
+ * Builds and signs the lock without broadcasting it (the x402 exact scheme: the server submits). `nonce` is the
+ * wallet UTxO pinned as the first input, the replay guard the scheme requires.
+ */
+export async function signBondLock(chain: Chain, agent: SigningWallet, price: EscalationPrice, o: { datumCbor?: string } = {}): Promise<{ txHex: string; txHash: string; nonce: string; datum: BondDatum }> {
+  const { datum, output: built } = bondLockOutput(price, agentKeys(agent.address));
+  // A server-issued datum (x402 extra.datum) is attached verbatim, as any exact-scheme client would.
+  const output = o.datumCbor === undefined ? built : { address: built.address, amount: built.amount, datumCbor: o.datumCbor };
+  const wallet = await agent.snapshot();
+  const plan = emptyPlan(wallet);
+  const first = wallet.utxos.find((u) => !u.output.scriptRef && u.output.amount.length === 1);
+  if (!first) throw new Error(`agent wallet ${wallet.address} has no ADA-only UTxO to spend`);
+  plan.keyInputs = [first];
+  plan.outputs = [output];
+  const txHex = await agent.sign(await buildTx(chain, plan));
+  return { txHex, txHash: resolveTxHash(txHex), nonce: `${first.input.txHash}#${first.input.outputIndex}`, datum };
+}
+
 /** Builds, signs with the agent wallet and submits the lock. Returns the escrow UTxO. */
 export async function lockBond(chain: Chain, agent: SigningWallet, price: EscalationPrice): Promise<BondUtxo> {
-  const { datum, output } = bondLockOutput(price, agentKeys(agent.address));
-  const plan = emptyPlan(await agent.snapshot());
-  plan.outputs = [output];
-  const tx_hash = await signAndSubmit(chain, await buildTx(chain, plan), [agent]);
+  const { txHex, datum } = await signBondLock(chain, agent, price);
+  const tx_hash = await submit(chain, txHex);
+  await awaitTx(chain, tx_hash);
   return { tx_hash, output_index: 0, datum, amount: datum.amount, escrow_address: price.escrow_address };
 }
 

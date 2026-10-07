@@ -254,6 +254,8 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
   const faults: CardanoError[] = [];
   // Fake escrow: bonds the test locked, keyed by approval id; spends built by outcome.
   const bonds = new Map<string, BondUtxo>();
+  /** Signed txs handed to submitSigned (the exact-scheme lock path). */
+  const submitted: string[] = [];
   const bondSpends = new Map<string, { bond: BondUtxo; outcome: BondOutcome }>();
   let reads = 0;
   let readsFail = false;
@@ -289,12 +291,17 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
       return { txCbor: `84a4${txHash}`, txHash };
     },
     bondAddresses() {
-      return { escrow: 'addr_test1wq' + 'e5c4'.repeat(12) + 'ab', sink: 'addr_test1wq' + 'dead'.repeat(12) + 'ab' };
+      // The real preprod escrow script address: the 402 derives the script hash from it.
+      return { escrow: 'addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f', sink: 'addr_test1wq' + 'dead'.repeat(12) + 'ab' };
     },
     async readBond(price) {
       const bond = bonds.get(price.approval_id);
       if (!bond || bond.datum.action_hash !== price.action_hash || bond.amount !== BigInt(price.amount)) return null;
       return bond;
+    },
+    async submitSigned(txCbor) {
+      submitted.push(txCbor);
+      return { tx_hash: sha256Hex(`tx:${txCbor}`), accepted: true, detail: '' };
     },
     async buildBondSpend(bond, outcome) {
       const txHash = sha256Hex(`bond:${outcome}:${bond.tx_hash}#${bond.output_index}`);
@@ -363,10 +370,11 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
     built,
     bonds,
     bondSpends,
+    submitted,
     /** The agent locked the priced bond in escrow: the UTxO the port will read back for this approval. */
-    lockBond(price: EscalationPrice, o: { amount?: bigint; agent?: string } = {}): BondUtxo {
+    lockBond(price: EscalationPrice, o: { amount?: bigint; agent?: string; txCbor?: string } = {}): BondUtxo {
       const utxo: BondUtxo = {
-        tx_hash: sha256Hex(`bond:lock:${price.approval_id}:${price.action_hash}`),
+        tx_hash: o.txCbor === undefined ? sha256Hex(`bond:lock:${price.approval_id}:${price.action_hash}`) : sha256Hex(`tx:${o.txCbor}`),
         output_index: 0,
         amount: o.amount ?? BigInt(price.amount),
         escrow_address: price.escrow_address,
@@ -405,7 +413,7 @@ export function fakeCardano(chains: Map<string, Chain>, now: () => number) {
 }
 
 // ---- The API under test ---------------------------------------------------------------------------
-export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: Engine['interpret'] } = {}) {
+export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: Engine['interpret']; facilitatorUrl?: string } = {}) {
   let t = NOW;
   const now = () => t;
   const db = await memoryDb();
@@ -477,6 +485,7 @@ export async function startApi(o: { labRunner?: LabDeps['runner']; interpret?: E
     interpret: o.interpret ?? null,
     publicApiUrl: 'https://api.test',
     bondLovelace: '5000000',
+    facilitatorUrl: o.facilitatorUrl ?? null,
   };
   const lab: LabDeps = {
     runner: o.labRunner ?? null,
