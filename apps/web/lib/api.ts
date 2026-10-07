@@ -2,9 +2,11 @@ import { config } from './config';
 import type {
   ApprovalView,
   AttackId,
+  AuthorityInfo,
   DeclineSignature,
   LogAnchorRef,
   MandateView,
+  Metrics,
   ReceiptBundle,
   ReceiptSummary,
   RunEvent,
@@ -49,8 +51,14 @@ export const approve = (approvalId: string) =>
     `/v1/approvals/${id(approvalId)}/approve`,
     {},
   );
+/** Decline returns the bond spend (refund or capture) for the approver wallet to sign; bondSubmit sends it. */
 export const decline = (approvalId: string, cfo: DeclineSignature) =>
-  call<{ ok: true }>(`/v1/approvals/${id(approvalId)}/decline`, cfo);
+  call<{ unsigned_tx_cbor: string; tx_hash: string }>(`/v1/approvals/${id(approvalId)}/decline`, cfo);
+export const bondSubmit = (approvalId: string, body: { tx_hash: string; cfo_witness_cbor: string }) =>
+  call<{ tx_hash: string }>(`/v1/approvals/${id(approvalId)}/bond-submit`, body);
+export const getAuthority = (role: string, mandateId: string) =>
+  call<AuthorityInfo>(`/v1/authority/${id(role)}?mandate_id=${id(mandateId)}`);
+export const getMetrics = (mandateId: string) => call<Metrics>(`/v1/metrics?mandate_id=${id(mandateId)}`);
 export const execute = (body: { approval_id: string; authorization_digest: string; cfo_witness_cbor: string }) =>
   call<{ run_id: string; tx_hash: string }>('/v1/executions', body);
 export const prepareRevoke = (mandateId: string) =>

@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { type ReactNode, useMemo, useState } from 'react';
 import { cardanoTxUrl, sepoliaTxUrl } from '../lib/config';
 import type { Payloads } from '../lib/contract';
-import { actionTitle, clock, money, plainReason, shortHex } from '../lib/format';
-import { type CardView, type Row, type RowTone, enforcedRow, mayRow, statusLine, trueRow } from '../lib/run';
+import { DECLINE_REASON_TEXT, actionTitle, clock, money, plainReason, shortHex } from '../lib/format';
+import { type CardView, type Row, type RowTone, budgetExhausted, enforcedRow, mayRow, statusLine, trueRow } from '../lib/run';
 import { BoundaryRail } from './boundary-rail';
+import { BondChip, BriefView } from './brief';
 
 type Started = Payloads['RunStarted'];
 
@@ -71,6 +72,11 @@ export function ActionCard({
       <p className="mt-0.5 text-sm text-muted">
         {a?.reference ? <span className="font-mono text-[13px]">{a.reference.invoice_number} · </span> : null}
         {started?.delegate ?? a?.actor ?? 'agent'} · <time dateTime={card.proposedAt}>{clock(card.proposedAt)}</time>
+        {card.bond ? (
+          <span className="ml-3">
+            <BondChip bond={card.bond} now={now} />
+          </span>
+        ) : null}
         {unanchored ? (
           <span data-testid="not-anchored" className="ml-3 rounded-sm border border-line px-1.5 py-px text-[11px] font-bold uppercase tracking-wider text-fg">
             not anchored
@@ -90,8 +96,22 @@ export function ActionCard({
       {denied && card.denied ? (
         <div data-testid="denied" className="mt-2 border-l-[3px] border-fg pl-3">
           <p className="text-fg">{plainReason(card.denied.reason)}</p>
+          {card.approval?.declineReason ? <p className="text-sm text-muted">{DECLINE_REASON_TEXT[card.approval.declineReason]}</p> : null}
+          {budgetExhausted(card) ? (
+            <p data-testid="nobody-paged" className="text-sm font-semibold text-fg">
+              Nobody was paged.
+            </p>
+          ) : null}
           <p className="text-sm text-muted">Funds moved: {money(0n, decimals, true)}</p>
         </div>
+      ) : null}
+      {card.approval?.brief ? (
+        <details data-testid="brief-details" open={card.state === 'ESCALATED'} className="mt-3">
+          <summary className="cursor-pointer text-sm font-semibold">Decision brief</summary>
+          <div className="mt-2">
+            <BriefView brief={card.approval.brief} bond={card.bond} now={now} decimals={decimals} />
+          </div>
+        </details>
       ) : null}
       {card.state === 'EXECUTING' ? <Progress card={card} authValid={authValid} now={now} /> : null}
       {a ? (

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   approve,
+  bondSubmit,
   decline,
   execute,
   getMandate,
@@ -15,9 +16,10 @@ import {
 } from '../lib/api';
 import { type ConnectedWallet, type WalletChoice, connectWallet, injectedWallets, walletErrorText } from '../lib/cip30';
 import { cardanoTxUrl } from '../lib/config';
-import { type ApprovalView, type MandateView, declineMessage } from '../lib/contract';
-import { actionTitle, formatUnits, money, parseUnits, plainReason, shortHex } from '../lib/format';
-import { useLoad } from '../lib/hooks';
+import { type ApprovalView, type DeclineReason, type MandateView, declineMessage } from '../lib/contract';
+import { DECLINE_REASON_TEXT, actionTitle, formatUnits, money, parseUnits, plainReason, shortHex } from '../lib/format';
+import { useLoad, useNow } from '../lib/hooks';
+import { BondChip, BriefView } from './brief';
 
 const KEY_HASH = /^[0-9a-f]{56}$/;
 
@@ -188,9 +190,9 @@ function Approvals({ wallet, approver }: { wallet: ConnectedWallet | null; appro
   }, []);
   return (
     <section aria-label="Approvals">
-      <h2 className="text-xl font-extrabold">CFO approval</h2>
+      <h2 className="text-xl font-extrabold">Escalated to you</h2>
       {error ? <p role="alert" className="text-forbid">{error}</p> : null}
-      {items.length === 0 ? <p className="mt-2 text-muted">No payments are waiting for approval.</p> : null}
+      {items.length === 0 ? <p className="mt-2 text-muted">Nothing is escalated. Agents reach this inbox only after locking a bond.</p> : null}
       <ul className="mt-3 space-y-4">
         {items.map((a) => (
           <li key={a.approval_id}>
@@ -202,13 +204,28 @@ function Approvals({ wallet, approver }: { wallet: ConnectedWallet | null; appro
   );
 }
 
-type Step = 'idle' | 'authorizing' | 'signing' | 'submitting' | 'submitted' | 'declining' | 'declined' | 'error';
+type Step =
+  | 'idle'
+  | 'authorizing'
+  | 'signing'
+  | 'submitting'
+  | 'submitted'
+  | 'declining'
+  | 'bond-signing'
+  | 'bond-submitting'
+  | 'declined'
+  | 'error';
 
 function ApprovalCard({ item, wallet, approver }: { item: ApprovalView; wallet: ConnectedWallet | null; approver: string | null }) {
   const [step, setStep] = useState<Step>('idle');
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [reason, setReason] = useState<DeclineReason | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const now = useNow(step === 'idle');
   const a = item.action;
+  const brief = item.brief ?? null;
+  const bond = item.bond ?? null;
+  const busy = step !== 'idle';
 
   const onApprove = async () => {
     if (!wallet) return;
@@ -231,44 +248,71 @@ function ApprovalCard({ item, wallet, approver }: { item: ApprovalView; wallet: 
       setMessage(walletErrorText(err));
     }
   };
-  // Decline is authenticated: the approver signs declineMessage with CIP-30 signData (CIP-8).
-  const onDecline = async () => {
+  // Decline is authenticated and priced: the approver signs declineMessage (CIP-8) naming the reason, then signs the
+  // bond spend the API returns (refund for a reasonable ask, capture for a frivolous one) and the API submits it.
+  const onDecline = async (why: DeclineReason) => {
     const address = wallet?.addresses.find((x) => x.keyHash === approver);
     if (!wallet || !address) return;
     setMessage(null);
+    setReason(why);
     try {
       setStep('declining');
-      const cfo = await wallet.api.signData(address.hex, bytesToHex(utf8ToBytes(declineMessage(item.approval_id))));
-      await decline(item.approval_id, cfo);
+      const cfo = await wallet.api.signData(address.hex, bytesToHex(utf8ToBytes(declineMessage(item.approval_id, why))));
+      const spend = await decline(item.approval_id, { ...cfo, reason: why });
+      if (spend.unsigned_tx_cbor) {
+        setStep('bond-signing');
+        let witness: string;
+        try {
+          witness = await wallet.api.signTx(spend.unsigned_tx_cbor, true);
+        } catch (err) {
+          throw Object.assign(new Error(walletErrorText(err)), { shown: true });
+        }
+        setStep('bond-submitting');
+        setTxHash((await bondSubmit(item.approval_id, { tx_hash: spend.tx_hash, cfo_witness_cbor: witness })).tx_hash);
+      }
       setStep('declined');
     } catch (err) {
       setStep('error');
-      setMessage(walletErrorText(err, 'signData'));
+      setMessage((err as { shown?: boolean }).shown ? (err as Error).message : walletErrorText(err, 'signData'));
     }
   };
 
   return (
-    <article data-testid="approval" className="rounded-[10px] border border-line bg-raised p-5">
+    <article data-testid="approval" data-approval-id={item.approval_id} className="rounded-[10px] border border-line bg-raised p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="text-lg font-semibold">{actionTitle(a)}</h3>
         <p className="text-2xl font-extrabold">{money(a.amount.value)}</p>
       </div>
-      <p className="font-mono text-[13px] text-muted">{a.reference?.invoice_number ?? 'No invoice'}</p>
-      <p className="mt-2">
-        <span className="font-semibold">Why the agent wants this: </span>
-        <q>{a.rationale}</q>
+      <p className="flex flex-wrap items-center gap-x-3 font-mono text-[13px] text-muted">
+        <span>{a.reference?.invoice_number ?? 'No invoice'}</span>
+        {bond ? <BondChip bond={bond} now={now} /> : null}
       </p>
-      <ul className="mt-2 border-l-[3px] border-fg pl-3 text-sm">
-        {item.evaluation.approvals_required.map((r) => (
-          <li key={r.constraint}>{plainReason(r.reason)}</li>
-        ))}
-      </ul>
+      {brief ? (
+        <div className="mt-3">
+          <BriefView brief={brief} bond={bond} now={now} />
+        </div>
+      ) : (
+        <>
+          <p className="mt-2">
+            <span className="font-semibold">Why the agent wants this: </span>
+            <q>{a.rationale}</q>
+          </p>
+          <ul className="mt-2 border-l-[3px] border-fg pl-3 text-sm">
+            {item.evaluation.approvals_required.map((r) => (
+              <li key={r.constraint}>{plainReason(r.reason)}</li>
+            ))}
+          </ul>
+        </>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" className="btn-strong" onClick={onApprove} disabled={!wallet || step !== 'idle'}>
+        <button type="button" className="btn-strong" onClick={onApprove} disabled={!wallet || busy}>
           Approve once
         </button>
-        <button type="button" className="btn" onClick={onDecline} disabled={!wallet || step !== 'idle'}>
-          Decline
+        <button type="button" className="btn" onClick={() => onDecline('legitimate')} disabled={!wallet || busy}>
+          Decline (reasonable ask, refund bond)
+        </button>
+        <button type="button" className="btn" onClick={() => onDecline('frivolous')} disabled={!wallet || busy}>
+          Decline (frivolous, capture bond)
         </button>
         {!wallet ? <span className="text-sm text-muted">Connect the payment approver wallet to approve or decline.</span> : null}
       </div>
@@ -276,7 +320,9 @@ function ApprovalCard({ item, wallet, approver }: { item: ApprovalView; wallet: 
         {step === 'authorizing' && 'Re-checking the mandate with fresh state and a fresh invoice verification…'}
         {step === 'signing' && 'Sign the release transaction in your wallet. Your signature lets the vault release above the autonomous limit.'}
         {step === 'submitting' && 'Submitting to Cardano…'}
-        {step === 'declining' && 'Sign the decline in your wallet. It proves the CFO refused this payment.'}
+        {step === 'declining' && 'Sign the decline in your wallet. It proves the CFO refused this payment and names the reason.'}
+        {step === 'bond-signing' && (reason === 'frivolous' ? 'Sign the bond capture in your wallet.' : 'Sign the bond refund in your wallet.')}
+        {step === 'bond-submitting' && 'Submitting the bond transaction to Cardano…'}
         {step === 'submitted' && txHash ? (
           <>
             Submitted.{' '}
@@ -285,7 +331,19 @@ function ApprovalCard({ item, wallet, approver }: { item: ApprovalView; wallet: 
             </a>
           </>
         ) : null}
-        {step === 'declined' && 'Declined. No money moves, and the agent is told the CFO declined.'}
+        {step === 'declined' ? (
+          <>
+            {reason ? DECLINE_REASON_TEXT[reason] : 'Declined.'} No money moves, and the agent is told the CFO declined.
+            {txHash ? (
+              <>
+                {' '}
+                <a className="font-mono text-[13px] underline" href={cardanoTxUrl(txHash)} target="_blank" rel="noreferrer">
+                  {shortHex(txHash)}
+                </a>
+              </>
+            ) : null}
+          </>
+        ) : null}
         {step === 'error' && <span className="text-forbid">{message}</span>}
       </p>
     </article>

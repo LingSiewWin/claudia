@@ -3,7 +3,8 @@ import { type ReactNode, useState } from 'react';
 import { getReceipt } from '../lib/api';
 import { koiosTx, sepoliaReceipt } from '../lib/chain';
 import { cardanoTxUrl, config, dataSource, sepoliaTxUrl } from '../lib/config';
-import { actionTitle, money, shortHex } from '../lib/format';
+import { BOND_TEXT, actionTitle, bondAmount, money, shortHex } from '../lib/format';
+import { cardanoscanTxUrl } from '../lib/config';
 import { useLoad } from '../lib/hooks';
 import { type CheckStatus, SUMMARY, type VerifyCheck, groupStatus, verdict, verifyReceipt } from '../lib/verify';
 
@@ -105,6 +106,35 @@ export function ReceiptView({ id }: { id: string }) {
             'Not required (within the autonomous limit)'
           )}
         </Evidence>
+        {r.approval.brief_hash ? (
+          <Evidence title="Decision brief">
+            <span data-testid="brief-hash" className="font-mono text-[13px] break-all">
+              {r.approval.brief_hash}
+            </span>
+            {b.brief ? ' · the brief the CFO read is attached; Verify recomputes its hash here' : ' · brief not attached'}
+            {checks?.find((c) => c.id === 'brief_hash') ? (
+              <span className="ml-2 inline-flex items-center gap-1">
+                <span aria-hidden className={`inline-block size-2 rounded-full ${DOT[checks.find((c) => c.id === 'brief_hash')!.status]}`} />
+                {checks.find((c) => c.id === 'brief_hash')!.status === 'pass' ? 'recomputed' : 'does not match'}
+              </span>
+            ) : null}
+          </Evidence>
+        ) : null}
+        {r.approval.bond ? (
+          <Evidence title="Escalation bond">
+            <span data-testid="receipt-bond" data-status={r.approval.bond.status}>
+              {BOND_TEXT[r.approval.bond.status]}, {bondAmount(r.approval.bond)}
+            </span>
+            {(r.approval.bond.outcome_tx_hash ?? r.approval.bond.tx_hash) ? (
+              <>
+                {', '}
+                <a className="underline" href={cardanoscanTxUrl((r.approval.bond.outcome_tx_hash ?? r.approval.bond.tx_hash) as string)} target="_blank" rel="noreferrer">
+                  escrow tx ↗
+                </a>
+              </>
+            ) : null}
+          </Evidence>
+        ) : null}
         <Evidence title="Authorization">
           nonce {r.authorization.nonce}, valid until {new Date(r.authorization.valid_until).toISOString()}, digest{' '}
           <span className="font-mono text-[13px]">{shortHex(r.authorization.digest)}</span>

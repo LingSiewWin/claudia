@@ -1,5 +1,5 @@
 import type { ActionIR, ApprovalRequirement, AuthorizationRecord, DecisionBrief, Evaluation, VerificationReport } from '@authority/core';
-import type { AttackId, EventType, Layer, Payloads, RunEvent, BondRef, DeclineReason } from './contract';
+import type { AttackId, EventType, Layer, Metrics, Payloads, RunEvent, BondRef, DeclineReason } from './contract';
 
 export type CardState =
   | 'PROPOSED'
@@ -24,7 +24,15 @@ export interface CardView {
   verification: { report: VerificationReport; reportHash: string; sepoliaTx: string } | null;
   authorization: AuthorizationRecord | null;
   compromisedEngine: boolean;
-  approval: { id: string; status: 'pending' | 'approved' | 'declined'; required: ApprovalRequirement[]; brief: DecisionBrief | null; declineReason: DeclineReason | null } | null;
+  approval: {
+    id: string;
+    status: 'pending' | 'approved' | 'declined';
+    required: ApprovalRequirement[];
+    brief: DecisionBrief | null;
+    declineReason: DeclineReason | null;
+    requestedAt: string;
+    decidedAt: string | null;
+  } | null;
   bond: BondRef | null;
   denied: { reason: string; layer: Layer } | null;
   tx: { hash: string | null; bodyCbor: string | null; submittedAt: string | null; confirmedAt: string | null; block: number | null };
@@ -42,6 +50,18 @@ export interface RunView {
   ignored: number;
   /** True once an event arrived with a skipped sequence number, or the stream began after the run started. */
   gap: boolean;
+  /** Event counts that cards cannot carry (a bond moves through several states; a budget denial has no approval). */
+  tally: Tally;
+}
+
+export interface Tally {
+  /** Approvals that reached a human (ApprovalRequested). An ESCALATE stopped at the 402 or the budget is not one. */
+  paged: number;
+  bondRequired: number;
+  bondLocked: number;
+  bondRefunded: number;
+  bondCaptured: number;
+  budgetExhausted: number;
 }
 
 export const emptyRun = (): RunView => ({
@@ -54,6 +74,7 @@ export const emptyRun = (): RunView => ({
   lastAt: null,
   ignored: 0,
   gap: false,
+  tally: { paged: 0, bondRequired: 0, bondLocked: 0, bondRefunded: 0, bondCaptured: 0, budgetExhausted: 0 },
 });
 
 const newCard = (actionId: string, at: string): CardView => ({
@@ -103,11 +124,21 @@ function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
     case 'ApprovalRequested':
       return {
         state: 'ESCALATED',
-        approval: { id: e.payload.approval_id, status: 'pending', required: e.payload.approvals_required, brief: e.payload.brief ?? null, declineReason: null },
+        approval: {
+          id: e.payload.approval_id,
+          status: 'pending',
+          required: e.payload.approvals_required,
+          brief: e.payload.brief ?? null,
+          declineReason: null,
+          requestedAt: e.created_at,
+          decidedAt: null,
+        },
         bond: e.payload.bond ?? c.bond,
       };
     case 'BondRequired':
+      // The engine escalated and priced the interruption; the human is not reached until the bond is on chain.
       return {
+        state: 'ESCALATED',
         bond: {
           amount: e.payload.price.amount,
           asset: e.payload.price.asset.symbol,
@@ -119,17 +150,17 @@ function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
         },
       };
     case 'BondLocked':
-      return { bond: c.bond && { ...c.bond, tx_hash: e.payload.tx_hash, output_index: e.payload.output_index, status: 'locked' } };
+      return c.bond && { bond: { ...c.bond, tx_hash: e.payload.tx_hash, output_index: e.payload.output_index, status: 'locked' } };
     case 'BondRefunded':
-      return { bond: c.bond && { ...c.bond, status: 'refunded' } };
+      return c.bond && { bond: { ...c.bond, status: 'refunded', outcome_tx_hash: e.payload.tx_hash } };
     case 'BondCaptured':
-      return { bond: c.bond && { ...c.bond, status: 'captured' } };
+      return c.bond && { bond: { ...c.bond, status: 'captured', outcome_tx_hash: e.payload.tx_hash } };
     case 'CFOApproved':
-      return { approval: c.approval && { ...c.approval, status: 'approved' } };
+      return { approval: c.approval && { ...c.approval, status: 'approved', decidedAt: e.created_at } };
     case 'CFODeclined':
       return {
         state: 'DENIED',
-        approval: c.approval && { ...c.approval, status: 'declined', declineReason: e.payload.reason ?? null },
+        approval: c.approval && { ...c.approval, status: 'declined', declineReason: e.payload.reason ?? null, decidedAt: e.created_at },
         denied: { reason: 'PRINCIPAL_DECLINED', layer: 'principal' },
       };
     case 'ActionDenied':
@@ -222,10 +253,69 @@ function applyKnown(view: RunView, e: RunEvent): RunView {
   if (patch === null) return { ...next, ignored: next.ignored + 1 };
   const updated = { ...card, ...patch };
   const cards = index >= 0 ? next.cards.map((c, i) => (i === index ? updated : c)) : [...next.cards, updated];
-  return { ...next, cards };
+  // Tallied only once the card accepted the event, so a bond event for a card without a bond counts nothing.
+  return { ...next, cards, tally: tallied(view.tally, e) };
+}
+
+function tallied(t: Tally, e: RunEvent): Tally {
+  switch (e.type) {
+    case 'ApprovalRequested':
+      return { ...t, paged: t.paged + 1 };
+    case 'BondRequired':
+      return { ...t, bondRequired: t.bondRequired + 1 };
+    case 'BondLocked':
+      return { ...t, bondLocked: t.bondLocked + 1 };
+    case 'BondRefunded':
+      return { ...t, bondRefunded: t.bondRefunded + 1 };
+    case 'BondCaptured':
+      return { ...t, bondCaptured: t.bondCaptured + 1 };
+    case 'ActionDenied':
+      return e.payload.reason === 'INTERRUPT_BUDGET_EXHAUSTED' ? { ...t, budgetExhausted: t.budgetExhausted + 1 } : t;
+    default:
+      return t;
+  }
 }
 
 export const reduceRun = (events: RunEvent[]): RunView => events.reduce(applyEvent, emptyRun());
+
+/** The engine's decision for a card: ESCALATE once a human was asked, else the last evaluation's outcome. Null while undecided. */
+export function decisionOf(c: CardView): 'ALLOW' | 'ESCALATE' | 'DENY' | null {
+  if (c.approval) return 'ESCALATE';
+  if (c.denied?.layer === 'engine' || c.denied?.layer === 'cre') return 'DENY';
+  const outcome = c.evaluation?.outcome;
+  return outcome === 'ALLOW' || outcome === 'DENY' || outcome === 'ESCALATE' ? outcome : null;
+}
+
+/** Was this card denied without paging anyone: the day's interrupt budget was already spent. */
+export const budgetExhausted = (c: CardView) => c.denied?.reason === 'INTERRUPT_BUDGET_EXHAUSTED';
+
+/**
+ * The same numbers GET /v1/metrics reports, from this view alone (REPLAY, or LIVE while the API is unreachable).
+ * `escalate` counts the engine's decisions; interruptions count the humans actually paged, so an escalation that
+ * stopped at the 402 or at the budget raises the first and not the second.
+ */
+export function metricsOf(view: RunView): Metrics {
+  const decided = view.cards.map(decisionOf).filter((d): d is 'ALLOW' | 'ESCALATE' | 'DENY' => d !== null);
+  const count = (d: 'ALLOW' | 'ESCALATE' | 'DENY') => decided.filter((x) => x === d).length;
+  const evaluated = decided.length;
+  const escalate = count('ESCALATE');
+  const times = view.cards
+    .flatMap((c) => (c.approval?.decidedAt ? [Date.parse(c.approval.decidedAt) - Date.parse(c.approval.requestedAt)] : []))
+    .sort((a, b) => a - b);
+  const mid = times.length >> 1;
+  const median = times.length === 0 ? null : times.length % 2 ? (times[mid] as number) : Math.round(((times[mid - 1] as number) + (times[mid] as number)) / 2);
+  const t = view.tally;
+  return {
+    actions_evaluated: evaluated,
+    allow: count('ALLOW'),
+    deny: count('DENY'),
+    escalate,
+    interruptions_per_100_actions: evaluated === 0 ? 0 : Math.round((t.paged / evaluated) * 1000) / 10,
+    bonds: { required: t.bondRequired, locked: t.bondLocked, refunded: t.bondRefunded, captured: t.bondCaptured },
+    budget_exhausted: t.budgetExhausted,
+    median_decision_ms: median,
+  };
+}
 
 export type RowTone = 'pending' | 'pass' | 'approval' | 'fail' | 'skipped';
 export interface Row {
@@ -245,7 +335,7 @@ export function mayRow(c: CardView): Row {
   const failed = own.find((k) => k.result === 'fail');
   if (failed) return { value: 'DENY', tone: 'fail', reason: failed.reason };
   const approval = own.find((k) => k.result === 'approval');
-  if (approval) return { value: 'REQUIRES APPROVAL', tone: 'approval', reason: approval.reason };
+  if (approval) return { value: 'ESCALATE', tone: 'approval', reason: approval.reason };
   return { value: 'ALLOW', tone: 'pass', reason: null };
 }
 
@@ -269,6 +359,7 @@ export function enforcedRow(c: CardView): Row {
   if (c.state === 'EXECUTING') return { value: 'Executing…', tone: 'pending', reason: null };
   if (c.state === 'DENIED') return { value: 'Not reached', tone: 'skipped', reason: null };
   if (c.approval?.status === 'pending') return { value: 'Waiting for CFO', tone: 'approval', reason: null };
+  if (c.state === 'ESCALATED' && c.bond?.status === 'required') return { value: 'Waiting for bond', tone: 'approval', reason: null };
   return { value: '—', tone: 'pending', reason: null };
 }
 
@@ -291,7 +382,9 @@ export function statusLine(c: CardView): { text: string; tone: RowTone } {
     case 'VERIFYING':
       return { text: 'Checking the invoice…', tone: 'pending' };
     case 'ESCALATED':
-      return { text: 'Waiting for CFO approval', tone: 'approval' };
+      return c.approval
+        ? { text: 'Escalated to the CFO', tone: 'approval' }
+        : { text: 'Escalated. The agent must lock a bond before the CFO is paged', tone: 'approval' };
     case 'AUTHORIZED':
     case 'EXECUTING':
       return { text: 'Paying on Cardano…', tone: 'pending' };

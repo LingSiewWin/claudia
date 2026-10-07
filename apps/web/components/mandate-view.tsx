@@ -1,16 +1,21 @@
 'use client';
-import { getMandate } from '../lib/api';
+import Link from 'next/link';
+import { getAuthority, getMandate } from '../lib/api';
 import { cardanoTxUrl } from '../lib/config';
-import { money, shortHex } from '../lib/format';
+import { budgetText, money, shortHex } from '../lib/format';
 import { useLoad } from '../lib/hooks';
 import { readMandate, treasuryNote } from '../lib/mandate';
 import { BoundaryRail } from './boundary-rail';
 
 export function MandateView({ id }: { id: string }) {
   const { data, error } = useLoad(() => getMandate(id).then(readMandate), [id]);
+  const role = data?.mandate.approvers[0]?.role ?? null;
+  const authority = useLoad(role ? () => getAuthority(role, id) : null, [id, role]);
   if (error) return <p role="alert" className="text-forbid">{error}</p>;
   if (!data) return <p className="text-muted">Loading mandate {id}…</p>;
   const { limits, vault, anchor, mandate, balance, floor, spent, dayCap } = data;
+  const perDay = mandate.interrupt_budget.per_day;
+  const used = authority.data?.interrupt_budget.used ?? null;
   const d = limits.decimals;
   const usd = (v: string | bigint) => money(v, d);
   const revoked = anchor.status === 'revoked';
@@ -56,6 +61,28 @@ export function MandateView({ id }: { id: string }) {
           marker={floorPct}
           testId="treasury-meter"
         />
+        <Meter
+          title="Interrupt budget"
+          value={used === null ? `${perDay} a day` : budgetText(used, perDay)}
+          note={
+            used === null
+              ? authority.error
+                ? "Today's use is unavailable right now"
+                : 'Escalations the agent may raise to a human per day'
+              : used >= perDay
+                ? 'Spent. Further escalations are denied and nobody is paged.'
+                : `${perDay - used} left. Beyond that, escalations are denied and nobody is paged.`
+          }
+          fill={used === null ? 0 : perDay === 0 ? 100 : (used * 100) / perDay}
+          testId="budget-meter"
+        />
+        {role ? (
+          <div className="self-end text-sm">
+            <Link className="underline" href={`/authority/${encodeURIComponent(role)}?mandate_id=${encodeURIComponent(mandate.id)}`}>
+              What it costs an agent to reach the {role}
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       <section aria-label="On-chain anchor" className="text-sm">

@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { getMandate, listRuns, startRun } from '../lib/api';
+import { getMandate, getMetrics, listRuns, startRun } from '../lib/api';
 import { config } from '../lib/config';
-import type { Limits, MandateView, RunSummary } from '../lib/contract';
+import type { Limits, MandateView, Metrics, RunSummary } from '../lib/contract';
 import { clock, money } from '../lib/format';
 import { useEventStream, useLoad, useNow, useReplay } from '../lib/hooks';
-import { type RunView, treasury, units } from '../lib/run';
+import { type RunView, metricsOf, treasury, units } from '../lib/run';
 import { ActionCard } from './action-card';
 import { AttackLab } from './attack-lab';
 import { BoundaryRail } from './boundary-rail';
@@ -35,6 +35,9 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
   }, [mode, liveRun, replayRun]);
 
   const view: RunView = mode === 'live' ? live.view : replay.view;
+  // LIVE: the mandate-wide numbers from the API, refetched each time a card reaches an outcome. REPLAY: this run's own.
+  const settledCount = view.cards.filter((c) => ['PROVEN', 'DENIED', 'SETTLED'].includes(c.state)).length;
+  const apiMetrics = useLoad(mode === 'live' ? () => getMetrics(config.stageMandateId) : null, [mode, liveRun, settledCount]);
   const executing = view.cards.some((c) => c.state === 'EXECUTING');
   const wall = useNow(mode === 'live' && executing);
   const now = mode === 'live' ? wall : view.lastAt ? Date.parse(view.lastAt) : 0;
@@ -92,6 +95,10 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
           </div>
 
           {authority ? <AuthorityHeader a={authority} /> : null}
+          <MetricsStrip
+            metrics={mode === 'live' ? apiMetrics.data : metricsOf(view)}
+            source={mode === 'live' ? (apiMetrics.data ? 'api' : 'none') : 'replay'}
+          />
 
           {problem ? (
             <p role="alert" className="mt-4 text-forbid">
@@ -214,6 +221,56 @@ function AuthorityHeader({ a }: { a: Authority }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** The headline is interruptions per 100 actions: the number the bond and the budget exist to push down. */
+function MetricsStrip({ metrics: m, source }: { metrics: Metrics | null; source: 'api' | 'replay' | 'none' }) {
+  if (!m) return null;
+  const b = m.bonds;
+  return (
+    <dl data-testid="metrics" data-source={source} className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border-y border-line py-3">
+      <div>
+        <dt className="text-sm text-muted">Interruptions / 100 actions</dt>
+        <dd data-testid="metric-interruptions" className="text-2xl font-extrabold tabular-nums">
+          {m.interruptions_per_100_actions}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-sm text-muted">Actions evaluated</dt>
+        <dd data-testid="metric-evaluated" className="text-2xl font-extrabold tabular-nums">
+          {m.actions_evaluated}{' '}
+          <span className="text-sm font-semibold text-muted">
+            <span className="text-permit">{m.allow}</span> allow · <span className="text-cosign">{m.escalate}</span> escalate ·{' '}
+            <span className="text-forbid">{m.deny}</span> deny
+          </span>
+        </dd>
+      </div>
+      <div>
+        <dt className="text-sm text-muted">Bonds</dt>
+        <dd data-testid="metric-bonds" className="text-2xl font-extrabold tabular-nums">
+          {b.locked}{' '}
+          <span className="text-sm font-semibold text-muted">
+            locked · {b.required} required · {b.refunded} refunded · {b.captured} captured
+          </span>
+        </dd>
+      </div>
+      <div>
+        <dt className="text-sm text-muted">Denied, nobody paged</dt>
+        <dd data-testid="metric-budget" className="text-2xl font-extrabold tabular-nums">
+          {m.budget_exhausted}
+        </dd>
+      </div>
+      {m.median_decision_ms !== null ? (
+        <div>
+          <dt className="text-sm text-muted">Median human decision</dt>
+          <dd className="text-2xl font-extrabold tabular-nums">{Math.round(m.median_decision_ms / 1000)}s</dd>
+        </div>
+      ) : null}
+      <p className="basis-full text-[12px] text-muted">
+        {source === 'api' ? `Across every run of Mandate ${config.stageMandateId}, from the evidence log.` : 'This recorded run, counted from its events in your browser.'}
+      </p>
+    </dl>
   );
 }
 
