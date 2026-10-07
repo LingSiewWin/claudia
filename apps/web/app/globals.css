@@ -199,8 +199,10 @@ body {
 .doc a {
   text-decoration: underline;
   text-underline-offset: 3px;
+  overflow-wrap: anywhere;
 }
 .doc code {
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: 0.86em;
   background: var(--raised);
