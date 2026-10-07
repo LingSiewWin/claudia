@@ -1,6 +1,6 @@
-# Authority Layer
+# Claudia
 
-Agents are infinite. Human attention is not. Authority Layer sits between an AI agent and consequential execution: the agent proposes, a deterministic engine checks the proposal against a mandate, external facts are verified, and funds move only for the exact action a human signed. Interrupting that human costs the agent a bond.
+Agents are infinite. Human attention is not. Claudia is the human authority layer for AI agents: it sits between an AI agent and consequential execution: the agent proposes, a deterministic engine checks the proposal against a mandate, external facts are verified, and funds move only for the exact action a human signed. Interrupting that human costs the agent a bond.
 
 ## What it does
 
