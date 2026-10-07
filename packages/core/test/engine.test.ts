@@ -99,7 +99,7 @@ describe('evaluate: algorithm', () => {
 
   it('above the autonomous limit with a verified report needs approval', () => {
     const e = run(action({ id: 'A-2', amount: 18 }));
-    expect(e).toMatchObject({ outcome: 'REQUIRE_APPROVAL', reason: null });
+    expect(e).toMatchObject({ outcome: 'ESCALATE', reason: null });
     expect(e.approvals_required.map((r) => r.reason)).toEqual(['ABOVE_AUTONOMOUS_LIMIT']);
   });
 

@@ -13,8 +13,8 @@ describe('stage run through the real engine', () => {
     const result = await runClaimed(d, await claimOf(fake));
     expect(result.items.map((i) => [i.action_id.split('-')[2], i.proposal?.outcome, i.proposal?.reason, i.proposal?.resolution])).toEqual([
       ['1', 'ALLOW', null, 'settled'],
-      ['2', 'REQUIRE_APPROVAL', null, 'settled'],
-      ['3', 'REQUIRE_APPROVAL', 'PRINCIPAL_DECLINED', 'declined'],
+      ['2', 'ESCALATE', null, 'settled'],
+      ['3', 'ESCALATE', 'PRINCIPAL_DECLINED', 'declined'],
       ['4', 'DENY', 'AMOUNT_ABOVE_HARD_CAP', 'denied'],
       ['5', 'DENY', 'PURPOSE_NOT_AUTHORIZED', 'denied'],
       ['6', 'DENY', 'RECIPIENT_MISMATCH', 'denied'],

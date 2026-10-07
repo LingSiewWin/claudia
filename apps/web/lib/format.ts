@@ -71,6 +71,7 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   VERIFICATION_UNAVAILABLE: 'The invoice could not be verified right now.',
   COUNTERPARTY_NOT_APPROVED: 'This vendor is not on the approved list.',
   ABOVE_AUTONOMOUS_LIMIT: "The amount is above the agent's autonomous limit.",
+  INTERRUPT_BUDGET_EXHAUSTED: "The agent has used today's interrupt budget. Nobody was paged.",
   PRINCIPAL_DECLINED: 'The CFO declined this payment.',
 };
 

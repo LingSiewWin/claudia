@@ -163,9 +163,9 @@ describe('authority check: evaluate, verify, evaluate, issue', () => {
     expect(old).toMatchObject({ status: 'settled', tx_hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
   });
 
-  it('REQUIRE_APPROVAL never carries an authorization at check time', async () => {
+  it('ESCALATE never carries an authorization at check time', async () => {
     const res = await masumi(signed(action({ id: 'A-2', invoice: inv('INV-3822') })));
-    expect(res.json.evaluation.outcome).toBe('REQUIRE_APPROVAL');
+    expect(res.json.evaluation.outcome).toBe('ESCALATE');
     expect(res.json.authorization).toBeNull();
     expect(res.json.approval_id).toBeNull(); // pure evaluations never reach the CFO inbox
     expect(await api.db.query('select id from approvals')).toEqual([]);
@@ -399,7 +399,7 @@ describe('nonce allocation', () => {
 });
 
 describe('decision hash', () => {
-  const vectors: Array<{ name: string; inputs: { action_hash: string | null; mandate_hash: string | null; verification_ref: string | null; outcome: 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY' }; decision_hash: string }> =
+  const vectors: Array<{ name: string; inputs: { action_hash: string | null; mandate_hash: string | null; verification_ref: string | null; outcome: 'ALLOW' | 'ESCALATE' | 'DENY' }; decision_hash: string }> =
     JSON.parse(readFileSync(new URL('../../../packages/core/test/vectors/decision.json', import.meta.url), 'utf8'));
 
   it.each(vectors)('response field maps evaluation fields in vector order: $name', ({ inputs, decision_hash }) => {

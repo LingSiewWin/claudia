@@ -27,7 +27,7 @@ async function load(eng: Engine, id: string): Promise<MandateRow> {
 /** Same mandate, new limits and version. Every constraint that defines a limit gets the new value. */
 export function withLimits(m: Mandate, l: z.infer<typeof UpdateBody>['limits'], version: number): Mandate {
   const constraints = m.constraints.map((c) => {
-    if (c.kind === 'amount_lte') return { ...c, value: c.on_violation === 'REQUIRE_APPROVAL' ? l.autonomous_limit : l.hard_cap };
+    if (c.kind === 'amount_lte') return { ...c, value: c.on_violation === 'ESCALATE' ? l.autonomous_limit : l.hard_cap };
     if (c.kind === 'daily_spend_lte' && c.on_violation === 'DENY') return { ...c, value: l.daily_cap };
     if (c.kind === 'balance_after_gte' && c.on_violation === 'DENY') return { ...c, value: l.treasury_minimum };
     return c;

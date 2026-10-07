@@ -135,7 +135,7 @@ export function authorizationRecord(requiresPrincipal: boolean, o: Partial<Autho
 }
 
 export function authorityResponse(
-  o: { outcome?: 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY'; signed?: boolean; authorization?: unknown; interpreted?: unknown; receiptId?: string } = {},
+  o: { outcome?: 'ALLOW' | 'ESCALATE' | 'DENY'; signed?: boolean; authorization?: unknown; interpreted?: unknown; receiptId?: string } = {},
 ) {
   const signed = o.signed ?? true;
   const outcome = o.outcome ?? 'ALLOW';
@@ -155,7 +155,7 @@ export function authorityResponse(
     ...(o.interpreted === undefined ? {} : { interpreted_action: o.interpreted }),
     verification: { report_hash: 'ee'.repeat(32), sepolia_tx: `0x${'ab'.repeat(32)}`, facts: { recipient_match: outcome !== 'DENY' } },
     authorization:
-      o.authorization !== undefined ? o.authorization : signed && outcome !== 'DENY' ? authorizationRecord(outcome === 'REQUIRE_APPROVAL') : null,
+      o.authorization !== undefined ? o.authorization : signed && outcome !== 'DENY' ? authorizationRecord(outcome === 'ESCALATE') : null,
     receipt_id: o.receiptId ?? 'R-0001',
     receipt_hash: '11'.repeat(32),
     events_url: 'https://api.authority.example/v1/runs/r1/events',

@@ -16,7 +16,7 @@ const V = 'ee'.repeat(32);
 export function decisionVectorCases(): Array<{ name: string; inputs: DecisionVectorInputs }> {
   return [
     { name: 'ALLOW, all parts set', inputs: { action_hash: A, mandate_hash: M, verification_ref: V, outcome: 'ALLOW' } },
-    { name: 'REQUIRE_APPROVAL, all parts set', inputs: { action_hash: A, mandate_hash: M, verification_ref: V, outcome: 'REQUIRE_APPROVAL' } },
+    { name: 'ESCALATE, all parts set', inputs: { action_hash: A, mandate_hash: M, verification_ref: V, outcome: 'ESCALATE' } },
     { name: 'DENY, no action hash', inputs: { action_hash: null, mandate_hash: M, verification_ref: V, outcome: 'DENY' } },
     { name: 'DENY, no verification ref', inputs: { action_hash: A, mandate_hash: M, verification_ref: null, outcome: 'DENY' } },
     { name: 'DENY, no action hash or verification ref', inputs: { action_hash: null, mandate_hash: M, verification_ref: null, outcome: 'DENY' } },

@@ -280,7 +280,7 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
   let d = await decide(eng, { row, proposal, state: chain.state, action, emit });
   let e: Decided['evaluation'] = d.evaluation;
   const contextOf = (ev: Decided['evaluation']) =>
-    decisionContext(row, action, proposal, { ...d, evaluation: ev }, { required: ev.outcome === 'REQUIRE_APPROVAL', cfo_key_hash: null }, proposed.hash);
+    decisionContext(row, action, proposal, { ...d, evaluation: ev }, { required: ev.outcome === 'ESCALATE', cfo_key_hash: null }, proposed.hash);
   const denied = async (ev: Decided['evaluation'], layer: Layer | null) => {
     const reason = ev.reason ?? 'INVALID_PROPOSAL';
     await emit('ActionDenied', { reason, layer });
@@ -294,7 +294,7 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
   if (e.outcome === 'DENY') {
     await denied(e, d.deniedBy);
   } else if (e.signed && action) {
-    if (e.outcome === 'REQUIRE_APPROVAL') {
+    if (e.outcome === 'ESCALATE') {
       // Approvals exist only for runs that want execution; a pure evaluation never reaches the CFO inbox.
       if (body.execute) {
         const [ap] = await eng.db.query<{ id: string }>(

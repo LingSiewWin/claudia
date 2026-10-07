@@ -8,7 +8,7 @@ import type { ActionType, Mandate } from '../src/schemas';
 import { ATTACKER_ADDR, AWS_ADDR, CHAIN, ENGINE_SK, M001, NOW, action, propose, state, verified } from './fixtures';
 
 const HARD_CAP = 50_000_000n;
-const RANK: Record<Evaluation['outcome'], number> = { ALLOW: 0, REQUIRE_APPROVAL: 1, DENY: 2, NEEDS_VERIFICATION: -1 };
+const RANK: Record<Evaluation['outcome'], number> = { ALLOW: 0, ESCALATE: 1, DENY: 2, NEEDS_VERIFICATION: -1 };
 
 const broad = fc.record({
   amountCents: fc.integer({ min: 1, max: 20_000 }),
@@ -107,7 +107,7 @@ describe('engine invariants', () => {
     );
   });
 
-  it('revoked or version-mismatched mandate never yields ALLOW or REQUIRE_APPROVAL', () => {
+  it('revoked or version-mismatched mandate never yields ALLOW or ESCALATE', () => {
     const stale = fc.oneof(
       fc.record({ anchorStatus: fc.constant<'active' | 'revoked'>('revoked'), anchorVersion: fc.constantFrom(3, 2) }),
       fc.record({ anchorStatus: fc.constant<'active' | 'revoked'>('active'), anchorVersion: fc.constant(2) }),

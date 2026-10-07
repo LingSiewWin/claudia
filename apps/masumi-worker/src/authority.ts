@@ -36,7 +36,7 @@ const AuthorizationRecordSchema = z.strictObject({
 // The slice of POST /v1/authority/check (Authority API) this worker depends on.
 export const AuthorityResponseSchema = z.object({
   evaluation: z.object({
-    outcome: z.enum(['ALLOW', 'REQUIRE_APPROVAL', 'DENY']),
+    outcome: z.enum(['ALLOW', 'ESCALATE', 'DENY']),
     reason: z.string().nullable(),
     checks: z.array(z.unknown()),
     signed: z.boolean(),
@@ -161,8 +161,8 @@ function assertSellable(res: AuthorityResponse): void {
   }
   if (!e.signed) throw new AuthorityContractError('authorization returned for an unsigned proposal');
   if (e.outcome === 'DENY') throw new AuthorityContractError('authorization returned for a DENY');
-  if (e.outcome === 'REQUIRE_APPROVAL' && authorization.fields.requires_principal !== true) {
-    throw new AuthorityContractError('REQUIRE_APPROVAL authorization must require the principal signature');
+  if (e.outcome === 'ESCALATE' && authorization.fields.requires_principal !== true) {
+    throw new AuthorityContractError('ESCALATE authorization must require the principal signature');
   }
   if (authorization.fields.action_hash !== e.action_hash) throw new AuthorityContractError('authorization is for another action');
   if (authorization.fields.mandate_hash !== e.mandate_hash) throw new AuthorityContractError('authorization is under another mandate');

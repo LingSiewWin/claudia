@@ -11,15 +11,15 @@
     "decision_hash": "652822b7d97cdceeeecf8a161a2cbaf75cdabd08baa7be15b665d73dd637f0a0"
   },
   {
-    "name": "REQUIRE_APPROVAL, all parts set",
+    "name": "ESCALATE, all parts set",
     "inputs": {
       "action_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "mandate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "verification_ref": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "outcome": "REQUIRE_APPROVAL"
+      "outcome": "ESCALATE"
     },
-    "preimage_hex": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee524551554952455f415050524f56414c",
-    "decision_hash": "3fcd6a5105a15bb0e924fdcb0f45c7a3359e6c45811d00bffd8394bff14545f3"
+    "preimage_hex": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee455343414c415445",
+    "decision_hash": "47378fc446b1b4fc62da69918a0057bc6d34abf0a9b8eb02f88ee0f29a27be64"
   },
   {
     "name": "DENY, no action hash",

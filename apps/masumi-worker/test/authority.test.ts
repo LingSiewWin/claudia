@@ -184,15 +184,15 @@ describe('buildOutput (the sold result)', () => {
     expect(output.interpreted_action).toEqual({ note: 'interpreted' });
   });
 
-  it('REQUIRE_APPROVAL may carry an authorization that requires the principal', () => {
-    const { output } = buildOutput(authorityResponse({ outcome: 'REQUIRE_APPROVAL' }) as never, WEB);
+  it('ESCALATE may carry an authorization that requires the principal', () => {
+    const { output } = buildOutput(authorityResponse({ outcome: 'ESCALATE' }) as never, WEB);
     expect((output.authorization as { fields: { requires_principal: boolean } }).fields.requires_principal).toBe(true);
   });
 
   it.each([
     ['authorization for an unsigned proposal (compromised API)', { signed: false, authorization: authorizationRecord(false) }],
     ['authorization for a DENY', { outcome: 'DENY' as const, authorization: authorizationRecord(false) }],
-    ['REQUIRE_APPROVAL authorization without the principal flag', { outcome: 'REQUIRE_APPROVAL' as const, authorization: authorizationRecord(false) }],
+    ['ESCALATE authorization without the principal flag', { outcome: 'ESCALATE' as const, authorization: authorizationRecord(false) }],
     ['authorization for another action', { authorization: authorizationRecord(false, { actionHash: '0d'.repeat(32) }) }],
     ['authorization under another mandate', { authorization: authorizationRecord(false, { mandateHash: '0c'.repeat(32) }) }],
     ['signed ALLOW without an authorization record', { authorization: null }],
@@ -218,8 +218,8 @@ describe('buildOutput (the sold result)', () => {
     expect(() => buildOutput(other as never, WEB)).toThrow(AuthorityContractError);
   });
 
-  it('check-time REQUIRE_APPROVAL with no authorization record stays sellable', () => {
-    const res = authorityResponse({ outcome: 'REQUIRE_APPROVAL', authorization: null });
+  it('check-time ESCALATE with no authorization record stays sellable', () => {
+    const res = authorityResponse({ outcome: 'ESCALATE', authorization: null });
     expect(buildOutput(res as never, WEB).output.authorization).toBeNull();
   });
 });

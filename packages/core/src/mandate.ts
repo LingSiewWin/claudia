@@ -42,7 +42,7 @@ const max = (xs: bigint[]) => (xs.length ? xs.reduce((a, b) => (b > a ? b : a)) 
 
 export function enforcementLimits(m: Mandate): EnforcementLimits {
   return {
-    autonomous: min(values(m, 'amount_lte', 'REQUIRE_APPROVAL')),
+    autonomous: min(values(m, 'amount_lte', 'ESCALATE')),
     hardCap: min(values(m, 'amount_lte', 'DENY')),
     dailyCap: min(values(m, 'daily_spend_lte', 'DENY')),
     treasuryMinimum: max(values(m, 'balance_after_gte', 'DENY')),
@@ -61,13 +61,13 @@ export function mandateRuleProblems(m: Mandate): string[] {
   }
   const roles = new Set(m.approvers.map((a) => a.role));
   for (const c of m.constraints) {
-    if (c.on_violation === 'REQUIRE_APPROVAL' && (c.approver === undefined || !roles.has(c.approver))) {
-      problems.push(`${c.id}: REQUIRE_APPROVAL needs an approver listed in approvers`);
+    if (c.on_violation === 'ESCALATE' && (c.approver === undefined || !roles.has(c.approver))) {
+      problems.push(`${c.id}: ESCALATE needs an approver listed in approvers`);
     }
     if (c.on_violation === 'DENY' && c.approver !== undefined) problems.push(`${c.id}: DENY constraints take no approver`);
   }
   const l = enforcementLimits(m);
-  if (l.autonomous === null) problems.push('needs an amount_lte constraint with REQUIRE_APPROVAL (autonomous limit)');
+  if (l.autonomous === null) problems.push('needs an amount_lte constraint with ESCALATE (autonomous limit)');
   if (l.hardCap === null) problems.push('needs an amount_lte constraint with DENY (hard cap)');
   if (l.dailyCap === null) problems.push('needs a daily_spend_lte constraint with DENY');
   if (l.treasuryMinimum === null) problems.push('needs a balance_after_gte constraint with DENY');

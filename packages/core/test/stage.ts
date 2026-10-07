@@ -54,7 +54,7 @@ export function runStage(): StageRow[] {
       spent += amount;
       lastNonce += 1n;
     }
-    const reason = e.outcome === 'REQUIRE_APPROVAL' && human === 'decline' ? 'PRINCIPAL_DECLINED' : e.reason;
+    const reason = e.outcome === 'ESCALATE' && human === 'decline' ? 'PRINCIPAL_DECLINED' : e.reason;
     rows.push({ case: n, label, outcome: e.outcome, reason, approvals: e.approvals_required.map((x) => x.reason), cre, balance, spent, requires_principal: requiresPrincipal, refusal });
   };
 

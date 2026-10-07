@@ -11,7 +11,7 @@ const Units = z
 const PositiveUnits = Units.refine((s) => BigInt(s) > 0n, 'must be > 0');
 const Ed25519Key = z.string().regex(/^ed25519:[0-9a-f]{64}$/);
 const AssetSymbol = z.string().regex(/^[A-Z]{2,10}$/);
-const OnViolation = z.enum(['DENY', 'REQUIRE_APPROVAL']);
+const OnViolation = z.enum(['DENY', 'ESCALATE']);
 
 const common = { id: IdSchema, on_violation: OnViolation, approver: z.string().min(1).max(32).optional() };
 
@@ -43,6 +43,8 @@ export const MandateSchema = z.strictObject({
   asset: z.strictObject({ symbol: AssetSymbol, decimals: z.number().int().min(0).max(18) }),
   validity: z.strictObject({ starts_at: z.iso.datetime(), expires_at: z.iso.datetime() }),
   delegation: z.strictObject({ allowed: z.literal(false) }),
+  // Human attention is budgeted like money: ESCALATE outcomes per UTC day. The next one is a DENY and nobody is paged.
+  interrupt_budget: z.strictObject({ per_day: z.number().int().min(0).max(10_000) }),
   constraints: z.array(ConstraintSchema).min(1),
 });
 
@@ -88,6 +90,41 @@ export const StateSchema = z.strictObject({
   anchor_version: z.number().int().min(1),
   anchor_status: z.enum(['active', 'revoked']),
   observed_at_slot: z.number().int().min(0),
+  // Escalations already counted today (engine record). Absent means none.
+  escalations_today: z.number().int().min(0).optional(),
+  escalation_day_index: z.number().int().min(0).optional(),
+});
+
+export const BondStatusSchema = z.enum(['required', 'locked', 'refunded', 'captured', 'expired']);
+
+/** Body of the HTTP 402 reply: what the agent must lock in escrow before a human is interrupted. */
+export const EscalationPriceSchema = z.strictObject({
+  schema: z.literal('escalation-price/v0.1'),
+  approval_id: z.string().min(1).max(64),
+  network: z.enum(['cardano-preprod', 'cardano-mainnet']),
+  asset: z.strictObject({ policy_id: z.string().regex(/^([0-9a-f]{56})?$/), asset_name: z.string().regex(/^[0-9a-f]{0,64}$/), symbol: AssetSymbol }),
+  amount: PositiveUnits,
+  escrow_address: z.string().min(1).max(200),
+  action_hash: hexBytes(32),
+  approver_key_hash: hexBytes(28),
+  locked_until_ms: z.number().int().positive(),
+  interrupt_budget: z.strictObject({ used: z.number().int().min(0), per_day: z.number().int().min(0) }),
+});
+
+/** A bond on record: the escrow UTxO an agent locked to escalate one action, and what became of it. */
+export const BondSchema = z.strictObject({
+  schema: z.literal('bond/v0.1'),
+  approval_id: z.string().min(1).max(64),
+  action_hash: hexBytes(32),
+  mandate_id: IdSchema,
+  amount: PositiveUnits,
+  asset: AssetSymbol,
+  escrow_address: z.string().min(1).max(200),
+  tx_hash: hexBytes(32).nullable(),
+  output_index: z.number().int().min(0).nullable(),
+  locked_until_ms: z.number().int().positive(),
+  status: BondStatusSchema,
+  outcome_tx_hash: hexBytes(32).nullable(),
 });
 
 export const FactReasonSchema = z.enum([
@@ -148,6 +185,7 @@ export const ReasonCodeSchema = z.enum([
   'COUNTERPARTY_NOT_APPROVED',
   'ABOVE_AUTONOMOUS_LIMIT',
   'PRINCIPAL_DECLINED',
+  'INTERRUPT_BUDGET_EXHAUSTED',
 ]);
 
 export type Mandate = z.infer<typeof MandateSchema>;
@@ -157,7 +195,10 @@ export type ActionType = z.infer<typeof ActionTypeSchema>;
 export type State = z.infer<typeof StateSchema>;
 export type VerificationReport = z.infer<typeof VerificationReportSchema>;
 export type ReasonCode = z.infer<typeof ReasonCodeSchema>;
-export type Outcome = 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY';
+export type Outcome = 'ALLOW' | 'ESCALATE' | 'DENY';
+export type BondStatus = z.infer<typeof BondStatusSchema>;
+export type EscalationPrice = z.infer<typeof EscalationPriceSchema>;
+export type Bond = z.infer<typeof BondSchema>;
 export interface VerifiedReport {
   report: VerificationReport;
   report_hash: string;

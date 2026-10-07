@@ -40,12 +40,13 @@ function mandate(o: { id: string; delegate: string; sk: Uint8Array; limits: [str
     asset: { symbol: 'USDM', decimals: 6 },
     validity: { starts_at: '2026-10-06T00:00:00Z', expires_at: '2026-11-06T00:00:00Z' },
     delegation: { allowed: false },
+    interrupt_budget: { per_day: 3 },
     constraints: [
       { id: 'purpose', kind: 'purpose_in', values: ['invoice_payment'], on_violation: 'DENY' },
       { id: 'action', kind: 'action_in', values: ['pay_invoice'], on_violation: 'DENY' },
       { id: 'asset', kind: 'asset_eq', value: 'USDM', on_violation: 'DENY' },
-      { id: 'counterparty', kind: 'counterparty_in', values: o.vendors, on_violation: 'REQUIRE_APPROVAL', approver: 'CFO' },
-      { id: 'autonomous', kind: 'amount_lte', value: autonomous, on_violation: 'REQUIRE_APPROVAL', approver: 'CFO' },
+      { id: 'counterparty', kind: 'counterparty_in', values: o.vendors, on_violation: 'ESCALATE', approver: 'CFO' },
+      { id: 'autonomous', kind: 'amount_lte', value: autonomous, on_violation: 'ESCALATE', approver: 'CFO' },
       { id: 'hard_cap', kind: 'amount_lte', value: hard, on_violation: 'DENY' },
       { id: 'daily_cap', kind: 'daily_spend_lte', value: daily, on_violation: 'DENY' },
       { id: 'treasury_floor', kind: 'balance_after_gte', value: floor, on_violation: 'DENY' },
@@ -233,7 +234,7 @@ export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: O
       let approvalId: string | null = null;
       if (outcome === 'DENY') emit('ActionDenied', action.id, { reason, layer });
       if (outcome === 'ALLOW' && body.execute) settle(action);
-      if (outcome === 'REQUIRE_APPROVAL') {
+      if (outcome === 'ESCALATE') {
         approvalId = `AP-${checks.length}`;
         emit('ApprovalRequested', action.id, { approval_id: approvalId });
         if ((o.cfo ?? (() => 'approve'))(approvalId, action) === 'approve') {

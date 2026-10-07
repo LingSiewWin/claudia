@@ -6,7 +6,7 @@ export type CardState =
   | 'EVALUATING'
   | 'VERIFYING'
   | 'AUTHORIZED'
-  | 'REQUIRES_APPROVAL'
+  | 'ESCALATED'
   | 'DENIED'
   | 'EXECUTING'
   | 'SETTLED'
@@ -100,7 +100,7 @@ function cardPatch(e: RunEvent, c: CardView): Partial<CardView> | null {
       return { authorization: e.payload.authorization, compromisedEngine: e.payload.compromised_engine, state: 'AUTHORIZED' };
     case 'ApprovalRequested':
       return {
-        state: 'REQUIRES_APPROVAL',
+        state: 'ESCALATED',
         approval: { id: e.payload.approval_id, status: 'pending', required: e.payload.approvals_required },
       };
     case 'CFOApproved':
@@ -265,7 +265,7 @@ export function statusLine(c: CardView): { text: string; tone: RowTone } {
       return { text: 'Checking the mandate…', tone: 'pending' };
     case 'VERIFYING':
       return { text: 'Checking the invoice…', tone: 'pending' };
-    case 'REQUIRES_APPROVAL':
+    case 'ESCALATED':
       return { text: 'Waiting for CFO approval', tone: 'approval' };
     case 'AUTHORIZED':
     case 'EXECUTING':

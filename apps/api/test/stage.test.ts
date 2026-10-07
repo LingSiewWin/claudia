@@ -17,8 +17,8 @@ describe('stage run through the API', () => {
     const u = (s: string) => BigInt(usdm(s));
     expect(rows.map((r) => [r.n, r.outcome, r.reason, r.balance, r.spent])).toEqual([
       [1, 'ALLOW', null, u('126.58'), u('8.42')],
-      [2, 'REQUIRE_APPROVAL', null, u('108.58'), u('26.42')],
-      [3, 'REQUIRE_APPROVAL', 'PRINCIPAL_DECLINED', u('108.58'), u('26.42')],
+      [2, 'ESCALATE', null, u('108.58'), u('26.42')],
+      [3, 'ESCALATE', 'PRINCIPAL_DECLINED', u('108.58'), u('26.42')],
       [4, 'DENY', 'AMOUNT_ABOVE_HARD_CAP', u('108.58'), u('26.42')],
       [5, 'DENY', 'PURPOSE_NOT_AUTHORIZED', u('108.58'), u('26.42')],
       [6, 'DENY', 'RECIPIENT_MISMATCH', u('108.58'), u('26.42')],

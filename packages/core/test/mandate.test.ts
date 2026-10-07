@@ -15,7 +15,7 @@ describe('parseMandate', () => {
     expect(() => parseMandate(withConstraints(cs))).toThrow(/hard cap must be >= autonomous limit/);
   });
 
-  it('rejects a REQUIRE_APPROVAL constraint whose approver is not listed', () => {
+  it('rejects a ESCALATE constraint whose approver is not listed', () => {
     const cs = M001_INPUT.constraints.map((c) => (c.id === 'autonomous' ? { ...c, approver: 'CEO' } : c));
     expect(() => parseMandate(withConstraints(cs))).toThrow(MandateError);
   });

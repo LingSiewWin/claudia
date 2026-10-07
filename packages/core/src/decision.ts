@@ -1,7 +1,7 @@
 import { concatBytes, hexOfLength, utf8ToBytes } from './bytes';
 import { sha256Hex } from './hash';
 
-export const DECISION_OUTCOMES = ['ALLOW', 'REQUIRE_APPROVAL', 'DENY'] as const;
+export const DECISION_OUTCOMES = ['ALLOW', 'ESCALATE', 'DENY'] as const;
 export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
 const ZERO32 = new Uint8Array(32);

@@ -47,7 +47,7 @@ describe('issueAuthorization (gate)', () => {
     expect(refusal(prepared(action({ id: 'A-1', amount: 8.42 }), { signed: false }))).toBe('UNSIGNED_PROPOSAL');
   });
 
-  it('REQUIRE_APPROVAL needs a matching approval, then sets requires_principal', () => {
+  it('ESCALATE needs a matching approval, then sets requires_principal', () => {
     const a = action({ id: 'A-2', amount: 18 });
     const input = prepared(a);
     expect(refusal(input)).toBe('APPROVAL_MISSING');

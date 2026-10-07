@@ -74,7 +74,9 @@ export function evaluate(input: EvaluateInput): Evaluation {
     { id: 'proposal', kind: 'integrity', result: 'not_evaluated', reason: null, detail: {} },
     { id: 'mandate', kind: 'validity', result: 'not_evaluated', reason: null, detail: {} },
     ...mandate.constraints.map((c): Check => ({ id: c.id, kind: c.kind, result: 'not_evaluated', reason: null, detail: {} })),
+    { id: 'interrupt_budget', kind: 'interrupt_budget', result: 'not_evaluated', reason: null, detail: {} },
   ];
+  const budgetIndex = checks.length - 1;
   const approvals: ApprovalRequirement[] = [];
   let actionHash: string | null = null;
   let signed = false;
@@ -150,5 +152,13 @@ export function evaluate(input: EvaluateInput): Evaluation {
     if (constraint.approver === undefined) throw new Error(`evaluate: constraint ${constraint.id} has no approver`);
     approvals.push({ constraint: constraint.id, approver: constraint.approver, reason });
   }
-  return finish(approvals.length > 0 ? 'REQUIRE_APPROVAL' : 'ALLOW', null);
+  if (approvals.length === 0) return finish('ALLOW', null);
+
+  // 4. Interrupt budget: an escalation consumes one unit of the day's human attention. None left means DENY,
+  // and the human is never paged for it.
+  const used = (state.escalation_day_index ?? 0) < dayIndex ? 0 : (state.escalations_today ?? 0);
+  const perDay = mandate.interrupt_budget.per_day;
+  if (used >= perDay) return deny(budgetIndex, 'INTERRUPT_BUDGET_EXHAUSTED', { used, per_day: perDay });
+  set(budgetIndex, 'pass', null, { used, per_day: perDay, remaining: perDay - used - 1 });
+  return finish('ESCALATE', null);
 }

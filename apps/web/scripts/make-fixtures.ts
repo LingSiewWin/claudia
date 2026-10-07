@@ -142,12 +142,13 @@ function buildMandate(s: Setup, version = s.version): Mandate {
     asset: { symbol: 'USDM', decimals: 6 },
     validity: { starts_at: '2026-10-06T00:00:00Z', expires_at: '2026-11-06T00:00:00Z' },
     delegation: { allowed: false },
+    interrupt_budget: { per_day: 3 },
     constraints: [
       { id: 'purpose', kind: 'purpose_in', values: ['invoice_payment'], on_violation: 'DENY' },
       { id: 'action', kind: 'action_in', values: ['pay_invoice'], on_violation: 'DENY' },
       { id: 'asset', kind: 'asset_eq', value: 'USDM', on_violation: 'DENY' },
-      { id: 'counterparty', kind: 'counterparty_in', values: s.vendors, on_violation: 'REQUIRE_APPROVAL', approver: 'CFO' },
-      { id: 'autonomous', kind: 'amount_lte', value: l.autonomous_limit, on_violation: 'REQUIRE_APPROVAL', approver: 'CFO' },
+      { id: 'counterparty', kind: 'counterparty_in', values: s.vendors, on_violation: 'ESCALATE', approver: 'CFO' },
+      { id: 'autonomous', kind: 'amount_lte', value: l.autonomous_limit, on_violation: 'ESCALATE', approver: 'CFO' },
       { id: 'hard_cap', kind: 'amount_lte', value: l.hard_cap, on_violation: 'DENY' },
       { id: 'daily_cap', kind: 'daily_spend_lte', value: l.daily_cap, on_violation: 'DENY' },
       { id: 'treasury_floor', kind: 'balance_after_gte', value: l.treasury_minimum, on_violation: 'DENY' },
@@ -326,7 +327,7 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
     return null;
   }
   let approved = false;
-  if (evaluation.outcome === 'REQUIRE_APPROVAL') {
+  if (evaluation.outcome === 'ESCALATE') {
     const approval_id = `AP-${action.id}`;
     run.emit('ApprovalRequested', action.id, { approval_id, approvals_required: evaluation.approvals_required });
     out.approvals.push({ approval_id, run_id: run.id, action, evaluation, requested_at: new Date(run.t).toISOString() });

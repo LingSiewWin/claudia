@@ -87,8 +87,8 @@ describe('agent runtime against the API', () => {
     await api.executor.idle();
     expect(result.items.map((i) => [i.proposal?.outcome, i.proposal?.reason, i.proposal?.resolution])).toEqual([
       ['ALLOW', null, 'settled'],
-      ['REQUIRE_APPROVAL', null, 'settled'],
-      ['REQUIRE_APPROVAL', 'PRINCIPAL_DECLINED', 'declined'],
+      ['ESCALATE', null, 'settled'],
+      ['ESCALATE', 'PRINCIPAL_DECLINED', 'declined'],
       ['DENY', 'AMOUNT_ABOVE_HARD_CAP', 'denied'],
       ['DENY', 'PURPOSE_NOT_AUTHORIZED', 'denied'],
       ['DENY', 'RECIPIENT_MISMATCH', 'denied'],

@@ -45,7 +45,7 @@ export interface Approval {
  *
  * The only public signing path. It takes evaluate()'s inputs, never an Evaluation: it runs evaluate() itself
  * at nowMs, so report freshness is measured at signing time, and signs only what that evaluation allows.
- * ALLOW signs with requires_principal = 0. REQUIRE_APPROVAL needs a fresh approval from the mandate's approver
+ * ALLOW signs with requires_principal = 0. ESCALATE needs a fresh approval from the mandate's approver
  * for this exact action_hash and signs with requires_principal = 1. nonce must exceed state.last_nonce and fit
  * in u64. Everything else throws IssuanceRefused.
  */
@@ -80,7 +80,7 @@ export function issueAuthorization(input: IssueInput): AuthorizationRecord {
   const amount = BigInt(action.amount.value);
   const { autonomous, hardCap } = enforcementLimits(mandate);
   let requiresPrincipal = false;
-  if (e.outcome === 'REQUIRE_APPROVAL') {
+  if (e.outcome === 'ESCALATE') {
     const approval = input.approval;
     if (
       approval === null ||

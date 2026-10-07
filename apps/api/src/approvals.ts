@@ -46,7 +46,7 @@ export async function pendingApprovals(eng: Engine) {
 
 /**
  * "Approve once": fresh Cardano state, fresh CRE verification, fresh evaluation. Signs with requires_principal = 1
- * only if the outcome is still REQUIRE_APPROVAL, then builds the release the CFO wallet must co-sign.
+ * only if the outcome is still ESCALATE, then builds the release the CFO wallet must co-sign.
  */
 export async function approve(eng: Engine, approvalId: string): Promise<Reply> {
   const ap = await load(eng, approvalId);
@@ -84,7 +84,7 @@ export async function approve(eng: Engine, approvalId: string): Promise<Reply> {
     await emit('CFOApproved', { approval_id: approvalId, cfo_key_hash: cfo });
     const d = await decide(eng, { row, proposal, state: chain.state, action, emit });
     const e = d.evaluation;
-    if (e.outcome !== 'REQUIRE_APPROVAL' || !e.signed || !action) {
+    if (e.outcome !== 'ESCALATE' || !e.signed || !action) {
       if (e.outcome === 'DENY' && e.reason) await emit('ActionDenied', { reason: e.reason, layer: d.deniedBy });
       settledState = 'closed';
       throw new HttpError(409, `re-evaluation returned ${e.outcome}${e.reason ? ` ${e.reason}` : ''}; the agent must propose again`);
@@ -94,7 +94,7 @@ export async function approve(eng: Engine, approvalId: string): Promise<Reply> {
       [ap.run_id, ap.action_id],
     );
     const approver = e.approvals_required[0]?.approver;
-    if (approver === undefined) throw new Error('REQUIRE_APPROVAL without an approver');
+    if (approver === undefined) throw new Error('ESCALATE without an approver');
     const actionHash = canonicalHash(action);
     const issue = issueOnce(eng, {
       row,

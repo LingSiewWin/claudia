@@ -75,7 +75,7 @@ describe('web contract (what /live, /console, /mandate and /receipt render)', ()
 const Hex32 = z.string().regex(/^[0-9a-f]{64}$/);
 const WorkerResponse = z.object({
   evaluation: z.object({
-    outcome: z.enum(['ALLOW', 'REQUIRE_APPROVAL', 'DENY']),
+    outcome: z.enum(['ALLOW', 'ESCALATE', 'DENY']),
     reason: z.string().nullable(),
     checks: z.array(z.unknown()),
     signed: z.boolean(),
@@ -94,7 +94,7 @@ const WorkerResponse = z.object({
 describe('Masumi worker contract', () => {
   const cases = [
     ['ALLOW', () => signed(action({ id: 'M-1', invoice: inv('INV-L-0001') }))],
-    ['REQUIRE_APPROVAL', () => signed(action({ id: 'M-2', invoice: inv('INV-G-0042'), counterparty: ['globex', 'Globex (demo vendor)'] }))],
+    ['ESCALATE', () => signed(action({ id: 'M-2', invoice: inv('INV-G-0042'), counterparty: ['globex', 'Globex (demo vendor)'] }))],
     ['DENY', () => signed(action({ id: 'M-3', invoice: inv('INV-3823'), recipient: ADDR.attacker }))],
     ['ALLOW', () => ({ action: action({ id: 'M-4', invoice: inv('INV-L-0001') }), agent_signature: null })],
   ] as const;
@@ -109,7 +109,7 @@ describe('Masumi worker contract', () => {
     if (body.authorization) {
       expect(e.signed).toBe(true);
       expect(e.outcome).not.toBe('DENY');
-      if (e.outcome === 'REQUIRE_APPROVAL') expect(body.authorization.fields.requires_principal).toBe(true);
+      if (e.outcome === 'ESCALATE') expect(body.authorization.fields.requires_principal).toBe(true);
     }
     if (!e.signed) expect(res.json.notice).toBe('unsigned: evaluation only');
   });

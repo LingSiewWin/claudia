@@ -16,7 +16,7 @@ const WITNESS = 'a10081825820' + 'cd'.repeat(32) + '5840' + 'ef'.repeat(64);
 const GLOBEX = { id: 'A-3', invoice: inv('INV-G-0042'), counterparty: ['globex', 'Globex (demo vendor)'] as [string, string] };
 const requestApproval = async (spec: Parameters<typeof action>[0] = { id: 'A-2', invoice: inv('INV-3822') }) => {
   const res = await api.check({ mandate_id: 'M-001', proposal: signed(action(spec)), execute: true, run_id: run });
-  expect(res.json.evaluation.outcome).toBe('REQUIRE_APPROVAL');
+  expect(res.json.evaluation.outcome).toBe('ESCALATE');
   return res.json.approval_id as string;
 };
 const declineSig = async (approvalId: string, wallet?: MeshWallet) => {
