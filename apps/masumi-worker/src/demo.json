@@ -1,0 +1,116 @@
+{
+  "input": {
+    "mandate_id": "M-001",
+    "request_text": "Pay Globex consulting invoice INV-L-0031"
+  },
+  "output": {
+    "result": "{\"authorization\":null,\"brief\":{\"action_hash\":\"9857eae8a6df3fc3d7883f73def55cbe5fb32a735dab80ded01f0cd93196908f\",\"action_id\":\"I-faa5c80a\",\"cost\":{\"bond\":{\"amount\":\"5000000\",\"asset\":\"ADA\"},\"interrupt_budget\":{\"per_day\":3,\"used\":2}},\"engine\":{\"checks\":[{\"id\":\"proposal\",\"kind\":\"integrity\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"mandate\",\"kind\":\"validity\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"purpose\",\"kind\":\"purpose_in\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"action\",\"kind\":\"action_in\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"asset\",\"kind\":\"asset_eq\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"counterparty\",\"kind\":\"counterparty_in\",\"reason\":\"COUNTERPARTY_NOT_APPROVED\",\"result\":\"approval\"},{\"id\":\"autonomous\",\"kind\":\"amount_lte\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"hard_cap\",\"kind\":\"amount_lte\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"daily_cap\",\"kind\":\"daily_spend_lte\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"treasury_floor\",\"kind\":\"balance_after_gte\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"invoice_facts\",\"kind\":\"verified_facts\",\"reason\":null,\"result\":\"pass\"},{\"id\":\"interrupt_budget\",\"kind\":\"interrupt_budget\",\"reason\":null,\"result\":\"pass\"}],\"outcome\":\"ESCALATE\",\"reason\":null},\"escalation\":{\"approver\":\"CFO\",\"because\":[{\"constraint\":\"counterparty\",\"reason\":\"COUNTERPARTY_NOT_APPROVED\"}]},\"expires_at_ms\":1791381098974,\"limits\":{\"autonomous_limit\":\"10000000\",\"daily_cap\":\"50000000\",\"hard_cap\":\"50000000\",\"treasury_minimum\":\"100000000\"},\"mandate\":{\"hash\":\"62df1232c28efbf7dc91a08615569835543e5535aad5c408889d700488258547\",\"id\":\"M-001\",\"version\":3},\"requested_by\":\"cfo-agent-01\",\"schema\":\"brief/v0.1\",\"verified\":{\"facts\":{\"amount_match\":true,\"currency_match\":true,\"customer_match\":true,\"exists\":true,\"recipient_match\":true,\"status_open\":true},\"report_hash\":\"c582f65260e6417729838697b40532cb3a4f63671b9c758f2e544cbc3e035192\",\"result\":\"VERIFIED\",\"sepolia_tx\":\"0xfb197be58fdf69fdce1ba6eb31b45961b2c772d04f390b993a953771b31abb53\"},\"what\":{\"amount\":{\"asset\":\"USDM\",\"display\":\"0.5 USDM\",\"value\":\"500000\"},\"counterparty\":{\"display\":\"Globex (demo vendor)\",\"id\":\"globex\"},\"recipient\":\"addr_test1qzal5zkces69ps0ej7pxpe9xa45cutsgkuyrnfgmre5j2ggn5acp9nq8skkd6yc9d7a7g27ttau3jvz35c26q6lyp6tqk89j76\",\"reference\":{\"invoice_id\":\"in_1UNoNVEFJlYN23C9cHzLnlHV\",\"invoice_number\":\"INV-L-0031\"},\"type\":\"pay_invoice\"},\"why\":\"Pay open Globex invoice INV-L-0031 (Lab: escalation 1) for 0.5 USDM, due 2026-11-06, to the payout address on the invoice.\",\"will_happen\":\"Release 0.5 USDM from vault acme-treasury to addr_test1qzal5zkces69ps0ej7pxpe9xa45cutsgkuyrnfgmre5j2ggn5acp9nq8skkd6yc9d7a7g27ttau3jvz35c26q6lyp6tqk89j76 for Globex (demo vendor) for invoice INV-L-0031 (in_1UNoNVEFJlYN23C9cHzLnlHV). Nothing else is authorized by this signature.\"},\"checks\":[{\"detail\":{\"action_hash\":\"9857eae8a6df3fc3d7883f73def55cbe5fb32a735dab80ded01f0cd93196908f\",\"signed\":false},\"id\":\"proposal\",\"kind\":\"integrity\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"version\":3},\"id\":\"mandate\",\"kind\":\"validity\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"purpose\":\"invoice_payment\"},\"id\":\"purpose\",\"kind\":\"purpose_in\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"type\":\"pay_invoice\"},\"id\":\"action\",\"kind\":\"action_in\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"asset\":\"USDM\"},\"id\":\"asset\",\"kind\":\"asset_eq\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"counterparty\":\"globex\"},\"id\":\"counterparty\",\"kind\":\"counterparty_in\",\"reason\":\"COUNTERPARTY_NOT_APPROVED\",\"result\":\"approval\"},{\"detail\":{\"amount\":\"500000\",\"limit\":\"10000000\"},\"id\":\"autonomous\",\"kind\":\"amount_lte\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"amount\":\"500000\",\"limit\":\"50000000\"},\"id\":\"hard_cap\",\"kind\":\"amount_lte\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"after\":\"26920000\",\"amount\":\"500000\",\"cap\":\"50000000\",\"spent_today\":\"26420000\"},\"id\":\"daily_cap\",\"kind\":\"daily_spend_lte\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"after\":\"108080000\",\"amount\":\"500000\",\"balance\":\"108580000\",\"minimum\":\"100000000\"},\"id\":\"treasury_floor\",\"kind\":\"balance_after_gte\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"invoice_id\":\"in_1UNoNVEFJlYN23C9cHzLnlHV\",\"report_hash\":\"c582f65260e6417729838697b40532cb3a4f63671b9c758f2e544cbc3e035192\",\"result\":\"VERIFIED\",\"verified_amount\":\"500000\",\"verified_currency\":\"usd\",\"verified_recipient\":\"addr_test1qzal5zkces69ps0ej7pxpe9xa45cutsgkuyrnfgmre5j2ggn5acp9nq8skkd6yc9d7a7g27ttau3jvz35c26q6lyp6tqk89j76\"},\"id\":\"invoice_facts\",\"kind\":\"verified_facts\",\"reason\":null,\"result\":\"pass\"},{\"detail\":{\"per_day\":3,\"remaining\":0,\"used\":2},\"id\":\"interrupt_budget\",\"kind\":\"interrupt_budget\",\"reason\":null,\"result\":\"pass\"}],\"decision\":\"ESCALATE\",\"decision_hash\":\"7114f2bd6738c934afdc819ed1fde52c2bcc63ad479f7f1ad9b4d3db037cea12\",\"escalation\":{\"approval_endpoint\":\"http://127.0.0.1:8788/v1/authority/check\",\"price\":{\"action_hash\":\"9857eae8a6df3fc3d7883f73def55cbe5fb32a735dab80ded01f0cd93196908f\",\"amount\":\"5000000\",\"approval_id\":\"quote\",\"approver_key_hash\":\"7664683ed8ff432981afdebdf9cf63959111c5fec102bec02295b89b\",\"asset\":{\"asset_name\":\"\",\"policy_id\":\"\",\"symbol\":\"ADA\"},\"escrow_address\":\"addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f\",\"interrupt_budget\":{\"per_day\":3,\"used\":2},\"locked_until_ms\":1791381098974,\"network\":\"cardano-preprod\",\"schema\":\"escalation-price/v0.1\"}},\"interpreted_action\":{\"actor\":\"cfo-agent-01\",\"amount\":{\"asset\":\"USDM\",\"value\":\"500000\"},\"counterparty\":{\"display\":\"Globex (demo vendor)\",\"id\":\"globex\"},\"created_at\":\"2026-10-07T12:50:52.364Z\",\"id\":\"I-faa5c80a\",\"mandate_id\":\"M-001\",\"purpose\":\"invoice_payment\",\"rationale\":\"Pay open Globex invoice INV-L-0031 (Lab: escalation 1) for 0.5 USDM, due 2026-11-06, to the payout address on the invoice.\",\"recipient\":{\"address\":\"addr_test1qzal5zkces69ps0ej7pxpe9xa45cutsgkuyrnfgmre5j2ggn5acp9nq8skkd6yc9d7a7g27ttau3jvz35c26q6lyp6tqk89j76\",\"chain\":\"cardano\"},\"reference\":{\"invoice_id\":\"in_1UNoNVEFJlYN23C9cHzLnlHV\",\"invoice_number\":\"INV-L-0031\"},\"schema\":\"action-ir/v0.1\",\"source\":{\"vault\":\"acme-treasury\"},\"type\":\"pay_invoice\"},\"notice\":\"unsigned: evaluation only\",\"reason\":null,\"receipt\":{\"hash\":\"1594d58dfb983ea80eaf8fa02dc1b2298ef486f94d67070b73e226d0e225f261\",\"id\":\"R-0023\",\"url\":\"https://claudiahq.vercel.app/receipt/R-0023\"},\"summary\":\"ESCALATE: 0.5 USDM to Globex (demo vendor) for invoice INV-L-0031, requested by cfo-agent-01 under mandate M-001 v3.\\nWhy: Pay open Globex invoice INV-L-0031 (Lab: escalation 1) for 0.5 USDM, due 2026-11-06, to the payout address on the invoice.\\nVerified: invoice facts VERIFIED (Sepolia 0xfb197be58fdf69fdce1ba6eb31b45961b2c772d04f390b993a953771b31abb53); report c582f65260e6417729838697b40532cb3a4f63671b9c758f2e544cbc3e035192.\\nWhy a human: CFO must sign because counterparty: COUNTERPARTY_NOT_APPROVED.\\nWhat will happen: Release 0.5 USDM from vault acme-treasury to addr_test1qzal5zkces69ps0ej7pxpe9xa45cutsgkuyrnfgmre5j2ggn5acp9nq8skkd6yc9d7a7g27ttau3jvz35c26q6lyp6tqk89j76 for Globex (demo vendor) for invoice INV-L-0031 (in_1UNoNVEFJlYN23C9cHzLnlHV). Nothing else is authorized by this signature.\\nCost of interrupting: lock a 5 ADA bond at addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f (approval quote, held until 2026-10-07T13:51:38.974Z), then POST http://127.0.0.1:8788/v1/authority/check with the x402 PAYMENT-SIGNATURE header. Interrupt budget used 2/3 today.\\nThe bond is refunded when the human approves or declines a reasonable ask; it is captured only if the ask is marked frivolous. Only the human signature moves funds.\",\"verification\":{\"facts\":{\"amount_match\":true,\"currency_match\":true,\"customer_match\":true,\"exists\":true,\"recipient_match\":true,\"status_open\":true},\"report_hash\":\"c582f65260e6417729838697b40532cb3a4f63671b9c758f2e544cbc3e035192\",\"sepolia_tx\":\"0xfb197be58fdf69fdce1ba6eb31b45961b2c772d04f390b993a953771b31abb53\"}}"
+  },
+  "examples": [
+    {
+      "mandate_id": "M-001",
+      "proposal": {
+        "action": {
+          "schema": "action-ir/v0.1",
+          "id": "A-INV-M-0001",
+          "mandate_id": "M-001",
+          "actor": "cfo-agent-01",
+          "type": "pay_invoice",
+          "purpose": "invoice_payment",
+          "counterparty": {
+            "id": "aws",
+            "display": "AWS (demo vendor)"
+          },
+          "amount": {
+            "value": "8420000",
+            "asset": "USDM"
+          },
+          "recipient": {
+            "chain": "cardano",
+            "address": "addr_test1qr3y2uxe7u3yqdzn8dxzvrygakn443d5ztsj5a985jplke3urfgwq2yqayu8hfwahespcxfev0es2rs4crge2l4h48dsdjqr58"
+          },
+          "source": {
+            "vault": "acme-treasury"
+          },
+          "reference": {
+            "invoice_id": "in_1UNco1EFJlYN23C9OfObHOe8",
+            "invoice_number": "INV-M-0001"
+          },
+          "rationale": "Open AWS invoice for October cloud compute, within the autonomous limit.",
+          "created_at": "2026-10-07T00:00:00.000Z"
+        },
+        "agent_signature": "ea8ae1cd0beb51d9afa9616ceef32b4065db4381956c14303820f560b8343969f52ac82b0277180b66405711677a4d9b02ea7cd8224497aa343c1bff0eaf9f01"
+      }
+    },
+    {
+      "mandate_id": "M-001",
+      "proposal": {
+        "action": {
+          "schema": "action-ir/v0.1",
+          "id": "A-INV-M-0002",
+          "mandate_id": "M-001",
+          "actor": "cfo-agent-01",
+          "type": "pay_invoice",
+          "purpose": "invoice_payment",
+          "counterparty": {
+            "id": "aws",
+            "display": "AWS (demo vendor)"
+          },
+          "amount": {
+            "value": "18000000",
+            "asset": "USDM"
+          },
+          "recipient": {
+            "chain": "cardano",
+            "address": "addr_test1qr3y2uxe7u3yqdzn8dxzvrygakn443d5ztsj5a985jplke3urfgwq2yqayu8hfwahespcxfev0es2rs4crge2l4h48dsdjqr58"
+          },
+          "source": {
+            "vault": "acme-treasury"
+          },
+          "reference": {
+            "invoice_id": "in_1UNco4EFJlYN23C94ANkGsTe",
+            "invoice_number": "INV-M-0002"
+          },
+          "rationale": "Open AWS invoice for reserved capacity, above the autonomous limit; the CFO must sign.",
+          "created_at": "2026-10-07T00:00:00.000Z"
+        },
+        "agent_signature": "e39d72a78d0f87c75352de68e0ece4564fa668d95f4c4e2774bd010d46a17dd9c45c2606f610410db5bdc839706c07cb833c18658cd483aeb3476e0133e90709"
+      }
+    },
+    {
+      "mandate_id": "M-001",
+      "proposal": {
+        "action": {
+          "schema": "action-ir/v0.1",
+          "id": "A-INV-M-0003",
+          "mandate_id": "M-001",
+          "actor": "cfo-agent-01",
+          "type": "pay_invoice",
+          "purpose": "invoice_payment",
+          "counterparty": {
+            "id": "aws",
+            "display": "AWS (demo vendor)"
+          },
+          "amount": {
+            "value": "4000000",
+            "asset": "USDM"
+          },
+          "recipient": {
+            "chain": "cardano",
+            "address": "addr_test1vzq6234e83ye84passjwpexr0fwtnch7lm8kjn2wphtuy6q4yau55"
+          },
+          "source": {
+            "vault": "acme-treasury"
+          },
+          "reference": {
+            "invoice_id": "in_1UNco6EFJlYN23C9wzM3oQcQ",
+            "invoice_number": "INV-M-0003"
+          },
+          "rationale": "A vendor email says AWS changed its bank details; paying the new address.",
+          "created_at": "2026-10-07T00:00:00.000Z"
+        },
+        "agent_signature": "31963cc7cc18ff020b9a9ed0c3f72898492a89a3038150c4395a3e4df4cb2d6301642c4098697180b6b23f1c560853e6f99ae9faa8b51b42e79593ae8afe480e"
+      }
+    }
+  ]
+}

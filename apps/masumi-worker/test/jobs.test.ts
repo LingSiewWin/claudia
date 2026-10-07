@@ -3,10 +3,11 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { canonicalJson } from '@authority/core';
 import { MpsError, mip004InputHash, mip004ResultHashEscaped } from '@authority/masumi';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AuthorityContractError, createAuthorityClient, type AuthorityClient } from '../src/authority';
-import { advanceJob, advanceJobs, createMip003Handler, jobStatus, startJob, type JobDeps, type JobRecord } from '../src/jobs';
+import { DEMO_FILE, RESULT_HASH_SCHEME, advanceJob, advanceJobs, createMip003Handler, jobStatus, startJob, type JobDeps, type JobRecord } from '../src/jobs';
 import { Journal, LEASE_TTL_MS, holdGeneration, tryAcquireLease } from '../src/journal';
 import { ENGINE_PUBLIC_KEY, SIGNED_INPUT, SOURCE, WEB, authorityResponse, fakeMps, startFakeAuthority } from './fakes';
 
@@ -222,11 +223,23 @@ describe('job execution', () => {
     let job = await advanceJob(deps.jobs.read(ID)!, deps);
     expect(job.stage).toBe('awaiting-payment');
     expect(api.calls).toHaveLength(0);
+    expect(jobStatus(jobId, deps)).toEqual({ status: 200, body: { status: 'awaiting_payment', input_hash: mip004InputHash(SIGNED_INPUT, ID) } });
     mps.lock();
     job = await advanceJob(job, deps);
     expect(job.stage).toBe('completed');
     expect(mps.only().resultHash).toBe(mip004ResultHashEscaped(job.resultText!, ID));
-    expect(jobStatus(jobId, deps)).toEqual({ status: 200, body: { status: 'completed', result: job.resultText } });
+    // /status carries the exact hashes the worker computed and submitted, so the buyer can verify the escrow.
+    expect(jobStatus(jobId, deps)).toEqual({
+      status: 200,
+      body: {
+        status: 'completed',
+        input_hash: mip004InputHash(SIGNED_INPUT, ID),
+        result_hash: mps.only().resultHash,
+        result_hash_scheme: 'mip004-escaped-json',
+        result: job.resultText,
+      },
+    });
+    expect(RESULT_HASH_SCHEME).toBe('mip004-escaped-json');
 
     // The buyer retries and the worker restarts: stored terms, no new charge, no new check, no second submit.
     expect((await start(restart())).body).toEqual(r.body);
@@ -421,6 +434,27 @@ describe('GET /demo and the input schema default', () => {
   });
 });
 
+describe('GET /demo (shipped recording)', () => {
+  it('serves the recorded paid run: canonical JSON result that re-hashes under the escaped MIP-004 variant', async () => {
+    const { deps } = await setup();
+    const server = createServer(createMip003Handler(deps, DEMO_FILE));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const res = await fetch(`${base}/demo`);
+    expect(res.status).toBe(200);
+    const demo = (await res.json()) as { input: { mandate_id: string }; output: { result: string }; examples: unknown[] };
+    expect(demo.input.mandate_id).toBe('M-001');
+    expect(demo.examples).toHaveLength(3);
+    const output = JSON.parse(demo.output.result) as { decision: string; receipt: { id: string }; decision_hash: string };
+    expect(output.decision).toBe('ESCALATE');
+    expect(output.receipt.id).toBe('R-0023');
+    expect(output.decision_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(demo.output.result).toBe(canonicalJson(output));
+    expect(mip004ResultHashEscaped(demo.output.result, '6233221bbe7a3c445f00')).toBe('6760f206f286b1583ec8933ce3a0595c4aaea9b498b9392489f0b3bd8632d15f');
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+});
+
 describe('MIP-003 HTTP server', () => {
   it('serves availability, input schema, start_job and status', async () => {
     const { deps } = await setup();
@@ -431,7 +465,7 @@ describe('MIP-003 HTTP server', () => {
     expect(((await (await fetch(`${base}/input_schema`)).json()) as { input_data: unknown[] }).input_data).toHaveLength(3);
     const started = await fetch(`${base}/start_job`, { method: 'POST', body: JSON.stringify({ identifier_from_purchaser: ID, input_data: SIGNED_INPUT }) });
     const { id } = (await started.json()) as { id: string };
-    expect(await (await fetch(`${base}/status?job_id=${id}`)).json()).toEqual({ status: 'awaiting_payment' });
+    expect(await (await fetch(`${base}/status?job_id=${id}`)).json()).toEqual({ status: 'awaiting_payment', input_hash: mip004InputHash(SIGNED_INPUT, ID) });
     expect((await fetch(`${base}/status?job_id=00000000-0000-0000-0000-000000000000`)).status).toBe(404);
     expect((await fetch(`${base}/start_job`, { method: 'POST', body: 'x'.repeat(16_385) })).status).toBe(413);
     expect((await fetch(`${base}/start_job`, { method: 'POST', body: '{oops' })).status).toBe(400);

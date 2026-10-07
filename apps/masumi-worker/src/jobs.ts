@@ -27,6 +27,8 @@ const RETRY_BACKOFF_MS = 0;
 const TERMINAL_PAYMENT = new Set(['FundsOrDatumInvalid', 'RefundRequested']);
 // Recorded by scripts/smoke-api.ts from a real Authority API run.
 export const DEMO_FILE = fileURLToPath(new URL('./demo.json', import.meta.url));
+// Which MIP-004 output variant resultHash holds (mip004ResultHashEscaped): the buyer recomputes it from `result`.
+export const RESULT_HASH_SCHEME = 'mip004-escaped-json';
 
 export type JobStage =
   | 'quote-pending'
@@ -212,7 +214,15 @@ export function jobStatus(jobId: string, deps: Pick<JobDeps, 'jobs'>): Reply {
   for (const key of deps.jobs.keys()) {
     const found = deps.jobs.read(key);
     if (found?.id === jobId) {
-      return { status: 200, body: { status: MIP003_STATUS[found.stage], ...(found.stage === 'completed' ? { result: found.resultText } : {}) } };
+      return {
+        status: 200,
+        body: {
+          status: MIP003_STATUS[found.stage],
+          input_hash: found.inputHash,
+          ...(found.resultHash ? { result_hash: found.resultHash, result_hash_scheme: RESULT_HASH_SCHEME } : {}),
+          ...(found.stage === 'completed' ? { result: found.resultText } : {}),
+        },
+      };
     }
   }
   return { status: 404, body: { error: 'job not found' } };
