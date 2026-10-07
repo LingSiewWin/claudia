@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 const root = new URL('../', import.meta.url);
 const page = readFileSync(new URL('app/page.tsx', root), 'utf8');
+const section = readFileSync(new URL('components/built-with.tsx', root), 'utf8');
 
 describe('built with', () => {
-  it('names the four integrations in the last section and ships both logo files', () => {
-    const start = page.indexOf('aria-label="Built with"');
-    const section = page.slice(start, page.indexOf('</section>', start));
-    expect(section.length).toBeGreaterThan(0);
-    for (const name of ['Cardano', 'Chainlink', 'Masumi and Sokosumi', 'x402']) expect(section).toContain(`name="${name}"`);
+  it('is the last section of the home page, names the integrations in a marquee and four described rows, and ships both logo files', () => {
+    expect(page.lastIndexOf('<BuiltWith />')).toBeGreaterThan(page.lastIndexOf('<AudienceScroll'));
+    for (const name of ['Cardano', 'Chainlink', 'Masumi', 'Sokosumi', 'x402']) expect(section).toContain(`name: '${name}'`);
+    for (const name of ['Cardano', 'Chainlink', 'Masumi and Sokosumi', 'x402']) expect(section).toContain(`name: '${name}'`);
     expect(section).not.toMatch(/Supported by|Powered by/);
     for (const file of ['cardano.svg', 'cardano.png', 'chainlink.svg', 'chainlink.png']) {
       expect(existsSync(new URL(`public/logos/${file}`, root)), file).toBe(true);
