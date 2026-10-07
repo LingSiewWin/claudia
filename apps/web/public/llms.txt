@@ -1,8 +1,8 @@
-# Authority Layer
+# Claudia
 
 > Agents are infinite. Human attention is not. Interrupting a person costs a bond; only that person's signature moves funds.
 
-Authority Layer is an authorization layer between an AI agent and consequential execution. The agent proposes an Action IR; a deterministic engine returns ALLOW, ESCALATE or DENY against a mandate; facts are verified by a Chainlink CRE workflow; a Cardano vault releases only the exact action a human signed. ESCALATE answers HTTP 402: the agent locks a bond in escrow before a person is interrupted. Reasonable asks are refunded; frivolous ones are captured by an unspendable sink. Each mandate has an interrupt budget per day; past it, nobody is paged.
+Claudia is the human authority layer for AI agents: an authorization layer between an AI agent and consequential execution. The agent proposes an Action IR; a deterministic engine returns ALLOW, ESCALATE or DENY against a mandate; facts are verified by a Chainlink CRE workflow; a Cardano vault releases only the exact action a human signed. ESCALATE answers HTTP 402: the agent locks a bond in escrow before a person is interrupted. Reasonable asks are refunded; frivolous ones are captured by an unspendable sink. Each mandate has an interrupt budget per day; past it, nobody is paged.
 
 ## Protocol
 

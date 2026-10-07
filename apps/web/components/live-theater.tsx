@@ -89,7 +89,7 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
           )}
           <span className="flex-1" />
           <Link href="/" className="text-sm font-semibold text-muted">
-            Authority Layer
+            Claudia
           </Link>
         </div>
 

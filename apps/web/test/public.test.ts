@@ -32,7 +32,7 @@ describe('agent-readable files', () => {
   const summary = pub('llms.txt');
 
   it('llms.txt follows the convention: H1, blockquote summary, sections of links', () => {
-    expect(summary.startsWith('# Authority Layer\n\n> ')).toBe(true);
+    expect(summary.startsWith('# Claudia\n\n> ')).toBe(true);
     for (const link of ['/llms-full.txt', '/protocol', '/.well-known/agent.json', 'https://preprod.sokosumi.com/']) expect(summary).toContain(link);
     expect(summary).toContain('POST /v1/authority/check');
   });
@@ -121,7 +121,7 @@ describe('agent card', () => {
     const card = await GET(new Request('https://example.test/.well-known/agent.json')).json();
     expect(card.url).toBe('https://example.test');
     expect(card.endpoints.check.url).toBe('https://example.test/api/fixture/v1/authority/check');
-    expect(card.name).toBe('Authority Layer');
+    expect(card.name).toBe('Claudia');
     expect(card.network).toBe('cardano-preprod');
     expect(card.outcomes).toEqual(['ALLOW', 'ESCALATE', 'DENY']);
     expect(card.endpoints.check).toEqual({ method: 'POST', url: expect.stringMatching(/\/v1\/authority\/check$/) });
@@ -130,5 +130,18 @@ describe('agent card', () => {
     expect(card.pricing.interruption_bond).toMatchObject({ amount: '5000000', asset: 'ADA', display: '5 ADA', scheme: 'cardano-escrow' });
     expect(card.pricing.masumi_fee).toMatchObject({ amount: '1', asset: 'tUSDM', listing: 'Human Authority Endpoint', marketplace: 'https://preprod.sokosumi.com/' });
     expect(card.documentation.protocol).toMatch(/\/llms-full\.txt$/);
+  });
+});
+
+describe('brand', () => {
+  it('is Claudia in the tab title, the agent card, and the agent-readable headings', async () => {
+    // app/layout.tsx imports fonts and CSS, so its metadata is read as text rather than imported.
+    const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
+    expect(layout).toContain("title: { default: 'Claudia', template: '%s · Claudia' }");
+    const { GET } = await import('../app/.well-known/agent.json/route');
+    expect((await GET(new Request('https://example.test/.well-known/agent.json')).json()).name).toBe('Claudia');
+    expect(pub('llms.txt').split('\n')[0]).toBe('# Claudia');
+    expect(pub('llms-full.txt').split('\n')[0]).toBe('# Claudia protocol');
+    for (const name of ['llms.txt', 'llms-full.txt']) expect(pub(name)).not.toContain('Authority Layer');
   });
 });

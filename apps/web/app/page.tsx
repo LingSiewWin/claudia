@@ -28,7 +28,7 @@ export default function Home() {
         </h1>
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,38rem)_1fr] lg:items-end">
           <p className="text-xl leading-snug sm:text-2xl">
-            Interrupting a person costs a bond; only that person&apos;s signature moves funds. Authority Layer sits between an AI agent
+            Interrupting a person costs a bond; only that person&apos;s signature moves funds. Claudia, the human authority layer for AI agents, sits between an agent
             and the treasury: the agent proposes, a deterministic engine checks the mandate, the invoice is verified, and the vault
             releases exactly what a human signed. Nothing else.
           </p>

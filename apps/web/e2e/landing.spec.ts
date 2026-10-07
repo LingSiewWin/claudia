@@ -20,7 +20,7 @@ test('landing states the thesis, replays a real payment, and points agents and h
 
 test('protocol page renders the markdown source with a table of contents', async ({ page }) => {
   await page.goto('/protocol');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Authority Layer protocol');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Claudia protocol');
   await expect(page.getByRole('link', { name: 'Escalation over HTTP 402' })).toHaveAttribute('href', '#escalation-over-http-402');
   await expect(page.locator('#escalation-over-http-402')).toBeVisible();
   await expect(page.locator('.doc pre')).not.toHaveCount(0);
@@ -30,7 +30,7 @@ test('protocol page renders the markdown source with a table of contents', async
 test('agent-readable files are served', async ({ request }) => {
   const llms = await request.get('/llms.txt');
   expect(llms.ok()).toBe(true);
-  expect(await llms.text()).toContain('# Authority Layer');
+  expect(await llms.text()).toContain('# Claudia');
   const md = await request.get('/protocol.md');
   expect(md.headers()['content-type']).toContain('text/markdown');
   expect(await md.text()).toBe(await (await request.get('/llms-full.txt')).text());
