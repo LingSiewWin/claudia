@@ -12,6 +12,8 @@ export interface AgentConfig {
   pollMs: number;
   resolveTimeoutMs: number;
   maxTurns: number;
+  /** The most the agent will lock for one escalation bond, in lovelace. */
+  maxBondLovelace: bigint;
 }
 
 const int = (env: Record<string, string | undefined>, name: string, fallback: number, min: number) => {
@@ -45,5 +47,6 @@ export function loadConfig(env: Record<string, string | undefined>): AgentConfig
     pollMs: int(env, 'AGENT_POLL_MS', 3_000, 250),
     resolveTimeoutMs: int(env, 'AGENT_RESOLVE_TIMEOUT_MS', 900_000, 1_000),
     maxTurns: int(env, 'AGENT_MAX_TURNS', 12, 2),
+    maxBondLovelace: BigInt(int(env, 'AGENT_MAX_BOND_LOVELACE', 10_000_000, 0)),
   };
 }

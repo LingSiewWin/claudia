@@ -2,6 +2,7 @@ import {
   type ActionIR,
   bytesToHex,
   canonicalHash,
+  type EscalationPrice,
   evaluate,
   type Mandate,
   parseMandate,
@@ -9,10 +10,12 @@ import {
   type VerificationReport,
 } from '@authority/core';
 import type { InvoiceFacts } from '@authority/llm';
-import { AuthorityError, type AuthorityClient, type CheckReply, type Decision, type InboxMessage, type RunEvent, type RunWork, type WorkItem } from '../src/authority';
+import { AuthorityError, type AuthorityClient, type CheckReply, type Decision, type InboxMessage, type PaymentPayload, type RunEvent, type RunWork, type WorkItem } from '../src/authority';
+import { dayIndex } from '../src/bond';
 
 // An in-memory Authority API for runtime tests. Decisions come from the real engine (`evaluate`), invoice facts
-// from a fake billing network, settlement is instant; the CFO is the test.
+// from a fake billing network, settlement is instant; the CFO is the test. An ESCALATE answers 402 with a price
+// until the retry carries a bond; bonds consume the day's interrupt budget exactly as the API counts it.
 
 export const NOW = Date.parse('2026-10-07T03:00:00.000Z');
 export const AGENT_SK = new Uint8Array(32).fill(2);
@@ -112,21 +115,59 @@ export const STAGE_WORK: Omit<RunWork, 'run_id'> = {
 };
 export const LAB_WORK: Omit<RunWork, 'run_id'> = { queue: [{ kind: 'invoice', invoice_number: 'INV-L-0006' }], messages: [PHISH('INV-L-0006')] };
 
-export type Cfo = (approvalId: string, action: ActionIR) => 'approve' | 'decline';
+export type Cfo = (approvalId: string, action: ActionIR) => 'approve' | 'decline' | 'decline_frivolous';
 
-export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: Omit<RunWork, 'run_id'>; kind?: 'stage' | 'lab'; attack?: string | null; cfo?: Cfo } = {}) {
+export const ESCROW = 'addr_test1wzescrowescrowescrowescrowescrowescrowescrowescrq9fakes';
+export const SINK = 'addr_test1wzsinksinksinksinksinksinksinksinksinksinksinksinkq9fakes';
+const BOND_LOVELACE = '5000000';
+
+interface Approval {
+  id: string;
+  action_hash: string;
+  price: EscalationPrice;
+  status: 'awaiting_bond' | 'pending' | 'approved' | 'declined';
+  created_ms: number;
+  bond: { tx_hash: string; output_index: number } | null;
+}
+
+export function fakeAuthority(
+  o: { mandate?: Mandate; balance?: string; work?: Omit<RunWork, 'run_id'>; kind?: 'stage' | 'lab'; attack?: string | null; cfo?: Cfo; bondLovelace?: string; bondAsset?: string; now?: () => number } = {},
+) {
   const m = o.mandate ?? M001;
+  const now = o.now ?? (() => NOW);
   const runId = '0f0e0d0c-0b0a-4908-8706-050403020100';
   const state = { balance: BigInt(usdm(o.balance ?? '135')), spent: 0n, nonce: 0n };
   const events: RunEvent[] = [];
   const decisions: Decision[] = [];
   const replies = new Map<string, CheckReply>();
-  const checks: { key: string; execute: boolean; action: ActionIR }[] = [];
+  const checks: { key: string; execute: boolean; action: ActionIR; payment: PaymentPayload | null }[] = [];
+  const approvals: Approval[] = [];
   const paid = new Set<string>();
   const failNext: AuthorityError[] = [];
   let finished = 0;
   let claimed = false;
   const emit = (type: string, actionId: string | null, payload: Record<string, unknown>) => events.push({ seq: events.length + 1, type, action_id: actionId, payload });
+  /** Approvals that reached a human today (bond locked), the way the API derives `escalations_today`. */
+  const escalationsToday = () => approvals.filter((a) => a.status !== 'awaiting_bond' && dayIndex(a.created_ms) === dayIndex(now())).length;
+  const approverPkh = m.approvers[0]!.cardano_key_hash;
+  const priceFor = (approvalId: string, actionHash: string): EscalationPrice => ({
+    schema: 'escalation-price/v0.1',
+    approval_id: approvalId,
+    network: 'cardano-preprod',
+    asset: { policy_id: '', asset_name: '', symbol: o.bondAsset ?? 'ADA' },
+    amount: o.bondLovelace ?? BOND_LOVELACE,
+    escrow_address: ESCROW,
+    action_hash: actionHash,
+    approver_key_hash: approverPkh,
+    locked_until_ms: now() + 3_600_000,
+    interrupt_budget: { used: escalationsToday(), per_day: m.interrupt_budget.per_day },
+  });
+  const paymentRequired = (price: EscalationPrice) => ({
+    x402Version: 2,
+    error: 'escalation requires a bond',
+    resource: { url: 'https://api.example.test/v1/authority/check', description: 'Human authority for this action' },
+    accepts: [{ scheme: 'cardano-escrow', network: price.network, amount: price.amount, asset: price.asset.symbol === 'ADA' ? 'lovelace' : `${price.asset.policy_id}.${price.asset.asset_name}`, payTo: ESCROW, maxTimeoutSeconds: 3600, extra: price }],
+  });
   const settle = (a: ActionIR) => {
     state.balance -= BigInt(a.amount.value);
     state.spent += BigInt(a.amount.value);
@@ -167,7 +208,7 @@ export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: O
       reason: failed ? failed[1] : null,
       trigger_id: `trigger-${a.id}`,
     };
-    return { report, report_hash: canonicalHash(report), block_time_ms: NOW - 1_000 };
+    return { report, report_hash: canonicalHash(report), block_time_ms: now() - 1_000 };
   };
   const evalNow = (proposal: { action: unknown; agent_signature: string | null }) => {
     const input = {
@@ -176,13 +217,15 @@ export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: O
       state: {
         vault_balance: state.balance.toString(),
         spent_today: state.spent.toString(),
-        day_index: Math.floor(NOW / 86_400_000),
+        day_index: dayIndex(now()),
         last_nonce: state.nonce.toString(),
         anchor_version: 1,
         anchor_status: 'active' as const,
         observed_at_slot: 1,
+        escalations_today: escalationsToday(),
+        escalation_day_index: dayIndex(now()),
       },
-      nowMs: NOW,
+      nowMs: now(),
     };
     let e = evaluate({ ...input, verification: null });
     let verified = null;
@@ -212,36 +255,62 @@ export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: O
         mandate: m,
         mandate_hash: canonicalHash(m),
         limits: { symbol: 'USDM', decimals: 6, autonomous_limit: c('autonomous'), hard_cap: c('hard_cap'), daily_cap: c('daily_cap'), treasury_minimum: c('treasury_floor') },
-        vault: { balance: state.balance.toString(), spent_today: state.spent.toString(), day_index: Math.floor(NOW / 86_400_000), last_nonce: state.nonce.toString() },
+        vault: { balance: state.balance.toString(), spent_today: state.spent.toString(), day_index: dayIndex(now()), last_nonce: state.nonce.toString() },
       };
     },
     async decisions() {
       return [...decisions].reverse();
     },
-    async check(body, key) {
+    async check(body, key, payment) {
       const failure = failNext.shift();
       if (failure) throw failure;
       const seen = replies.get(key);
       if (seen) return seen;
       if (body.mandate_id !== m.id || body.run_id !== runId) throw new AuthorityError(409, 'wrong run', null);
       const action = body.proposal.action as ActionIR;
-      checks.push({ key, execute: body.execute, action });
+      checks.push({ key, execute: body.execute, action, payment: payment ?? null });
       const { e, verified } = evalNow(body.proposal);
       const outcome = e.outcome;
       const reason = e.reason;
       const layer = verified && verified.report.result === 'MISMATCH' ? 'cre' : 'engine';
-      emit('AuthorityEvaluated', action.id, { outcome, reason });
       let approvalId: string | null = null;
+      let settlement: CheckReply['settlement'] = null;
+      if (outcome === 'ESCALATE') {
+        const actionHash = canonicalHash(action);
+        let approval = approvals.find((a) => a.action_hash === actionHash && a.status === 'awaiting_bond');
+        if (!approval) {
+          approval = { id: `AP-${approvals.length + 1}`, action_hash: actionHash, price: priceFor(`AP-${approvals.length + 1}`, actionHash), status: 'awaiting_bond', created_ms: now(), bond: null };
+          approvals.push(approval);
+          emit('BondRequired', action.id, { approval_id: approval.id, price: approval.price });
+        }
+        const p = payment?.payload;
+        if (!p || p.approval_id !== approval.id || !/^[0-9a-f]{64}$/.test(p.tx_hash) || payment.x402Version !== 2 || payment.accepted.scheme !== 'cardano-escrow') {
+          throw new AuthorityError(402, 'escalation requires a bond', null, paymentRequired(approval.price));
+        }
+        approval.bond = { tx_hash: p.tx_hash, output_index: p.output_index };
+        approval.status = 'pending';
+        approvalId = approval.id;
+        settlement = { success: true, network: 'cardano-preprod', transaction: p.tx_hash };
+        emit('BondLocked', action.id, { approval_id: approval.id, tx_hash: p.tx_hash, output_index: p.output_index, amount: approval.price.amount, asset: approval.price.asset.symbol });
+      }
+      emit('AuthorityEvaluated', action.id, { outcome, reason });
       if (outcome === 'DENY') emit('ActionDenied', action.id, { reason, layer });
       if (outcome === 'ALLOW' && body.execute) settle(action);
-      if (outcome === 'ESCALATE') {
-        approvalId = `AP-${checks.length}`;
-        emit('ApprovalRequested', action.id, { approval_id: approvalId });
-        if ((o.cfo ?? (() => 'approve'))(approvalId, action) === 'approve') {
+      if (outcome === 'ESCALATE' && approvalId) {
+        const approval = approvals.find((a) => a.id === approvalId)!;
+        emit('ApprovalRequested', action.id, { approval_id: approvalId, approvals_required: 1, bond: approval.bond });
+        const verdict = (o.cfo ?? (() => 'approve'))(approvalId, action);
+        const refundTx = canonicalHash({ refund: approvalId }).slice(0, 64);
+        if (verdict === 'approve') {
+          approval.status = 'approved';
           emit('CFOApproved', action.id, { approval_id: approvalId });
           settle(action);
+          emit('BondRefunded', action.id, { approval_id: approvalId, tx_hash: refundTx, reason: 'approved' });
         } else {
-          emit('CFODeclined', action.id, { approval_id: approvalId });
+          approval.status = 'declined';
+          emit('CFODeclined', action.id, { approval_id: approvalId, reason: verdict === 'decline' ? 'legitimate' : 'frivolous' });
+          if (verdict === 'decline') emit('BondRefunded', action.id, { approval_id: approvalId, tx_hash: refundTx, reason: 'declined_legitimate' });
+          else emit('BondCaptured', action.id, { approval_id: approvalId, tx_hash: refundTx, sink_address: SINK });
         }
       }
       decisions.push({
@@ -263,12 +332,25 @@ export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: O
         approval_id: approvalId,
         receipt_id: `R-${String(decisions.length).padStart(4, '0')}`,
         receipt_hash: 'cc'.repeat(32),
+        settlement,
       };
       replies.set(key, reply);
       return reply;
     },
     async events() {
       return [...events];
+    },
+    async pricing(role, mandateId) {
+      if (mandateId !== m.id || role !== m.approvers[0]!.role) throw new AuthorityError(404, `no approver ${role} on ${mandateId}`, null);
+      const used = escalationsToday();
+      return {
+        approver: role,
+        mandate_id: m.id,
+        price: { amount: o.bondLovelace ?? BOND_LOVELACE, asset: o.bondAsset ?? 'ADA' },
+        interrupt_budget: { used, per_day: m.interrupt_budget.per_day },
+        escalations_today: used,
+        availability: used >= m.interrupt_budget.per_day ? 'budget_exhausted' : 'open',
+      };
     },
   };
   return {
@@ -277,6 +359,7 @@ export function fakeAuthority(o: { mandate?: Mandate; balance?: string; work?: O
     state,
     events,
     checks,
+    approvals,
     finished: () => finished,
     failNext: (e: AuthorityError) => failNext.push(e),
     invoices: { listOpen: async () => INVOICES.filter((i) => !paid.has(i.id)) },

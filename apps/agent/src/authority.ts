@@ -1,4 +1,6 @@
 import type { Mandate } from '@authority/core';
+import { b64json, decodePaymentRequired, decodePaymentResponse, type PaymentPayload, type PaymentRequired, type PaymentResponse } from './x402';
+export type { BondRef, PaymentPayload, PaymentRequired, PaymentRequirements, PaymentResponse } from './x402';
 
 // The agent's view of the Authority API. The agent holds a bearer key for these routes and nothing that can
 // authorize or move funds: authorizations come only from the engine's key, settlements only from the vault.
@@ -8,6 +10,8 @@ export class AuthorityError extends Error {
     readonly status: number,
     message: string,
     readonly retryAfterS: number | null,
+    /** Set on a 402: the x402 PaymentRequired document (PAYMENT-REQUIRED header, else the body). */
+    readonly paymentRequired: PaymentRequired | null = null,
   ) {
     super(message);
     this.name = 'AuthorityError';
@@ -71,6 +75,20 @@ export interface CheckReply {
   receipt_id: string;
   receipt_hash: string;
   notice?: string;
+  /** PAYMENT-RESPONSE on the 200 that followed a paid 402: the bond lock the API saw. */
+  settlement?: PaymentResponse | null;
+}
+
+export type CheckBody = { mandate_id: string; proposal: { action: unknown; agent_signature: string }; execute: boolean; run_id: string };
+
+/** GET /v1/authority/{role}: what interrupting this approver costs right now. Public, read-only. */
+export interface AuthorityPricing {
+  approver: string;
+  mandate_id: string;
+  price: { amount: string; asset: string };
+  interrupt_budget: { used: number; per_day: number };
+  escalations_today: number;
+  availability: 'open' | 'budget_exhausted';
 }
 
 export interface RunEvent {
@@ -86,13 +104,15 @@ export interface AuthorityClient {
   work(runId: string): Promise<RunWork>;
   mandate(mandateId: string): Promise<MandateView>;
   decisions(mandateId: string): Promise<Decision[]>;
-  check(body: { mandate_id: string; proposal: { action: unknown; agent_signature: string }; execute: boolean; run_id: string }, idempotencyKey: string): Promise<CheckReply>;
+  /** `payment` is the PAYMENT-SIGNATURE of the retry after a 402; the idempotency key stays the same. */
+  check(body: CheckBody, idempotencyKey: string, payment?: PaymentPayload): Promise<CheckReply>;
   events(runId: string): Promise<RunEvent[]>;
+  pricing(role: string, mandateId: string): Promise<AuthorityPricing>;
 }
 
 export function httpAuthority(o: { url: string; key: string; timeoutMs?: number; fetch?: typeof fetch }): AuthorityClient {
   const doFetch = o.fetch ?? fetch;
-  const call = async <T>(method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T | null> => {
+  const call = async <T>(method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}, onHeaders?: (h: Headers, json: T) => T): Promise<T | null> => {
     const res = await doFetch(`${o.url}${path}`, {
       method,
       headers: { authorization: `Bearer ${o.key}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
@@ -105,9 +125,10 @@ export function httpAuthority(o: { url: string; key: string; timeoutMs?: number;
     if (!res.ok) {
       const retry = Number(res.headers.get('retry-after'));
       const message = (json as { error?: unknown } | null)?.error;
-      throw new AuthorityError(res.status, `${method} ${path}: ${typeof message === 'string' ? message : `HTTP ${res.status}`}`, Number.isFinite(retry) && retry > 0 ? retry : null);
+      const required = res.status === 402 ? decodePaymentRequired(res.headers.get('payment-required'), json) : null;
+      throw new AuthorityError(res.status, `${method} ${path}: ${typeof message === 'string' ? message : `HTTP ${res.status}`}`, Number.isFinite(retry) && retry > 0 ? retry : null, required);
     }
-    return json as T;
+    return onHeaders ? onHeaders(res.headers, json as T) : (json as T);
   };
   const must = <T>(v: T | null, what: string): T => {
     if (v === null) throw new AuthorityError(502, `${what}: empty response`, null);
@@ -119,8 +140,16 @@ export function httpAuthority(o: { url: string; key: string; timeoutMs?: number;
     work: async (runId) => must(await call<RunWork>('GET', `/v1/agent/runs/${runId}/work`), 'work'),
     mandate: async (id) => must(await call<MandateView>('GET', `/v1/mandates/${encodeURIComponent(id)}`), 'mandate'),
     decisions: async (id) => must(await call<{ decisions: Decision[] }>('GET', `/v1/agent/decisions?mandate_id=${encodeURIComponent(id)}`), 'decisions').decisions,
-    check: async (body, key) => must(await call<CheckReply>('POST', '/v1/authority/check', body, { 'idempotency-key': key }), 'check'),
+    check: async (body, key, payment) =>
+      must(
+        await call<CheckReply>('POST', '/v1/authority/check', body, { 'idempotency-key': key, ...(payment ? { 'payment-signature': b64json(payment) } : {}) }, (h, reply) => ({
+          ...reply,
+          settlement: decodePaymentResponse(h.get('payment-response')),
+        })),
+        'check',
+      ),
     events: async (runId) => must(await call<{ events: RunEvent[] }>('GET', `/v1/runs/${runId}/log`), 'log').events,
+    pricing: async (role, mandateId) => must(await call<AuthorityPricing>('GET', `/v1/authority/${encodeURIComponent(role)}?mandate_id=${encodeURIComponent(mandateId)}`), 'pricing'),
   };
 }
 

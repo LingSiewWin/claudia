@@ -2,6 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { guardModel, modelFromEnv, secretsFromEnv } from '@authority/llm';
 import { listOpenInvoices, readOnlyStripe } from '@authority/stripe';
 import { httpAuthority } from './authority';
+import { cardanoBondPayer, newEscalationState } from './bond';
 import { loadConfig } from './config';
 import { runClaimed } from './runtime';
 
@@ -21,6 +22,9 @@ const deps = {
   pollMs: config.pollMs,
   resolveTimeoutMs: config.resolveTimeoutMs,
   maxTurns: config.maxTurns,
+  payer: cardanoBondPayer(process.env),
+  maxBondLovelace: config.maxBondLovelace,
+  escalation: newEscalationState(),
   log,
 };
 const once = process.argv.includes('--once');

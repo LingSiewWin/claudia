@@ -12,7 +12,8 @@ import {
   toolSchema,
   unitsToDecimal,
 } from '@authority/llm';
-import { AuthorityError, type AuthorityClient, type Claim, type RunWork, withRetry, type WorkItem } from './authority';
+import { AuthorityError, type AuthorityClient, type AuthorityPricing, type Claim, type RunWork, withRetry, type WorkItem } from './authority';
+import { type BondContext, BondRefused, checkWithBond } from './bond';
 
 // The agent's whole tool surface. Four tools only read; propose_action is the only one with an effect, and that
 // effect is a signed request to the Authority Engine. No tool can write to Stripe, the database, or any chain.
@@ -51,6 +52,10 @@ export interface ItemContext {
   pollMs: number;
   resolveTimeoutMs: number;
   log: (line: Record<string, unknown>) => void;
+  /** Pays the escalation bond on a 402 and keeps the interrupt budget state. */
+  bonds: BondContext;
+  /** What an escalation costs, as the planner sees it. */
+  cost: { line: string; pricing: AuthorityPricing | null };
   /** Set once propose_action has been accepted for this item. */
   out: { proposal: ProposalRecord | null };
 }
@@ -104,6 +109,9 @@ export function agentTools(ctx: ItemContext): ToolHandler[] {
           vault_balance: usdm(v.vault.balance, decimals),
           spent_today: usdm(v.vault.spent_today, decimals),
           valid_until: v.mandate.validity.expires_at,
+          escalation_bond: ctx.cost.pricing ? `${unitsToDecimal(ctx.cost.pricing.price.amount, 6)} ${ctx.cost.pricing.price.asset}` : null,
+          interrupt_budget: ctx.cost.pricing ? { ...ctx.cost.pricing.interrupt_budget, availability: ctx.cost.pricing.availability } : null,
+          escalation_cost: ctx.cost.line,
         });
       },
     },
@@ -153,13 +161,15 @@ async function propose(ctx: ItemContext, input: unknown): Promise<string> {
   const proposal = { action, agent_signature: signProposal(actionHash, ctx.agentSecretKey) };
   let reply;
   try {
-    reply = await withRetry(
-      () => ctx.authority.check({ mandate_id: ctx.mandate.id, proposal, execute: ctx.execute, run_id: ctx.claim.run_id }, `agent:${ctx.claim.run_id}:${action.id}`),
-      { attempts: 5, sleep: ctx.sleep },
-    );
+    reply = await checkWithBond(ctx.bonds, { mandate_id: ctx.mandate.id, proposal, execute: ctx.execute, run_id: ctx.claim.run_id }, `agent:${ctx.claim.run_id}:${action.id}`);
   } catch (error) {
     // A refused request (bad body, run not active) is reported to the model; auth and outages end the run.
     if (error instanceof AuthorityError && [400, 404, 409, 422].includes(error.status)) throw new ToolError(error.message);
+    // An escalation the agent will not pay for: no human is paged, the model hears why and may propose within limits.
+    if (error instanceof BondRefused) {
+      ctx.log({ event: 'bond_refused', run_id: ctx.claim.run_id, action_id: action.id, reason: error.reason, message: error.message });
+      throw new ToolError(`${error.reason}: ${error.message}`);
+    }
     throw error;
   }
   const { outcome, reason } = reply.evaluation;

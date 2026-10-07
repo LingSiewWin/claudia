@@ -17,6 +17,9 @@ importers:
 
   apps/agent:
     dependencies:
+      '@authority/cardano':
+        specifier: workspace:*
+        version: link:../../packages/cardano
       '@authority/core':
         specifier: workspace:*
         version: link:../../packages/core

@@ -4,6 +4,7 @@ import { bytesToHex } from '@authority/core';
 import { findSecret, guardModel, secretsFromEnv } from '@authority/llm';
 import { lastResults, say, scriptedModel } from '@authority/llm/testing';
 import { describe, expect, it } from 'vitest';
+import { fakeBondPayer, newEscalationState, newSummary } from '../src/bond';
 import { runClaimed } from '../src/runtime';
 import { agentTools, PROPOSE_TOOL, READ_TOOLS } from '../src/tools';
 import { clerk, tools } from '../src/testing';
@@ -35,6 +36,8 @@ describe('G1: only propose_action has an effect, and Stripe is read-only', () =>
       pollMs: 1,
       resolveTimeoutMs: 0,
       log: () => undefined,
+      bonds: { authority: fake.client, payer: fakeBondPayer(), maxBondLovelace: 10_000_000n, state: newEscalationState(), summary: newSummary(), now: () => NOW, sleep: async () => undefined, log: () => undefined },
+      cost: { line: '', pricing: null },
       out: { proposal: null },
     };
     const registry = agentTools(ctx);
