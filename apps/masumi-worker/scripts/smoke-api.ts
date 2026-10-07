@@ -19,19 +19,30 @@ for (const [name, raw] of cases) {
   const key = `smoke:${run}:${name}`;
   const first = buildOutput(await client.check(request, key), cfg.publicWebUrl);
   const again = buildOutput(await client.check(request, key), cfg.publicWebUrl);
-  const o = first.output as { decision: string; reason: string | null; notice?: string; authorization: { fields: { requires_principal: boolean; nonce: string } } | null; receipt: unknown; decision_hash: string };
+  const o = first.output as {
+    decision: string;
+    reason: string | null;
+    notice?: string;
+    summary: string;
+    escalation: { price: { amount: string; asset: { symbol: string } }; approval_endpoint: string } | null;
+    authorization: { fields: { requires_principal: boolean; nonce: string } } | null;
+    receipt: unknown;
+    decision_hash: string;
+  };
   results[name] = first.resultText;
   console.log(JSON.stringify({
     case: name,
     decision: o.decision,
     reason: o.reason,
     notice: o.notice ?? null,
+    summary: o.summary,
+    price: o.escalation ? { amount: o.escalation.price.amount, asset: o.escalation.price.asset.symbol, endpoint: o.escalation.approval_endpoint } : null,
     authorization: o.authorization ? { requires_principal: o.authorization.fields.requires_principal, nonce: o.authorization.fields.nonce } : null,
     receipt: o.receipt,
     decision_hash: o.decision_hash,
     idempotent: first.resultText === again.resultText,
   }));
 }
-const demo = { input: examples.allow, output: { result: results.allow }, examples: [examples.allow, examples.require_approval, examples.deny] };
+const demo = { input: examples.allow, output: { result: results.allow }, examples: [examples.allow, examples.escalate, examples.deny] };
 writeFileSync(fileURLToPath(new URL('../src/demo.json', import.meta.url)), `${JSON.stringify(demo, null, 2)}\n`);
 console.log('wrote src/demo.json');

@@ -1,4 +1,12 @@
-import { canonicalJson, verifyAuthorizationRecord } from '@authority/core';
+import {
+  ActionTypeSchema,
+  canonicalJson,
+  type DecisionBrief,
+  EscalationPriceSchema,
+  formatUnits,
+  ReasonCodeSchema,
+  verifyAuthorizationRecord,
+} from '@authority/core';
 import { decisionHash } from '@authority/masumi';
 import * as z from 'zod';
 import type { AuthorityRequest } from './input';
@@ -33,6 +41,60 @@ const AuthorizationRecordSchema = z.strictObject({
   }),
 });
 
+const Units = z.string().regex(/^\d{1,20}$/);
+const Outcome = z.enum(['ALLOW', 'ESCALATE', 'DENY']);
+
+// brief/v0.1 exactly as @authority/core builds it (the `satisfies` line fails typecheck if the two drift).
+export const DecisionBriefSchema = z.strictObject({
+  schema: z.literal('brief/v0.1'),
+  action_id: z.string().min(1),
+  action_hash: Hex32,
+  requested_by: z.string().min(1),
+  mandate: z.strictObject({ id: z.string().min(1), version: z.number().int(), hash: Hex32 }),
+  what: z.strictObject({
+    type: ActionTypeSchema,
+    amount: z.strictObject({ value: Units, asset: z.string().min(1), display: z.string().min(1) }),
+    counterparty: z.strictObject({ id: z.string().min(1), display: z.string().min(1) }),
+    recipient: z.string().min(1),
+    reference: z.strictObject({ invoice_id: z.string().min(1), invoice_number: z.string().min(1) }).nullable(),
+  }),
+  why: z.string(),
+  engine: z.strictObject({
+    outcome: Outcome,
+    reason: ReasonCodeSchema.nullable(),
+    checks: z.array(z.strictObject({ id: z.string(), kind: z.string(), result: z.string(), reason: ReasonCodeSchema.nullable() })),
+  }),
+  escalation: z
+    .strictObject({ approver: z.string().min(1), because: z.array(z.strictObject({ constraint: z.string(), reason: ReasonCodeSchema })) })
+    .nullable(),
+  verified: z
+    .strictObject({
+      report_hash: Hex32,
+      sepolia_tx: z.string().nullable(),
+      result: z.enum(['VERIFIED', 'MISMATCH']),
+      facts: z.strictObject({
+        exists: z.boolean(),
+        customer_match: z.boolean(),
+        status_open: z.boolean(),
+        amount_match: z.boolean(),
+        currency_match: z.boolean(),
+        recipient_match: z.boolean(),
+      }),
+    })
+    .nullable(),
+  limits: z.strictObject({ autonomous_limit: Units, hard_cap: Units, daily_cap: Units, treasury_minimum: Units }),
+  will_happen: z.string().min(1),
+  expires_at_ms: z.number().int().positive(),
+  cost: z.strictObject({
+    bond: z.strictObject({ amount: Units, asset: z.string().min(1) }).nullable(),
+    interrupt_budget: z.strictObject({ used: z.number().int().min(0), per_day: z.number().int().min(0) }),
+  }),
+}) satisfies z.ZodType<DecisionBrief>;
+
+// What interrupting the human costs and where the buyer's agent retries once the bond is locked.
+export const EscalationSchema = z.strictObject({ price: EscalationPriceSchema, approval_endpoint: z.url() });
+export type Escalation = z.infer<typeof EscalationSchema>;
+
 // The slice of POST /v1/authority/check (Authority API) this worker depends on.
 export const AuthorityResponseSchema = z.object({
   evaluation: z.object({
@@ -50,6 +112,9 @@ export const AuthorityResponseSchema = z.object({
     .nullable()
     .optional(),
   authorization: AuthorizationRecordSchema.nullable().optional(),
+  // v2: the decision brief (any outcome) and, on ESCALATE, the bond price and endpoint (no 402 for this key).
+  brief: DecisionBriefSchema.nullable().optional(),
+  escalation: EscalationSchema.nullable().optional(),
   receipt_id: z.string().min(1),
   receipt_hash: Hex32,
   events_url: z.string(),
@@ -152,6 +217,18 @@ export function createAuthorityClient(opts: {
 
 function assertSellable(res: AuthorityResponse): void {
   const e = res.evaluation;
+  const brief = res.brief ?? null;
+  if (brief !== null) {
+    if (brief.action_hash !== e.action_hash) throw new AuthorityContractError('brief is for another action');
+    if (brief.mandate.hash !== e.mandate_hash) throw new AuthorityContractError('brief is under another mandate');
+    if (brief.engine.outcome !== e.outcome) throw new AuthorityContractError('brief describes another outcome');
+  }
+  const escalation = res.escalation ?? null;
+  if (e.outcome === 'ESCALATE' && escalation === null) {
+    throw new AuthorityContractError('ESCALATE without the bond price: the buyer cannot be told what interrupting the human costs');
+  }
+  if (e.outcome !== 'ESCALATE' && escalation !== null) throw new AuthorityContractError('bond price returned for a decision that interrupts nobody');
+  if (escalation !== null && escalation.price.action_hash !== e.action_hash) throw new AuthorityContractError('bond price is for another action');
   const authorization = res.authorization ?? null;
   if (authorization === null) {
     if (e.signed && e.outcome === 'ALLOW') {
@@ -176,14 +253,66 @@ export interface AuthorityOutput {
   resultText: string;
 }
 
+// ponytail: only ADA is formatted; other bond assets print base units until the price carries decimals.
+const priceDisplay = (p: Escalation['price']): string =>
+  p.asset.symbol === 'ADA' ? `${formatUnits(p.amount, 6)} ADA` : `${p.amount} ${p.asset.symbol} (base units)`;
+
+// The lines a human reads in the Task thread. Deterministic: built only from the brief and the price.
+export function renderSummary(outcome: AuthorityResponse['evaluation']['outcome'], brief: DecisionBrief | null, escalation: Escalation | null): string {
+  const lines: string[] = [];
+  if (brief === null) {
+    lines.push(
+      outcome === 'ALLOW'
+        ? 'ALLOW: within the mandate. No human is interrupted.'
+        : outcome === 'DENY'
+          ? 'DENY: outside the mandate. No human is interrupted.'
+          : 'ESCALATE: a named human must sign.',
+    );
+  } else {
+    const w = brief.what;
+    const ref = w.reference ? ` for invoice ${w.reference.invoice_number}` : '';
+    lines.push(`${outcome}: ${w.amount.display} to ${w.counterparty.display}${ref}, requested by ${brief.requested_by} under mandate ${brief.mandate.id} v${brief.mandate.version}.`);
+    lines.push(`Why: ${brief.why}`);
+    const v = brief.verified;
+    lines.push(
+      v === null
+        ? 'Verified: no external facts were needed.'
+        : `Verified: invoice facts ${v.result}${v.sepolia_tx ? ` (Sepolia ${v.sepolia_tx})` : ''}; report ${v.report_hash}.`,
+    );
+    if (outcome === 'ESCALATE' && brief.escalation) {
+      const because = brief.escalation.because.map((b) => `${b.constraint}: ${b.reason}`).join('; ');
+      lines.push(`Why a human: ${brief.escalation.approver} must sign because ${because}.`);
+    } else {
+      lines.push(outcome === 'DENY' ? `Why denied: ${brief.engine.reason ?? 'engine'}.` : 'Why no human: every mandate check passed.');
+    }
+    lines.push(`What will happen: ${brief.will_happen}`);
+    const b = brief.cost.interrupt_budget;
+    if (escalation === null) lines.push(`Cost of interrupting: none. Interrupt budget used ${b.used}/${b.per_day} today.`);
+  }
+  if (escalation !== null) {
+    const p = escalation.price;
+    lines.push(
+      `Cost of interrupting: lock a ${priceDisplay(p)} bond at ${p.escrow_address} (approval ${p.approval_id}, held until ${new Date(p.locked_until_ms).toISOString()}),` +
+        ` then POST ${escalation.approval_endpoint} with the x402 PAYMENT-SIGNATURE header. Interrupt budget used ${p.interrupt_budget.used}/${p.interrupt_budget.per_day} today.`,
+    );
+    lines.push('The bond is refunded when the human approves or declines a reasonable ask; it is captured only if the ask is marked frivolous. Only the human signature moves funds.');
+  }
+  return lines.join('\n');
+}
+
 // The sold result. resultText (RFC 8785 JSON) is the exact string that is hashed, submitted and delivered.
 export function buildOutput(res: AuthorityResponse, publicWebUrl: string): AuthorityOutput {
   assertSellable(res);
   const e = res.evaluation;
   const authorization = res.authorization ?? null;
   const v = res.verification ?? null;
+  const brief = res.brief ?? null;
+  const escalation = res.escalation ?? null;
   const output: Record<string, unknown> = {
     decision: e.outcome,
+    summary: renderSummary(e.outcome, brief, escalation),
+    brief,
+    escalation,
     reason: e.reason,
     checks: e.checks,
     interpreted_action: res.interpreted_action ?? null,

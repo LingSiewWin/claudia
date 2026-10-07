@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "admin-key": "node --env-file-if-exists=../../.env --import tsx scripts/admin-key.ts",
     "compose": "docker compose --env-file ../../.env",
     "register": "node --env-file-if-exists=../../.env --import tsx scripts/register.ts",
     "typecheck": "tsc -p tsconfig.json"
@@ -12,5 +13,8 @@
     "@types/node": "26.6.4",
     "tsx": "4.23.15",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@authority/cardano": "workspace:*"
   }
 }

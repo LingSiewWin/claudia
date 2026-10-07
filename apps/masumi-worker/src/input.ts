@@ -47,7 +47,7 @@ function checkShape(value: unknown, depth: number): void {
   }
 }
 
-// MIP-003 input_data (or a JSON Task description) -> Authority Check API request.
+// MIP-003 input_data (or a JSON Task description) -> Authority API check request.
 export function parseAuthorityInput(raw: unknown): AuthorityRequest {
   checkSize(raw);
   checkShape(raw, 0);
@@ -100,7 +100,7 @@ export const INPUT_SCHEMA = {
       id: 'mandate_id',
       type: 'text',
       name: 'Mandate ID',
-      data: { default: DEFAULT_MANDATE_ID, description: 'The mandate the action is checked against.' },
+      data: { default: DEFAULT_MANDATE_ID, description: 'The mandate that names the human whose authority is asked for.' },
       validations: [
         { validation: 'min', value: '1' },
         { validation: 'max', value: '64' },
@@ -112,7 +112,7 @@ export const INPUT_SCHEMA = {
       name: 'Signed proposal (JSON)',
       data: {
         description:
-          'JSON {"action": <Action IR>, "agent_signature": "<hex>"}. Only proposals signed by the mandate delegate can receive an authorization. Ready examples: GET /demo.',
+          'JSON {"action": <Action IR>, "agent_signature": "<hex>"}. The result is the decision (ALLOW, ESCALATE or DENY), the decision brief, and on ESCALATE the exact bond price and endpoint to interrupt the human. Only proposals signed by the mandate delegate can receive an authorization. Ready examples: GET /demo.',
       },
       validations: [
         { validation: 'optional', value: 'true' },

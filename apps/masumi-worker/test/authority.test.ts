@@ -4,11 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AuthorityContractError, AuthorityError, buildOutput, createAuthorityClient } from '../src/authority';
 import {
   ENGINE_PUBLIC_KEY,
+  ESCALATION,
   OTHER_ENGINE_SECRET_KEY,
+  PRICE,
   SIGNED_INPUT,
   WEB,
   authorityResponse,
   authorizationRecord,
+  brief,
   startFakeAuthority,
 } from './fakes';
 
@@ -165,6 +168,9 @@ describe('buildOutput (the sold result)', () => {
     const { output, resultText } = buildOutput(res as never, `${WEB}/`);
     expect(output).toEqual({
       decision: 'ALLOW',
+      summary: output.summary,
+      brief: brief('ALLOW'),
+      escalation: null,
       reason: null,
       checks: res.evaluation.checks,
       interpreted_action: null,
@@ -221,5 +227,75 @@ describe('buildOutput (the sold result)', () => {
   it('check-time ESCALATE with no authorization record stays sellable', () => {
     const res = authorityResponse({ outcome: 'ESCALATE', authorization: null });
     expect(buildOutput(res as never, WEB).output.authorization).toBeNull();
+  });
+});
+
+describe('the sold result reads as a human authority product', () => {
+  const summaryOf = (o: Parameters<typeof authorityResponse>[0]) => buildOutput(authorityResponse(o) as never, WEB).output.summary as string;
+
+  it('ESCALATE: the brief sections, the exact bond price and the endpoint the agent must use', () => {
+    const { output } = buildOutput(authorityResponse({ outcome: 'ESCALATE' }) as never, WEB);
+    expect(output.brief).toEqual(brief('ESCALATE'));
+    expect(output.escalation).toEqual(ESCALATION);
+    const s = output.summary as string;
+    expect(s).toMatch(/^ESCALATE: 8.42 USDM to AWS \(demo vendor\) for invoice INV-M-0001, requested by cfo-agent-01 under mandate M-001 v3\./);
+    expect(s).toContain('Why: Open AWS invoice for October cloud compute.');
+    expect(s).toContain(`Verified: invoice facts VERIFIED (Sepolia 0x${'ab'.repeat(32)}); report ${'ee'.repeat(32)}.`);
+    expect(s).toContain('Why a human: cfo must sign because autonomous_limit: ABOVE_AUTONOMOUS_LIMIT.');
+    expect(s).toContain('What will happen: Release 8.42 USDM from vault acme-treasury');
+    expect(s).toContain(`Cost of interrupting: lock a 5 ADA bond at ${PRICE.escrow_address} (approval AP-7, held until 2027-01-15T08:00:00.000Z)`);
+    expect(s).toContain(`then POST ${ESCALATION.approval_endpoint} with the x402 PAYMENT-SIGNATURE header. Interrupt budget used 1/3 today.`);
+    expect(s).toContain('refunded when the human approves or declines a reasonable ask');
+    expect(s).toContain('Only the human signature moves funds.');
+  });
+
+  it('ALLOW and DENY: brief rendered, nobody interrupted, no price', () => {
+    const allow = summaryOf({ outcome: 'ALLOW' });
+    expect(allow).toContain('Why no human: every mandate check passed.');
+    expect(allow).toContain('Cost of interrupting: none. Interrupt budget used 1/3 today.');
+    const deny = summaryOf({ outcome: 'DENY' });
+    expect(deny).toContain('Why denied: RECIPIENT_MISMATCH.');
+    expect(deny).toContain('Verified: invoice facts MISMATCH');
+    expect(deny).not.toContain('POST ');
+  });
+
+  it('a missing brief is tolerated for ALLOW and DENY', () => {
+    const allow = buildOutput(authorityResponse({ outcome: 'ALLOW', brief: null }) as never, WEB).output;
+    expect(allow.brief).toBeNull();
+    expect(allow.summary).toBe('ALLOW: within the mandate. No human is interrupted.');
+    const deny = buildOutput(authorityResponse({ outcome: 'DENY', brief: null }) as never, WEB).output;
+    expect(deny.summary).toBe('DENY: outside the mandate. No human is interrupted.');
+    const noBriefButPriced = buildOutput(authorityResponse({ outcome: 'ESCALATE', brief: null }) as never, WEB).output.summary as string;
+    expect(noBriefButPriced).toContain('ESCALATE: a named human must sign.');
+    expect(noBriefButPriced).toContain('lock a 5 ADA bond');
+  });
+
+  it.each([
+    ['ESCALATE without the bond price', { outcome: 'ESCALATE' as const, escalation: null }],
+    ['a bond price on an ALLOW', { outcome: 'ALLOW' as const, escalation: ESCALATION }],
+    ['a bond price on a DENY', { outcome: 'DENY' as const, escalation: ESCALATION }],
+    ['a bond price for another action', { outcome: 'ESCALATE' as const, escalation: { ...ESCALATION, price: { ...PRICE, action_hash: '0d'.repeat(32) } } }],
+    ['a brief for another action', { brief: { ...brief('ALLOW'), action_hash: '0d'.repeat(32) } }],
+    ['a brief under another mandate', { brief: { ...brief('ALLOW'), mandate: { ...brief('ALLOW').mandate, hash: '0c'.repeat(32) } } }],
+    ['a brief that describes another outcome', { outcome: 'ALLOW' as const, brief: brief('DENY') }],
+  ])('refuses to sell %s', (_label, o) => {
+    expect(() => buildOutput(authorityResponse(o) as never, WEB)).toThrow(AuthorityContractError);
+  });
+
+  it.each([
+    ['a brief with an unknown field', { brief: { ...brief('ALLOW'), model_note: 'looks fine' } }],
+    ['a price with a bad amount', { outcome: 'ESCALATE' as const, escalation: { ...ESCALATION, price: { ...PRICE, amount: '0' } } }],
+    ['an endpoint that is not a URL', { outcome: 'ESCALATE' as const, escalation: { ...ESCALATION, approval_endpoint: 'approve here' } }],
+  ])('the client rejects %s as off-contract', async (_label, o) => {
+    const api = await startFakeAuthority(() => ({ status: 200, json: authorityResponse(o) }));
+    await expect(clientFor(api.url).check(SIGNED_INPUT, 'c1')).rejects.toBeInstanceOf(AuthorityContractError);
+    await api.close();
+  });
+
+  it('the client sells an ESCALATE that carries the price', async () => {
+    const api = await startFakeAuthority(() => ({ status: 200, json: authorityResponse({ outcome: 'ESCALATE' }) }));
+    const res = await clientFor(api.url).check(SIGNED_INPUT, 'c2');
+    expect(res.escalation).toEqual(ESCALATION);
+    await api.close();
   });
 });

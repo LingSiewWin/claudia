@@ -46,7 +46,7 @@ const example = (number: string, rationale: string, recipient?: string) => {
 
 const examples = {
   allow: example('INV-M-0001', 'Open AWS invoice for October cloud compute, within the autonomous limit.'),
-  require_approval: example('INV-M-0002', 'Open AWS invoice for reserved capacity, above the autonomous limit.'),
+  escalate: example('INV-M-0002', 'Open AWS invoice for reserved capacity, above the autonomous limit; the CFO must sign.'),
   deny: example('INV-M-0003', 'A vendor email says AWS changed its bank details; paying the new address.', ATTACKER),
 };
 writeFileSync(fileURLToPath(new URL('../src/examples.json', import.meta.url)), `${JSON.stringify(examples, null, 2)}\n`);
