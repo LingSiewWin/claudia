@@ -7,6 +7,7 @@ import { startAttack } from './lab';
 import { currentMandate, limitsOf, mandateOfKind, readChain, vaultSummary } from './mandates';
 import type { LabDeps } from './ports';
 import { receiptBundle, settlementReceipts } from './receipts';
+import { claimJob, completeJob } from './relay';
 import { assertNoLiveRun, claimRun, completeRun, createRun, finishRun, listRuns, type RunKind, runLog } from './runs';
 import { streamRun } from './sse';
 
@@ -56,6 +57,7 @@ export function createApp(deps: AppDeps) {
   const { eng } = deps;
   const ok = (body: unknown): Reply => ({ status: 200, body });
   const agentOnly = (req: IncomingMessage) => bearer<'agent'>(req, { agent: deps.keys.agent });
+  const relayOnly = (req: IncomingMessage) => bearer<'relay'>(req, { relay: deps.keys.relay });
 
   const routes: Route[] = [
     { method: 'GET', path: /^\/health$/, handler: async () => ok({ ok: true }) },
@@ -164,6 +166,23 @@ export function createApp(deps: AppDeps) {
     { method: 'POST', path: /^\/v1\/executions$/, handler: async ({ req }) => submitApproved(eng, await readBody(req)) },
     // Attack Lab
     { method: 'POST', path: /^\/v1\/lab\/attacks$/, handler: async ({ req }) => startAttack(eng, deps.lab, await readBody(req)) },
+    // CRE relay
+    {
+      method: 'POST',
+      path: /^\/v1\/cre\/jobs\/claim$/,
+      handler: async ({ req }) => {
+        relayOnly(req);
+        return claimJob(eng.db);
+      },
+    },
+    {
+      method: 'POST',
+      path: /^\/v1\/cre\/jobs\/([0-9a-f-]{36})\/result$/,
+      handler: async ({ req, params }) => {
+        relayOnly(req);
+        return completeJob(eng.db, params[0]!, await readBody(req, 1024 * 1024));
+      },
+    },
   ];
 
   const corsFor = (req: IncomingMessage): Record<string, string> => {
