@@ -66,6 +66,7 @@ const eng: Engine = {
       })
     : null,
   publicApiUrl: cfg.publicApiUrl,
+  bondLovelace: cfg.escalationBondLovelace,
 };
 
 // The public deployment record (committed) seeds the mandates; inserts are idempotent.

@@ -15,13 +15,13 @@ afterEach(() => api.close());
 const WITNESS = 'a10081825820' + 'cd'.repeat(32) + '5840' + 'ef'.repeat(64);
 const GLOBEX = { id: 'A-3', invoice: inv('INV-G-0042'), counterparty: ['globex', 'Globex (demo vendor)'] as [string, string] };
 const requestApproval = async (spec: Parameters<typeof action>[0] = { id: 'A-2', invoice: inv('INV-3822') }) => {
-  const res = await api.check({ mandate_id: 'M-001', proposal: signed(action(spec)), execute: true, run_id: run });
+  const res = await api.checkPaying({ mandate_id: 'M-001', proposal: signed(action(spec)), execute: true, run_id: run });
   expect(res.json.evaluation.outcome).toBe('ESCALATE');
   return res.json.approval_id as string;
 };
-const declineSig = async (approvalId: string, wallet?: MeshWallet) => {
+const declineSig = async (approvalId: string, wallet?: MeshWallet, reason: 'legitimate' | 'frivolous' = 'legitimate') => {
   const w = wallet ?? (await cfoWallet()).wallet;
-  return w.signData(bytesToHex(utf8ToBytes(declineMessage(approvalId))), await w.getChangeAddress());
+  return { ...(await w.signData(bytesToHex(utf8ToBytes(declineMessage(approvalId, reason))), await w.getChangeAddress())), reason };
 };
 
 describe('approve once', () => {
@@ -36,6 +36,7 @@ describe('approve once', () => {
     expect(res.json.unsigned_tx_cbor).toMatch(/^84a4/);
     expect(api.cre.calls).toHaveLength(2); // a fresh verification at approval time
     expect(api.cardano.built.at(-1)!.cfo).toBe((await cfoWallet()).pkh);
+    expect(res.json.bond_tx.unsigned_tx_cbor).toMatch(/^84a4/);
     expect((await api.log(run)).slice(-9).map((e) => e.type)).toEqual([
       'CFOApproved',
       'AuthorityEvaluationStarted',
@@ -58,7 +59,8 @@ describe('approve once', () => {
     const events = await api.log(run);
     expect(events.at(-1)).toMatchObject({ type: 'ReceiptProven' });
     const receipt = (await api.get(`/v1/receipts/${events.at(-1)!.payload.receipt_id}`)).json.receipt;
-    expect(receipt.approval).toEqual({ required: true, cfo_key_hash: (await cfoWallet()).pkh });
+    expect(receipt.approval).toMatchObject({ required: true, cfo_key_hash: (await cfoWallet()).pkh, bond: { status: 'locked' } });
+    expect(receipt.approval.brief_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(api.chains.get(api.b001.vaultHash)!.balance).toBe(BigInt(usdm('117')));
   });
 
@@ -110,14 +112,14 @@ describe('approve once', () => {
 
 describe('decline needs the principal (CIP-8 over declineMessage)', () => {
   it('declineMessage is the RFC 8785 text the web console signs', () => {
-    expect(declineMessage('AP-7')).toBe('{"approval_id":"AP-7","decision":"decline"}');
+    expect(declineMessage('AP-7', 'legitimate')).toBe('{"approval_id":"AP-7","decision":"decline","reason":"legitimate"}');
   });
 
   it('the CFO signature declines: CFODeclined, PRINCIPAL_DECLINED, no longer pending', async () => {
     const id = await requestApproval(GLOBEX);
     const res = await api.post(`/v1/approvals/${id}/decline`, await declineSig(id));
-    expect(res.json).toEqual({ ok: true });
-    expect((await api.log(run)).at(-1)).toMatchObject({ type: 'CFODeclined', action_id: 'A-3', payload: { approval_id: id } });
+    expect(res.json).toMatchObject({ ok: true, reason: 'legitimate', bond_tx: { tx_hash: expect.stringMatching(/^[0-9a-f]{64}$/) } });
+    expect((await api.log(run)).at(-1)).toMatchObject({ type: 'CFODeclined', action_id: 'A-3', payload: { approval_id: id, reason: 'legitimate' } });
     expect((await api.get('/v1/approvals?status=pending')).json.approvals).toEqual([]);
     expect((await api.post(`/v1/approvals/${id}/approve`, {})).status).toBe(409);
   });

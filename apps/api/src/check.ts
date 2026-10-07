@@ -3,9 +3,13 @@ import {
   type ActionIR,
   ActionIRSchema,
   type AuthorizationRecord,
+  type Bond,
+  briefHash,
   canonicalHash,
   canonicalJson,
+  type DecisionBrief,
   type DecisionOutcome,
+  type EscalationPrice,
   decisionHash,
   type Evaluation,
   evaluate,
@@ -19,6 +23,7 @@ import {
 import type { Db, StoredEvent } from '@authority/db';
 import * as z from 'zod';
 import { issueOnce } from './authorize';
+import { BOND_ASSET, bondOf, briefFor, type PaymentProof, paymentResponse, priceFor, reply402, withBudget } from './escalation';
 import { HttpError, parseJson, type Reply } from './http';
 import { idempotent } from './idempotency';
 import type { EventLog } from './log';
@@ -42,6 +47,8 @@ export interface Engine {
   enqueue: (authorizationId: number) => void;
   interpret: Interpret | null;
   publicApiUrl: string;
+  /** Escalation bond in lovelace (ESCALATION_BOND_LOVELACE). */
+  bondLovelace: string;
 }
 
 export interface Proposal {
@@ -188,8 +195,28 @@ async function boundVerification(
       order by e.seq desc limit 1`,
     [mandateId, invoiceId, actionHash, eng.now()],
   );
+  if (!row) return pricedVerification(eng, mandateId, actionHash);
+  const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
+}
+
+/**
+ * The report CRE produced when this action was priced (402). The paid retry is the same action under the same
+ * mandate minutes later: the evaluation still applies evaluate()'s freshness window to it, and a stale report
+ * triggers a new verification as usual. Saves one Sepolia round trip per escalation.
+ */
+async function pricedVerification(eng: Engine, mandateId: string, actionHash: string): Promise<Awaited<ReturnType<typeof boundVerification>>> {
+  const [row] = await eng.db.query<{ payload: string; created_ms: string }>(
+    `select e.payload, (extract(epoch from e.created_at) * 1000)::bigint::text as created_ms
+       from approvals ap
+       join events e on e.run_id = ap.run_id and e.action_id = ap.action_id and e.type = 'CREVerificationCompleted'
+      where ap.mandate_id = $1 and ap.action_hash = $2 and ap.status = 'awaiting_bond'
+      order by e.seq desc limit 1`,
+    [mandateId, actionHash],
+  );
   if (!row) return null;
   const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  if (verification.report.action_hash !== actionHash) return null;
   return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
 }
 
@@ -223,11 +250,11 @@ export function decisionContext(
 }
 
 /** The check pipeline without HTTP or idempotency (used by the Attack Lab for its valid authorizations). */
-export async function checkInProcess(eng: Engine, caller: Caller, body: z.input<typeof CheckBodySchema>): Promise<Reply> {
-  return runCheck(eng, caller, CheckBodySchema.parse(body));
+export async function checkInProcess(eng: Engine, caller: Caller, body: z.input<typeof CheckBodySchema>, payment: PaymentProof | null = null): Promise<Reply> {
+  return runCheck(eng, caller, CheckBodySchema.parse(body), payment);
 }
 
-async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<Reply> {
+async function runCheck(eng: Engine, caller: Caller, body: CheckBody, payment: PaymentProof | null): Promise<Reply> {
   if (caller === 'masumi' && (body.execute || body.run_id !== undefined)) {
     throw new HttpError(403, 'this key may only request evaluations: execute must be false and run_id absent');
   }
@@ -248,6 +275,8 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
   }
 
   const chain = await readChain(eng.cardano, row, eng.now());
+  // The interrupt budget is engine state read from the approvals table: escalations whose bond was locked today.
+  chain.state = await withBudget(eng.db, row.mandate.id, chain.state, eng.now());
   const run: Pick<RunRow, 'run_id' | 'kind' | 'attack'> =
     body.run_id !== undefined
       ? await attachRun(eng.db, body.run_id, row.mandate.id)
@@ -279,12 +308,24 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
   });
   let d = await decide(eng, { row, proposal, state: chain.state, action, emit });
   let e: Decided['evaluation'] = d.evaluation;
+  let brief: DecisionBrief | null = null;
+  let bond: Bond | null = null;
+  let price: EscalationPrice | null = null;
   const contextOf = (ev: Decided['evaluation']) =>
-    decisionContext(row, action, proposal, { ...d, evaluation: ev }, { required: ev.outcome === 'ESCALATE', cfo_key_hash: null }, proposed.hash);
+    decisionContext(
+      row,
+      action,
+      proposal,
+      { ...d, evaluation: ev },
+      { required: ev.outcome === 'ESCALATE', cfo_key_hash: null, brief_hash: brief && briefHash(brief), bond: bond && { status: bond.status, tx_hash: bond.tx_hash, outcome_tx_hash: bond.outcome_tx_hash } },
+      proposed.hash,
+    );
   const denied = async (ev: Decided['evaluation'], layer: Layer | null) => {
     const reason = ev.reason ?? 'INVALID_PROPOSAL';
     await emit('ActionDenied', { reason, layer });
-    if (run.kind === 'lab' && run.attack?.startsWith('prompt_injection')) {
+    // Attack Lab outcomes the engine itself decides: a fooled agent, or the fourth escalation of the day.
+    const labStop = run.attack?.startsWith('prompt_injection') || (run.attack === 'escalation_spam' && reason === 'INTERRUPT_BUDGET_EXHAUSTED');
+    if (run.kind === 'lab' && labStop) {
       await emit('AttackResult', { attack: run.attack, stopped_by: layer, code: reason, funds_moved: '0', tx_hash: null });
     }
   };
@@ -293,18 +334,18 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
   let approvalId: string | null = null;
   if (e.outcome === 'DENY') {
     await denied(e, d.deniedBy);
+  } else if (e.outcome === 'ESCALATE' && action && e.action_hash !== null && !body.execute) {
+    // Evaluate-only callers (Masumi, agent dry runs) learn what interrupting the human costs: the brief and a price
+    // quote. No approval exists and no bond is owed; execute: true on this action prices it for real.
+    const used = chain.state.escalations_today ?? 0;
+    price = priceFor(eng, row, { approvalId: 'quote', actionHash: e.action_hash, approverPkh: chain.anchor.approver_pkh, used });
+    brief = briefFor({ action, evaluation: e, row, verification: d.verification, bond: { amount: price.amount, asset: BOND_ASSET }, expiresAtMs: price.locked_until_ms });
   } else if (e.signed && action) {
     if (e.outcome === 'ESCALATE') {
-      // Approvals exist only for runs that want execution; a pure evaluation never reaches the CFO inbox.
-      if (body.execute) {
-        const [ap] = await eng.db.query<{ id: string }>(
-          `insert into approvals (run_id, mandate_id, action_id, proposal, evaluation, status)
-           values ($1, $2, $3, $4, $5, 'pending') returning id::text as id`,
-          [run.run_id, row.mandate.id, action.id, canonicalJson(proposal), canonicalJson(e)],
-        );
-        approvalId = `AP-${ap!.id}`;
-        await emit('ApprovalRequested', { approval_id: approvalId, approvals_required: e.approvals_required });
-      }
+      const gate = await escalationGate(eng, { row, run, action, evaluation: e, proposal, approverPkh: chain.anchor.approver_pkh, verification: d.verification, payment, emit });
+      if (gate.kind === 'priced') return gate.reply;
+      ({ brief, bond, price } = gate);
+      approvalId = gate.approvalId;
     } else {
       if (d.verified && eng.now() - d.verified.block_time_ms > REPORT_MAX_AGE_MS) {
         d = await decide(eng, { row, proposal, state: chain.state, action, emit });
@@ -377,19 +418,95 @@ async function runCheck(eng: Engine, caller: Caller, body: CheckBody): Promise<R
       },
       authorization: authorization?.record ?? null,
       approval_id: approvalId,
+      ...(brief === null ? {} : { brief }),
+      ...(bond === null ? {} : { bond }),
+      ...(price === null || approvalId !== null ? {} : { price }),
       receipt_id: receipt.id,
       receipt_hash: receipt.hash,
       events_url: `${eng.publicApiUrl}/v1/runs/${run.run_id}/events`,
       decision_hash: responseDecisionHash(e),
       ...(e.signed ? {} : { notice: 'unsigned: evaluation only' }),
     },
+    ...(bond?.tx_hash && price ? { headers: { 'payment-response': paymentResponse(price.network, bond.tx_hash) } } : {}),
   };
 }
 
-export function handleCheck(eng: Engine, caller: Caller, idempotencyKey: string, rawBody: string): Promise<Reply> {
+type Gate = { kind: 'priced'; reply: Reply } | { kind: 'locked'; approvalId: string; price: EscalationPrice; brief: DecisionBrief; bond: Bond };
+
+/**
+ * The 402 gate. An ESCALATE that wants execution first gets an approval row in `awaiting_bond` and its price; the
+ * same action asks again and gets the same price until the bond is on chain. With a PAYMENT-SIGNATURE naming
+ * that approval, the escrow UTxO is read back from Cardano and checked against the price. Only then is the brief
+ * built and the approval made visible to the human (status pending, ApprovalRequested).
+ */
+async function escalationGate(
+  eng: Engine,
+  i: {
+    row: MandateRow;
+    run: Pick<RunRow, 'run_id' | 'kind' | 'attack'>;
+    action: ActionIR;
+    evaluation: Decided['evaluation'];
+    proposal: Proposal;
+    approverPkh: string;
+    verification: Decided['verification'];
+    payment: PaymentProof | null;
+    emit: Emit;
+  },
+): Promise<Gate> {
+  const { row, run, action, evaluation: e, emit } = i;
+  const actionHash = e.action_hash;
+  if (actionHash === null) throw new Error('escalationGate: a signed evaluation always carries its action hash');
+  const dayIndex = Math.floor(eng.now() / 86_400_000);
+  const [existing] = await eng.db.query<{ id: string; price: string }>(
+    `select id::text as id, price from approvals where mandate_id = $1 and action_hash = $2 and status = 'awaiting_bond' order by approvals.id desc limit 1`,
+    [row.mandate.id, actionHash],
+  );
+  let id: string;
+  let price: EscalationPrice;
+  if (existing) {
+    id = existing.id;
+    price = JSON.parse(existing.price) as EscalationPrice;
+  } else {
+    const [ap] = await eng.db.query<{ id: string }>(
+      `insert into approvals (run_id, mandate_id, action_id, action_hash, proposal, evaluation, status, day_index)
+       values ($1, $2, $3, $4, $5, $6, 'awaiting_bond', $7) returning id::text as id`,
+      [run.run_id, row.mandate.id, action.id, actionHash, canonicalJson(i.proposal), canonicalJson(e), dayIndex],
+    );
+    id = ap!.id;
+    price = priceFor(eng, row, { approvalId: `AP-${id}`, actionHash, approverPkh: i.approverPkh, used: e.checks.find((c) => c.id === 'interrupt_budget')?.detail.used as number ?? 0 });
+    await eng.db.query('update approvals set price = $2, locked_until_ms = $3 where id = $1', [id, canonicalJson(price), price.locked_until_ms]);
+    await emit('BondRequired', { approval_id: price.approval_id, price });
+    if (run.kind === 'lab' && run.attack === 'no_bond') {
+      await emit('AttackResult', { attack: run.attack, stopped_by: 'engine', code: 'BOND_REQUIRED', funds_moved: '0', tx_hash: null });
+    }
+  }
+  const proof = i.payment;
+  const utxo = proof && proof.approval_id === price.approval_id ? await eng.cardano.readBond(price) : null;
+  const valid =
+    utxo !== null &&
+    utxo.tx_hash === proof!.tx_hash &&
+    utxo.output_index === proof!.output_index &&
+    utxo.datum.action_hash === actionHash &&
+    utxo.datum.approver_pkh === price.approver_key_hash &&
+    utxo.amount >= BigInt(price.amount);
+  if (!valid) return { kind: 'priced', reply: reply402(eng.publicApiUrl, price, action.id) };
+  const bond = bondOf(price, row.mandate.id, utxo);
+  const brief = briefFor({ action, evaluation: e, row, verification: i.verification, bond: { amount: bond.amount, asset: bond.asset }, expiresAtMs: price.locked_until_ms });
+  const claimed = await eng.db.query(
+    `update approvals set status = 'pending', proposal = $2, evaluation = $3, brief = $4, brief_hash = $5, bond = $6, day_index = $7
+     where id = $1 and status = 'awaiting_bond' returning id`,
+    [id, canonicalJson(i.proposal), canonicalJson(e), canonicalJson(brief), briefHash(brief), canonicalJson(bond), dayIndex],
+  );
+  if (claimed.length === 0) throw new HttpError(429, 'this escalation is being settled, retry', { 'retry-after': '1' });
+  await emit('BondLocked', { approval_id: bond.approval_id, tx_hash: bond.tx_hash, output_index: bond.output_index, amount: bond.amount, asset: bond.asset });
+  await emit('ApprovalRequested', { approval_id: bond.approval_id, approvals_required: e.approvals_required, brief, bond });
+  return { kind: 'locked', approvalId: bond.approval_id, price, brief, bond };
+}
+
+export function handleCheck(eng: Engine, caller: Caller, idempotencyKey: string, rawBody: string, payment: PaymentProof | null): Promise<Reply> {
   return idempotent(eng.db, caller, idempotencyKey, rawBody, async () => {
     const parsed = CheckBodySchema.safeParse(parseJson(rawBody));
     if (!parsed.success) throw new HttpError(400, `invalid request: ${parsed.error.issues.map((i) => i.path.join('.') || i.message).join('; ')}`);
-    return runCheck(eng, caller, parsed.data);
+    return runCheck(eng, caller, parsed.data, payment);
   });
 }

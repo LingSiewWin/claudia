@@ -31,7 +31,7 @@ export async function runStage(api: Api): Promise<{ run: string; rows: StageRow[
   const rows: StageRow[] = [];
   const chain = api.chains.get(api.b001.vaultHash)!;
   for (const c of CASES) {
-    const res = await api.check(
+    const res = await api.checkPaying(
       { mandate_id: 'M-001', proposal: signed(action(c.spec, api.now())), execute: true, run_id: run },
       { idem: `stage:${run}:${c.spec.id}` },
     );
@@ -44,11 +44,13 @@ export async function runStage(api: Api): Promise<{ run: string; rows: StageRow[
         authorization_digest: approved.json.authorization.digest_hex,
         cfo_witness_cbor: WITNESS,
       });
+      await api.post(`/v1/approvals/${res.json.approval_id}/bond-submit`, { tx_hash: approved.json.bond_tx.tx_hash, cfo_witness_cbor: WITNESS });
     }
     if (c.cfo === 'decline') {
       const { wallet, address } = await cfoWallet();
-      const sig = await wallet.signData(bytesToHex(utf8ToBytes(declineMessage(res.json.approval_id))), address);
-      await api.post(`/v1/approvals/${res.json.approval_id}/decline`, sig);
+      const sig = await wallet.signData(bytesToHex(utf8ToBytes(declineMessage(res.json.approval_id, 'legitimate'))), address);
+      const declined = await api.post(`/v1/approvals/${res.json.approval_id}/decline`, { ...sig, reason: 'legitimate' });
+      await api.post(`/v1/approvals/${res.json.approval_id}/bond-submit`, { tx_hash: declined.json.bond_tx.tx_hash, cfo_witness_cbor: WITNESS });
       reason = 'PRINCIPAL_DECLINED';
     }
     await api.executor.idle();
