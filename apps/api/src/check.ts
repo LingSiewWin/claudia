@@ -17,7 +17,7 @@ import {
   IssuanceRefused,
   REPORT_MAX_AGE_MS,
   type State,
-  type VerificationReport,
+  type AnyVerificationReport,
   type VerifiedReport,
 } from '@authority/core';
 import type { Db, StoredEvent } from '@authority/db';
@@ -83,7 +83,7 @@ export type Layer = 'agent' | 'engine' | 'cre' | 'vault' | 'principal';
 
 export interface Decided {
   evaluation: Evaluation & { outcome: DecisionOutcome };
-  verification: { report: VerificationReport; report_hash: string; sepolia_tx: string } | null;
+  verification: { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null } | null;
   /** The report exactly as verifyInvoice returned it from Sepolia, fresh for this decision (never cached). */
   verified: VerifiedReport | null;
   /** For a DENY: the layer that stopped it. */
@@ -198,7 +198,7 @@ async function boundVerification(
     [mandateId, invoiceId, actionHash, eng.now()],
   );
   if (!row) return pricedVerification(eng, mandateId, actionHash);
-  const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  const verification = JSON.parse(row.payload) as { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null };
   return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
 }
 
@@ -217,7 +217,7 @@ async function pricedVerification(eng: Engine, mandateId: string, actionHash: st
     [mandateId, actionHash],
   );
   if (!row) return null;
-  const verification = JSON.parse(row.payload) as { report: VerificationReport; report_hash: string; sepolia_tx: string };
+  const verification = JSON.parse(row.payload) as { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null };
   if (verification.report.action_hash !== actionHash) return null;
   return { verified: { report: verification.report, report_hash: verification.report_hash, block_time_ms: Number(row.created_ms) }, verification };
 }

@@ -1,4 +1,4 @@
-import { type Detail, checkConstraint } from './constraints';
+import { appliesTo, type Detail, checkConstraint, needsVerification } from './constraints';
 import { canonicalHash } from './hash';
 import { mandateHash } from './mandate';
 import { verifyProposal } from './proposal';
@@ -10,7 +10,7 @@ import {
   type ReasonCode,
   type State,
   StateSchema,
-  VerificationReportSchema,
+  AnyVerificationReportSchema,
   type VerifiedReport,
 } from './schemas';
 
@@ -57,7 +57,7 @@ export interface EvaluateInput {
 
 function usableReport(v: VerifiedReport | null, actionHash: string, nowMs: number): VerifiedReport | null {
   if (v === null) return null;
-  if (!VerificationReportSchema.safeParse(v.report).success) return null;
+  if (!AnyVerificationReportSchema.safeParse(v.report).success) return null;
   if (v.report.action_hash !== actionHash) return null;
   if (canonicalHash(v.report) !== v.report_hash) return null;
   if (!(nowMs - v.block_time_ms <= REPORT_MAX_AGE_MS)) return null;
@@ -133,15 +133,15 @@ export function evaluate(input: EvaluateInput): Evaluation {
   for (const [offset, constraint] of mandate.constraints.entries()) {
     const index = offset + 2;
     let verification: VerifiedReport | null = null;
-    if (constraint.kind === 'verified_facts') {
+    if (needsVerification(constraint) && appliesTo(constraint, action)) {
       verification = usableReport(input.verification, actionHash, nowMs);
       if (verification === null) {
-        set(index, 'pending', null, { source: constraint.source });
+        set(index, 'pending', null, { source: constraint.kind === 'verified_facts' ? constraint.source : 'crebit' });
         return finish('NEEDS_VERIFICATION', null);
       }
       verificationHash = verification.report_hash;
     }
-    const out = checkConstraint(constraint, { action, amount, state, dayIndex, verification, mandateAsset: mandate.asset.symbol });
+    const out = checkConstraint(constraint, { action, amount, state, dayIndex, nowMs, verification, mandateAsset: mandate.asset.symbol, mandateFx: mandate.fx });
     if (!out.violated) {
       set(index, 'pass', null, out.detail);
       continue;

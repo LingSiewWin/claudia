@@ -1,5 +1,5 @@
 import { canonicalHash } from './hash';
-import { type Constraint, type Mandate, MandateSchema } from './schemas';
+import { type Constraint, FX_CONSTRAINT_KINDS, type Mandate, MandateSchema } from './schemas';
 
 export class MandateError extends Error {
   constructor(readonly problems: string[]) {
@@ -76,6 +76,17 @@ export function mandateRuleProblems(m: Mandate): string[] {
   if (l.autonomous !== null && l.dailyCap !== null && l.dailyCap < l.autonomous) problems.push('daily cap must be >= autonomous limit');
   if (Date.parse(m.validity.starts_at) >= Date.parse(m.validity.expires_at)) {
     problems.push('validity.starts_at must be before expires_at');
+  }
+  // fx_lock: the fx block and every fx constraint come together, or not at all. Forwards need listing explicitly.
+  const kinds = new Set(m.constraints.map((c) => (c.kind === 'verified_facts' ? `verified_facts:${c.source}` : c.kind)));
+  const fxKinds = [...FX_CONSTRAINT_KINDS, 'verified_facts:crebit'];
+  const allowsFx = m.constraints.some((c) => c.kind === 'action_in' && c.values.includes('fx_lock'));
+  if (m.fx === undefined) {
+    if (allowsFx) problems.push('action_in lists fx_lock but the mandate has no fx block');
+    for (const k of fxKinds) if (kinds.has(k)) problems.push(`${k} needs an fx block`);
+  } else {
+    for (const k of fxKinds) if (!kinds.has(k)) problems.push(`fx block needs a ${k} constraint`);
+    if (!allowsFx) problems.push('fx block needs action_in to list fx_lock');
   }
   return problems;
 }

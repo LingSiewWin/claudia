@@ -10,7 +10,7 @@ export interface DecisionContext {
   action_hash: string | null;
   agent_signature: string | null;
   evaluation: { outcome: string; reason: string | null; checks: Check[] };
-  verification: { report_hash: string; sepolia_tx: string; result: string } | null;
+  verification: { report_hash: string; sepolia_tx: string | null; result: string } | null;
   approval: {
     required: boolean;
     cfo_key_hash: string | null;

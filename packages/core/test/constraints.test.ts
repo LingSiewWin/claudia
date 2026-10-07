@@ -6,7 +6,7 @@ import { ATTACKER_ADDR, AWS_ADDR, M001, NOW, action, state, usdm, verified } fro
 const c = (id: string) => M001.constraints.find((x) => x.id === id) as Constraint;
 const ctx = (amount: number, balance = 135, spent = 0, overrides: Partial<ConstraintContext> = {}): ConstraintContext => {
   const a = action({ id: 'A-1', amount });
-  return { action: a, amount: BigInt(usdm(amount)), state: state(balance, spent), dayIndex: Math.floor(NOW / 86_400_000), verification: null, mandateAsset: 'USDM', ...overrides };
+  return { action: a, amount: BigInt(usdm(amount)), state: state(balance, spent), dayIndex: Math.floor(NOW / 86_400_000), nowMs: NOW, verification: null, mandateAsset: 'USDM', ...overrides };
 };
 
 describe('checkConstraint', () => {

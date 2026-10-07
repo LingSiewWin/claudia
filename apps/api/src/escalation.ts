@@ -10,7 +10,7 @@ import {
   EscalationPriceSchema,
   type Evaluation,
   type State,
-  type VerificationReport,
+  type AnyVerificationReport,
 } from '@authority/core';
 import type { Sql } from '@authority/db';
 import * as z from 'zod';
@@ -151,7 +151,7 @@ export function briefFor(input: {
   action: ActionIR;
   evaluation: Evaluation;
   row: MandateRow;
-  verification: { report: VerificationReport; report_hash: string; sepolia_tx: string } | null;
+  verification: { report: AnyVerificationReport; report_hash: string; sepolia_tx: string | null } | null;
   bond: { amount: string; asset: string };
   expiresAtMs: number;
 }): DecisionBrief {
