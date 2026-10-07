@@ -1,0 +1,39 @@
+{
+  "name": "@authority/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "dev:fixture": "NEXT_PUBLIC_API_BASE_URL=http://localhost:8787 NEXT_PUBLIC_KOIOS_URL=http://localhost:8787/koios NEXT_PUBLIC_SEPOLIA_RPC_URL=http://localhost:8787/sepolia NEXT_PUBLIC_VERIFICATION_REGISTRY_ADDRESS=0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "playwright test",
+    "fixtures": "tsx scripts/make-fixtures.ts",
+    "fixture-api": "tsx fixtures/server.ts",
+    "contract-check": "tsx scripts/contract-check.ts"
+  },
+  "dependencies": {
+    "@authority/core": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

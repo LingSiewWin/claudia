@@ -34,6 +34,13 @@ workflows/*/.cre_build_tmp.js
 .playwright-mcp/
 .vitest/
 
+# Web build and test output
+.next/
+next-env.d.ts
+test-results/
+playwright-report/
+.vercel/
+
 # Foundry build output
 contracts/sepolia/out/
 contracts/sepolia/cache/
