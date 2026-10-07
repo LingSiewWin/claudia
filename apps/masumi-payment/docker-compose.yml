@@ -1,0 +1,34 @@
+# Masumi Payment Service (preprod) and its Postgres. Secrets come from the repo-root .env via --env-file.
+name: authority-masumi-payment
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mps
+      POSTGRES_DB: mps_preprod
+      POSTGRES_PASSWORD: ${MPS_POSTGRES_PASSWORD:?set MPS_POSTGRES_PASSWORD in .env}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: [mps-postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mps", "-d", "mps_preprod"]
+      interval: 5s
+      retries: 30
+  mps:
+    # Release 0.29.0 (git 71455701ac22c3380c50da54089e1b7363f6825d), pinned by digest. The image is linux/amd64 only.
+    image: ghcr.io/masumi-network/masumi-payment-service:0.29.0@sha256:c7408906637858f121667e8e7fd973f2bda26c183eefc67eecacf9c09bf36ed9
+    platform: linux/amd64
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mps:${MPS_POSTGRES_PASSWORD}@postgres:5432/mps_preprod?schema=public
+      ENCRYPTION_KEY: ${MPS_ENCRYPTION_KEY:?set MPS_ENCRYPTION_KEY in .env}
+      ADMIN_KEY: ${MPS_ADMIN_KEY:?set MPS_ADMIN_KEY in .env}
+      BLOCKFROST_API_KEY_PREPROD: ${BLOCKFROST_PROJECT_ID_PREPROD:?set BLOCKFROST_PROJECT_ID_PREPROD in .env}
+      PORT: "3012"
+      SEED_ONLY_IF_EMPTY: "true"
+      AUTO_WITHDRAW_PAYMENTS: "true"
+    ports: ["127.0.0.1:3012:3012"]
+    restart: unless-stopped
+volumes:
+  mps-postgres:
