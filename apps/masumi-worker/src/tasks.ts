@@ -5,6 +5,7 @@ import {
   QuoteError,
   checkQuote,
   confirmedState,
+  confirmedTxHashes,
   masumiPaymentEvent,
   mip004InputHash,
   mip004ResultHashEscaped,
@@ -78,11 +79,16 @@ export interface TaskDeps {
   coworkerId: string;
   paid: boolean;
   webUrl: string;
-  verifyCollection: (txHash: string, sellerAddress: string) => Promise<CollectionProof>;
+  // inputHash and the payment's confirmed tx hashes bind the collection to this purchase.
+  verifyCollection: (
+    txHash: string,
+    sellerAddress: string,
+    binding: { inputHash: string; paymentTxHashes: readonly string[] },
+  ) => Promise<CollectionProof>;
   now: () => number;
   log: Log;
-  // Generation captured after the executor acquired the lease. createPayment, the authority
-  // check, and submit-result are refused if holdGeneration(leaseDir) no longer matches.
+  // Generation captured after the executor acquired the lease. Null is not a hold. createPayment,
+  // the authority check, and submit-result are refused if holdGeneration(leaseDir) no longer matches.
   leaseDir: string;
   generation: string | null;
   wait?: (ms: number) => Promise<void>;
@@ -100,7 +106,7 @@ function need<T>(value: T | null | undefined, what: string): T {
 
 const waitFor = (deps: TaskDeps, ms: number): Promise<void> => (deps.wait ?? ((n) => new Promise((r) => setTimeout(r, n))))(ms);
 
-const lostHold = (deps: TaskDeps): boolean => holdGeneration(deps.leaseDir) !== deps.generation;
+const lostHold = (deps: TaskDeps): boolean => deps.generation === null || holdGeneration(deps.leaseDir) !== deps.generation;
 
 // 408/429 were not processed and may be retried. 5xx, a 2xx without the success envelope, and a
 // timeout or reset after the bytes were sent may have created a payment: never retry those.
@@ -353,10 +359,14 @@ export async function advanceTask(start: TaskRecord, deps: TaskDeps): Promise<Ta
         if (receipt.blockchainIdentifier?.toLowerCase() !== payment.blockchainIdentifier.toLowerCase()) {
           return inspect('Core receipt belongs to another payment');
         }
-        if (!withdrawnBy(await deps.mps.resolvePayment(payment.blockchainIdentifier), receipt.txHash)) return rec;
+        const resolved = await deps.mps.resolvePayment(payment.blockchainIdentifier);
+        if (!withdrawnBy(resolved, receipt.txHash)) return rec;
         let proof: CollectionProof;
         try {
-          proof = await deps.verifyCollection(receipt.txHash, source().sellerAddress);
+          proof = await deps.verifyCollection(receipt.txHash, source().sellerAddress, {
+            inputHash: payment.inputHash,
+            paymentTxHashes: confirmedTxHashes(resolved),
+          });
         } catch (e) {
           if (e instanceof CollectionError) return inspect(e.message);
           throw e;
