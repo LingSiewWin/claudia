@@ -7,9 +7,9 @@ export function GET(request: Request) {
   const site = config.siteUrl ?? new URL(request.url).origin;
   const api = config.publicApiUrl ?? `${site}/api/fixture`;
   return Response.json({
-    name: 'Authority Layer',
+    name: 'Claudia',
     description:
-      'Human authority for AI agents. Send a signed Action IR; receive ALLOW, ESCALATE or DENY with a Decision Brief. ESCALATE answers HTTP 402: lock a bond in Cardano escrow to interrupt the named human. Reasonable asks are refunded; only the human signature moves funds.',
+      'The human authority layer for AI agents. Send a signed Action IR; receive ALLOW, ESCALATE or DENY with a Decision Brief. ESCALATE answers HTTP 402: lock a bond in Cardano escrow to interrupt the named human. Reasonable asks are refunded; only the human signature moves funds.',
     url: site,
     documentation: { summary: `${site}/llms.txt`, protocol: `${site}/llms-full.txt`, human: `${site}/protocol` },
     network: 'cardano-preprod',

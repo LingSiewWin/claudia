@@ -1,12 +1,14 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getMandate, getMetrics, listRuns, startRun } from '../lib/api';
 import { config } from '../lib/config';
-import type { Limits, MandateView, Metrics, RunSummary } from '../lib/contract';
+import type { Limits, MandateView, RunSummary } from '../lib/contract';
 import { clock, money } from '../lib/format';
 import { useEventStream, useLoad, useNow, useReplay } from '../lib/hooks';
 import { type RunView, metricsOf, treasury, units } from '../lib/run';
 import { ActionCard } from './action-card';
+import { FloorStage } from './floor/floor-stage';
 import { AttackLab } from './attack-lab';
 import { BoundaryRail } from './boundary-rail';
 import { type Mode, ModeBanner } from './mode-banner';
@@ -57,11 +59,13 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
     }
   };
 
+  const metrics = mode === 'live' ? apiMetrics.data : metricsOf(view);
+  const source = mode === 'live' ? (apiMetrics.data ? 'api' : 'none') : 'replay';
+
   return (
     <div data-mode={mode} className="min-h-dvh bg-surface text-fg">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-8 lg:grid-cols-[minmax(0,46rem)_1fr]">
-        <section aria-label="Agent actions" className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="mx-auto max-w-7xl px-5 py-8">
+        <div className="flex flex-wrap items-center gap-3">
             <div role="radiogroup" aria-label="Mode" className="inline-flex rounded-full border border-line p-1 text-sm font-bold">
               {(['live', 'replay'] as const).map((m) => (
                 <button
@@ -81,24 +85,37 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
                 {starting ? 'Starting…' : liveRun ? 'Run the agent again' : 'Run the agent'}
               </button>
             ) : (
-              <RunPicker runs={runs.data?.runs ?? []} value={replayRun} onChange={setReplayRun} />
-            )}
-          </div>
+            <RunPicker runs={runs.data?.runs ?? []} value={replayRun} onChange={setReplayRun} />
+          )}
+          <span className="flex-1" />
+          <Link href="/" className="text-sm font-semibold text-muted">
+            Claudia
+          </Link>
+        </div>
 
-          <div className="mt-5">
-            <ModeBanner
-              mode={mode}
-              recordedAt={mode === 'replay' ? replay.recordedAt : null}
-              verdict={mode === 'replay' ? replay.verdict : null}
-              banner={mode === 'replay' ? replay.banner : null}
-            />
-          </div>
-
-          {authority ? <AuthorityHeader a={authority} /> : null}
-          <MetricsStrip
-            metrics={mode === 'live' ? apiMetrics.data : metricsOf(view)}
-            source={mode === 'live' ? (apiMetrics.data ? 'api' : 'none') : 'replay'}
+        <div className="mt-5">
+          <ModeBanner
+            mode={mode}
+            recordedAt={mode === 'replay' ? replay.recordedAt : null}
+            verdict={mode === 'replay' ? replay.verdict : null}
+            banner={mode === 'replay' ? replay.banner : null}
           />
+        </div>
+
+        <div className="mt-5">
+          <FloorStage view={view} metrics={metrics} source={source} now={now} mode={mode} />
+        </div>
+        {mode === 'replay' && !replay.done && view.cards.length > 0 ? (
+          <button type="button" className="btn-quiet mt-3" onClick={replay.skip}>
+            Skip to the end
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mx-auto grid max-w-7xl gap-10 px-5 pb-8 lg:grid-cols-[minmax(0,46rem)_1fr]">
+        <section aria-label="Agent actions" className="min-w-0">
+          <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">Log</h2>
+          {authority ? <AuthorityHeader a={authority} /> : null}
 
           {problem ? (
             <p role="alert" className="mt-4 text-forbid">
@@ -131,11 +148,6 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
               </li>
             ))}
           </ol>
-          {mode === 'replay' && !replay.done && view.cards.length > 0 ? (
-            <button type="button" className="btn-quiet mt-4" onClick={replay.skip}>
-              Skip to the end
-            </button>
-          ) : null}
         </section>
 
         <aside aria-label="Attack Lab" className="min-w-0">
@@ -221,56 +233,6 @@ function AuthorityHeader({ a }: { a: Authority }) {
         </p>
       ) : null}
     </div>
-  );
-}
-
-/** The headline is interruptions per 100 actions: the number the bond and the budget exist to push down. */
-function MetricsStrip({ metrics: m, source }: { metrics: Metrics | null; source: 'api' | 'replay' | 'none' }) {
-  if (!m) return null;
-  const b = m.bonds;
-  return (
-    <dl data-testid="metrics" data-source={source} className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border-y border-line py-3">
-      <div>
-        <dt className="text-sm text-muted">Interruptions / 100 actions</dt>
-        <dd data-testid="metric-interruptions" className="text-2xl font-extrabold tabular-nums">
-          {m.interruptions_per_100_actions}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-sm text-muted">Actions evaluated</dt>
-        <dd data-testid="metric-evaluated" className="text-2xl font-extrabold tabular-nums">
-          {m.actions_evaluated}{' '}
-          <span className="text-sm font-semibold text-muted">
-            <span className="text-permit">{m.allow}</span> allow · <span className="text-cosign">{m.escalate}</span> escalate ·{' '}
-            <span className="text-forbid">{m.deny}</span> deny
-          </span>
-        </dd>
-      </div>
-      <div>
-        <dt className="text-sm text-muted">Bonds</dt>
-        <dd data-testid="metric-bonds" className="text-2xl font-extrabold tabular-nums">
-          {b.locked}{' '}
-          <span className="text-sm font-semibold text-muted">
-            locked · {b.required} required · {b.refunded} refunded · {b.captured} captured
-          </span>
-        </dd>
-      </div>
-      <div>
-        <dt className="text-sm text-muted">Denied, nobody paged</dt>
-        <dd data-testid="metric-budget" className="text-2xl font-extrabold tabular-nums">
-          {m.budget_exhausted}
-        </dd>
-      </div>
-      {m.median_decision_ms !== null ? (
-        <div>
-          <dt className="text-sm text-muted">Median human decision</dt>
-          <dd className="text-2xl font-extrabold tabular-nums">{Math.round(m.median_decision_ms / 1000)}s</dd>
-        </div>
-      ) : null}
-      <p className="basis-full text-[12px] text-muted">
-        {source === 'api' ? `Across every run of Mandate ${config.stageMandateId}, from the evidence log.` : 'This recorded run, counted from its events in your browser.'}
-      </p>
-    </dl>
   );
 }
 

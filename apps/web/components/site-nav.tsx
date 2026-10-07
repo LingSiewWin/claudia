@@ -5,7 +5,7 @@ export function SiteHeader({ current }: { current?: 'protocol' }) {
   return (
     <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-line pb-4 text-[15px]">
       <Link href="/" className="font-extrabold tracking-tight">
-        Authority Layer
+        Claudia
       </Link>
       <nav aria-label="Site" className="flex flex-wrap gap-x-5 gap-y-1 font-semibold">
         <Link href="/live?mode=replay">Replay</Link>
@@ -23,7 +23,7 @@ export function SiteHeader({ current }: { current?: 'protocol' }) {
 export function SiteFooter() {
   return (
     <footer className="mt-24 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-line pt-4 text-sm text-muted">
-      <p>Authority Layer. Cardano preprod, Sepolia. No funds are held by the service.</p>
+      <p>Claudia, the human authority layer for AI agents. Cardano preprod, Sepolia. No funds are held by the service.</p>
       <p className="flex flex-wrap gap-x-4 font-mono text-[13px]">
         <a href="/llms.txt">/llms.txt</a>
         <a href="/llms-full.txt">/llms-full.txt</a>
