@@ -2,7 +2,9 @@ import { expect, test } from '@playwright/test';
 
 test('landing states the thesis, replays a real payment, and points agents and humans onward', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Agents are infinite. Human attention is not.');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Give your agents an allowance, not your keys.');
+  await expect(page.getByRole('region', { name: 'Thesis' })).toContainText('only your signature moves the money');
+  for (const p of ['Allowance', 'Ask', 'Sign']) await expect(page.getByRole('region', { name: 'Thesis' })).toContainText(p);
   await expect(page.getByRole('link', { name: 'Watch it act' }).first()).toHaveAttribute('href', '/live?mode=replay');
   await expect(page.getByRole('link', { name: 'Read the protocol' }).first()).toHaveAttribute('href', '/protocol');
   await expect(page.getByRole('link', { name: 'Try it on Sokosumi' })).toHaveAttribute('href', 'https://preprod.sokosumi.com/');

@@ -24,14 +24,19 @@ export default function Home() {
 
       <section aria-label="Thesis" className="mt-14">
         <h1 className="font-serif text-[3.1rem] leading-[0.98] tracking-[-0.02em] sm:text-7xl lg:text-[5.6rem]">
-          Agents are infinite. <em className="text-muted">Human attention is not.</em>
+          Give your agents an allowance, <em className="text-muted">not your keys.</em>
         </h1>
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,38rem)_1fr] lg:items-end">
-          <p className="text-xl leading-snug sm:text-2xl">
-            Interrupting a person costs a bond; only that person&apos;s signature moves funds. Claudia, the human authority layer for AI agents, sits between an agent
-            and the treasury: the agent proposes, a deterministic engine checks the mandate, the invoice is verified, and the vault
-            releases exactly what a human signed. Nothing else.
-          </p>
+        <p className="mt-8 max-w-4xl text-xl leading-snug sm:text-2xl">
+          Every agent gets its own ID and wallet. A mandate sets the daily cap and spending limit. Above the limit it pays a bond to ask
+          you, and only your signature moves the money.
+        </p>
+        <dl aria-label="Allowance, ask, sign" className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border-y border-line py-3 text-[15px]">
+          <Pillar name="Allowance">daily cap, per-action limit, approved counterparties</Pillar>
+          <Pillar name="Ask">HTTP 402 plus a bond, refunded when the ask is reasonable, captured when it is not</Pillar>
+          <Pillar name="Sign">the human&apos;s wallet signature is the only thing the vault accepts</Pillar>
+        </dl>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,38rem)_1fr] lg:items-end">
+          <p className="text-[15px] text-muted">Claudia, the human authority layer for AI agents. Below, a recorded run on the authority floor.</p>
           <div className="flex flex-wrap gap-3 lg:justify-end">
             <Link href="/live?mode=replay" className="btn-strong text-lg">
               Watch it act
@@ -47,7 +52,7 @@ export default function Home() {
             </a>
           </div>
         </div>
-        <div className="mt-10">
+        <div className="mt-8">
           <HeroFloor />
         </div>
         <p className="mt-3 font-mono text-[12px] text-muted">
@@ -216,6 +221,15 @@ export default function Home() {
 
       <SiteFooter />
     </main>
+  );
+}
+
+function Pillar({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="font-mono text-[12px] font-bold uppercase tracking-[0.12em]">{name}</dt>
+      <dd className="text-muted">{children}</dd>
+    </div>
   );
 }
 
