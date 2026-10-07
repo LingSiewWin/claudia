@@ -81,6 +81,10 @@ body {
   background: var(--fg);
   color: var(--surface);
 }
+/* Destructive confirm only. Unlayered so it wins over .btn-strong; utilities would not. */
+.btn-danger {
+  background: var(--forbid);
+}
 .btn-quiet {
   color: var(--muted);
   text-decoration: underline;
