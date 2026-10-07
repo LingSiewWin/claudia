@@ -126,7 +126,7 @@ export function LiveTheater({ initialMode, initialRun }: { initialMode: Mode; in
             ))}
           </div>
           {mode === 'live' ? (
-            <button type="button" className="btn btn-primary" onClick={run} disabled={starting}>
+            <button type="button" className="btn-strong" onClick={run} disabled={starting}>
               {starting ? 'Starting…' : liveRun ? 'Run the agent again' : 'Run the agent'}
             </button>
           ) : (

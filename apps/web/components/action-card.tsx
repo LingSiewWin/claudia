@@ -104,11 +104,11 @@ export function ActionCard({
           WHY?
         </button>
         {card.receipt ? (
-          <Link href={`/receipt/${encodeURIComponent(card.receipt.id)}`} className="btn btn-primary">
+          <Link href={`/receipt/${encodeURIComponent(card.receipt.id)}`} className="btn-strong">
             PROVE
           </Link>
         ) : (
-          <button type="button" className="btn btn-primary" disabled title={denied ? 'Nothing to prove: no money moved' : 'PROVE after settlement'}>
+          <button type="button" className="btn-strong" disabled title={denied ? 'Nothing to prove: no money moved' : 'PROVE after settlement'}>
             PROVE
           </button>
         )}
