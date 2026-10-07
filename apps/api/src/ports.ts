@@ -70,6 +70,8 @@ export interface CardanoPort {
   readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash' | 'network'>): Promise<BondUtxo | null>;
   /** Unsigned Refund or Capture of a bond; the approver key hash is a required signer. */
   buildBondSpend(bond: BondUtxo, outcome: BondOutcome): Promise<UnsignedTx>;
+  /** Submits a fully signed tx (hex CBOR) as is. The hash is computed locally, so a node rejection still names the tx. */
+  submitSigned(txCbor: string): Promise<{ tx_hash: string; accepted: boolean; detail: string }>;
 }
 
 /** CRE verification (verifyInvoice behind it). The trigger id is chosen by the API, never by a caller. */

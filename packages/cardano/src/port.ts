@@ -71,6 +71,7 @@ export interface CardanoPort {
   bondAddresses(): { escrow: string; sink: string };
   readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash' | 'network'>): Promise<BondUtxo | null>;
   buildBondSpend(bond: BondUtxo, outcome: BondOutcome): Promise<UnsignedTx>;
+  submitSigned(txCbor: string): Promise<{ tx_hash: string; accepted: boolean; detail: string }>;
 }
 
 export type VaultAttack = 'recipient_swap' | 'amount_swap' | 'replay' | 'expired' | 'revoked' | 'daily_cap' | 'cfo_bypass';
@@ -332,6 +333,10 @@ export function createCardanoPort(env: Env): CardanoPort {
     async buildBondSpend(bond, outcome) {
       const chain = await chainOf();
       return buildBondSpendTx(chain, await feeOf(), bond, outcome);
+    },
+    async submitSigned(txCbor) {
+      const r = await submitRaw(await chainOf(), txCbor);
+      return { tx_hash: resolveTxHash(txCbor), accepted: r.ok, detail: r.body };
     },
   };
 }

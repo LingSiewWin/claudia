@@ -26,6 +26,8 @@ export interface Config {
   deploymentFile: string | undefined;
   /** Escalation bond in lovelace (ESCALATION_BOND_LOVELACE, default 5 ADA). */
   escalationBondLovelace: string;
+  /** x402 facilitator base URL for exact-scheme bond locks (X402_FACILITATOR_URL); undefined = submit locally. */
+  x402FacilitatorUrl: string | undefined;
 }
 
 const ROOT = resolve(import.meta.dirname, '../../..');
@@ -52,6 +54,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
   if (!/^[1-9]\d{0,18}$/.test(bond)) throw new Error('ESCALATION_BOND_LOVELACE must be a positive integer (lovelace)');
   return {
     escalationBondLovelace: bond,
+    x402FacilitatorUrl: optional('X402_FACILITATOR_URL')?.replace(/\/+$/, ''),
     port: Number(optional('PORT') ?? 8788),
     databaseUrl: need('DATABASE_URL'),
     publicApiUrl: (optional('PUBLIC_API_URL') ?? '').replace(/\/+$/, ''),
