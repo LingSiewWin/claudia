@@ -79,7 +79,8 @@ export function Scene({ floor, selected, onSelect }: { floor: Floor; selected: s
     const k = piles.get(key) ?? 0;
     piles.set(key, k + 1);
     const [x, y] = dock(c);
-    return { c, x, y, z: k * 0.82 };
+    // Piles are three high; the fourth crate starts a new column beside the pile.
+    return { c, x: x - Math.floor(k / 3) * 1.15, y, z: (k % 3) * 0.82 };
   });
   const [ax, ay] = AT.agent;
   const [gx, gy] = AT.gate;
