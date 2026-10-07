@@ -10,6 +10,8 @@ export const config = {
 };
 
 export const cardanoTxUrl = (hash: string) => `https://preprod.cexplorer.io/tx/${hash}`;
+/** Bond escrow transactions link to Cardanoscan, which decodes the escrow datum and redeemer. */
+export const cardanoscanTxUrl = (hash: string) => `https://preprod.cardanoscan.io/transaction/${hash}`;
 export const sepoliaTxUrl = (hash: string) => `https://sepolia.etherscan.io/tx/${hash.startsWith('0x') ? hash : `0x${hash}`}`;
 
 /** Where browser Verify reads chain data from, shown next to every result. NEXT_PUBLIC_KOIOS_URL switches Koios to direct. */

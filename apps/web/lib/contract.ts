@@ -23,6 +23,8 @@ export const ATTACK_IDS = [
   'revoked',
   'daily_cap',
   'cfo_bypass',
+  'escalation_spam',
+  'no_bond',
 ] as const;
 export type AttackId = (typeof ATTACK_IDS)[number];
 
@@ -88,6 +90,30 @@ export interface BondRef {
   tx_hash: string | null;
   output_index: number | null;
   status: 'required' | 'locked' | 'refunded' | 'captured' | 'expired';
+  /** The refund or capture transaction, once the bond was resolved. */
+  outcome_tx_hash?: string | null;
+}
+
+/** GET /v1/authority/{role}?mandate_id= (public): what interrupting this human costs right now. */
+export interface AuthorityInfo {
+  approver: string;
+  mandate_id: string;
+  price: { amount: string; asset: string };
+  interrupt_budget: { used: number; per_day: number };
+  escalations_today: number;
+  availability: 'open' | 'budget_exhausted';
+}
+
+/** GET /v1/metrics?mandate_id=, computed from events. REPLAY computes the same numbers client side (lib/run.ts metricsOf). */
+export interface Metrics {
+  actions_evaluated: number;
+  allow: number;
+  deny: number;
+  escalate: number;
+  interruptions_per_100_actions: number;
+  bonds: { required: number; locked: number; refunded: number; captured: number };
+  budget_exhausted: number;
+  median_decision_ms: number | null;
 }
 
 /** Timestamps are RFC 3339 UTC with milliseconds and a Z suffix (Date.toISOString); the event hash covers the exact string. */
@@ -141,6 +167,9 @@ export interface ApprovalView {
   action: ActionIR;
   evaluation: Evaluation;
   requested_at: string;
+  /** Present once the API stores the brief with the approval (seam: ApprovalRequested carries both). */
+  brief?: DecisionBrief | null;
+  bond?: BondRef | null;
 }
 
 export interface Receipt {
@@ -160,10 +189,19 @@ export interface Receipt {
     nonce: string;
     valid_until: number;
   };
-  approval: { required: boolean; cfo_key_hash: string | null };
+  approval: { required: boolean; cfo_key_hash: string | null; brief_hash?: string | null; bond?: BondOutcome | null };
   settlement: { chain: 'cardano-preprod'; tx_hash: string; block: number };
   masumi: unknown;
   evidence: { first_event_hash: string; last_event_hash: string };
+}
+
+/** What became of the bond an agent locked to escalate the receipted action. */
+export interface BondOutcome {
+  amount: string;
+  asset: string;
+  status: BondRef['status'];
+  tx_hash: string | null;
+  outcome_tx_hash: string | null;
 }
 
 export interface ReceiptBundle {
@@ -171,6 +209,8 @@ export interface ReceiptBundle {
   receipt_hash: string;
   authorization: AuthorizationRecord;
   mandate: Mandate;
+  /** The Decision Brief the approver read, when the action was escalated. briefHash(brief) must equal receipt.approval.brief_hash. */
+  brief?: DecisionBrief | null;
 }
 
 export interface ReceiptSummary {
@@ -184,13 +224,15 @@ export interface ReceiptSummary {
 
 /**
  * The exact text the CFO signs (CIP-30 signData, CIP-8 COSE_Sign1) to decline an approval.
- * The API rebuilds it from the approval id and accepts the decline only when the COSE_Sign1 payload equals it
- * and the signing key hashes to the mandate's CFO key hash.
+ * The API rebuilds it from the approval id and reason and accepts the decline only when the COSE_Sign1 payload
+ * equals it and the signing key hashes to the mandate's CFO key hash. `legitimate` refunds the bond, `frivolous` captures it.
  */
-export const declineMessage = (approvalId: string) => canonicalJson({ approval_id: approvalId, decision: 'decline' });
+export const declineMessage = (approvalId: string, reason: DeclineReason) =>
+  canonicalJson({ approval_id: approvalId, decision: 'decline', reason });
 
-/** CIP-30 DataSignature: hex CBOR of a COSE_Sign1 and of a COSE_Key. */
+/** CIP-30 DataSignature: hex CBOR of a COSE_Sign1 and of a COSE_Key, plus the reason the signature covers. */
 export interface DeclineSignature {
   signature: string;
   key: string;
+  reason: DeclineReason;
 }

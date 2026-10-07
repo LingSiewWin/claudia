@@ -1,5 +1,6 @@
 import {
   authorizationDigest,
+  briefHash,
   bytesToHex,
   canonicalHash,
   encodeAuthorization,
@@ -41,7 +42,19 @@ export function offlineChecks(b: ReceiptBundle): VerifyCheck[] {
   const ir = r.action.ir;
   const receiptHash = canonicalHash(r);
   const actionHash = canonicalHash(ir);
+  const brief = b.brief ?? null;
+  const briefChecks: VerifyCheck[] = brief
+    ? [
+        ok(
+          'brief_hash',
+          'Decision brief recomputes to the hash the approver signed off on',
+          safe(() => briefHash(brief) === r.approval.brief_hash && brief.action_hash === r.action.hash && brief.mandate.id === r.mandate.id),
+          r.approval.brief_hash ?? 'no brief_hash on receipt',
+        ),
+      ]
+    : [];
   return [
+    ...briefChecks,
     ok('receipt_hash', 'Receipt hash recomputed', receiptHash === b.receipt_hash, receiptHash),
     ok('action_hash', 'Action hash recomputed from the Action IR', actionHash === r.action.hash, actionHash),
     ok(

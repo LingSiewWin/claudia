@@ -2,7 +2,7 @@
 // Usage: API_BASE=https://<api> pnpm --filter @authority/web contract-check
 import assert from 'node:assert/strict';
 import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '@authority/core';
-import type { MandateView, ReceiptBundle, RunEvent, RunSummary } from '../lib/contract';
+import type { AuthorityInfo, MandateView, Metrics, ReceiptBundle, RunEvent, RunSummary } from '../lib/contract';
 
 const base = process.env.API_BASE;
 if (!base) throw new Error('set API_BASE');
@@ -16,6 +16,7 @@ const TYPES = new Set([
   'CREVerificationCompleted', 'AuthorizationIssued', 'ApprovalRequested', 'CFOApproved', 'CFODeclined', 'ActionDenied',
   'TransactionBuilt', 'TransactionSubmitted', 'TransactionConfirmed', 'TransactionRejected', 'ReceiptProven',
   'AttackStarted', 'AttackResult', 'MandateUpdated', 'MandateRevoked', 'RunCompleted',
+  'BondRequired', 'BondLocked', 'BondRefunded', 'BondCaptured',
 ]);
 
 const { runs } = await get<{ runs: RunSummary[] }>('/v1/runs?kind=all');
@@ -30,6 +31,13 @@ for (const e of events) {
   lastSeq = e.seq;
   const { hash, prev_hash, ...body } = e;
   assert.equal(sha256Hex(concatBytes(hexToBytes(prev_hash), utf8ToBytes(canonicalJson(body)))), hash, `bad hash at seq ${e.seq}`);
+  if (e.type === 'ApprovalRequested') {
+    assert.equal(e.payload.brief?.schema, 'brief/v0.1', `ApprovalRequested ${e.payload.approval_id} must carry the Decision Brief`);
+    assert.ok(e.payload.bond === null || /^\d+$/.test(e.payload.bond.amount), 'ApprovalRequested.bond.amount');
+  }
+  if (e.type === 'BondRequired') assert.equal(e.payload.price.schema, 'escalation-price/v0.1', 'BondRequired.price');
+  if (e.type === 'BondLocked') assert.match(e.payload.tx_hash, /^[0-9a-f]{64}$/, 'BondLocked.tx_hash');
+  if (e.type === 'CFODeclined') assert.ok(['legitimate', 'frivolous'].includes(e.payload.reason), 'CFODeclined.reason');
 }
 const started = events[0] as Extract<RunEvent, { type: 'RunStarted' }>;
 for (const k of ['autonomous_limit', 'hard_cap', 'daily_cap', 'treasury_minimum'] as const) {
@@ -47,6 +55,16 @@ const bundle = await get<ReceiptBundle>(`/v1/receipts/${first.receipt_id}`);
 assert.equal(bundle.receipt.schema, 'receipt/v0.1');
 assert.equal(bundle.authorization.schema, 'authorization/v0.1');
 assert.equal(bundle.mandate.schema, 'mandate/v0.1');
+const authority = await get<AuthorityInfo>('/v1/authority/CFO?mandate_id=M-001');
+assert.equal(authority.mandate_id, 'M-001');
+assert.match(authority.price.amount, /^\d+$/, 'authority.price.amount');
+assert.ok(Number.isInteger(authority.interrupt_budget.used) && Number.isInteger(authority.interrupt_budget.per_day), 'authority.interrupt_budget');
+assert.ok(['open', 'budget_exhausted'].includes(authority.availability), 'authority.availability');
+const metrics = await get<Metrics>('/v1/metrics?mandate_id=M-001');
+for (const k of ['actions_evaluated', 'allow', 'deny', 'escalate', 'interruptions_per_100_actions', 'budget_exhausted'] as const) {
+  assert.equal(typeof metrics[k], 'number', `metrics.${k}`);
+}
+for (const k of ['required', 'locked', 'refunded', 'captured'] as const) assert.equal(typeof metrics.bonds[k], 'number', `metrics.bonds.${k}`);
 const sse = await fetch(`${base}/v1/runs/${stage.run_id}/events`, { signal: AbortSignal.timeout(5_000) });
 assert.equal(sse.headers.get('content-type')?.split(';')[0], 'text/event-stream');
 assert.ok(sse.headers.get('access-control-allow-origin'), 'SSE needs Access-Control-Allow-Origin for the Vercel origin');
@@ -54,4 +72,7 @@ const reader = sse.body?.getReader();
 const chunk = new TextDecoder().decode((await reader?.read())?.value);
 await reader?.cancel();
 assert.match(chunk, /(^|\n)(id: \d+|retry: \d+)/, 'SSE frames must carry id: <seq>');
-console.log(`contract ok: ${runs.length} runs, stage run ${stage.run_id} with ${events.length} hash-valid events, receipt ${first.receipt_id}`);
+console.log(
+  `contract ok: ${runs.length} runs, stage run ${stage.run_id} with ${events.length} hash-valid events, receipt ${first.receipt_id}, ` +
+    `authority ${authority.approver} ${authority.availability}, ${metrics.interruptions_per_100_actions} interruptions/100`,
+);

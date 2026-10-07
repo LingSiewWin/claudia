@@ -1,4 +1,5 @@
 import type { ActionIR, ReasonCode } from '@authority/core';
+import type { BondRef, DeclineReason } from './contract';
 
 /** Base units -> display string with at least 2 decimals ("8.42", "18.00", "0.000001"). */
 export function formatUnits(value: string | bigint, decimals = 6): string {
@@ -71,9 +72,39 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   VERIFICATION_UNAVAILABLE: 'The invoice could not be verified right now.',
   COUNTERPARTY_NOT_APPROVED: 'This vendor is not on the approved list.',
   ABOVE_AUTONOMOUS_LIMIT: "The amount is above the agent's autonomous limit.",
-  INTERRUPT_BUDGET_EXHAUSTED: "The agent has used today's interrupt budget. Nobody was paged.",
+  INTERRUPT_BUDGET_EXHAUSTED: "The agent has used today's interrupt budget.",
   PRINCIPAL_DECLINED: 'The CFO declined this payment.',
 };
+
+/** Codes outside ReasonCode that an Attack Lab result can carry. */
+export const LAB_TEXT: Record<string, string> = {
+  BOND_REQUIRED: 'No bond was locked, so nobody was paged. The inbox stayed empty.',
+};
+
+/** Bond chip label per status. "expired" is derived in bondStatus when a required bond's lock window passed unlocked. */
+export const BOND_TEXT: Record<BondRef['status'], string> = {
+  required: 'Bond required',
+  locked: 'Bond locked',
+  refunded: 'Bond refunded',
+  captured: 'Bond captured',
+  expired: 'Bond expired',
+};
+
+export const DECLINE_REASON_TEXT: Record<DeclineReason, string> = {
+  legitimate: 'Declined as a reasonable ask. Bond refunded to the agent.',
+  frivolous: 'Declined as frivolous. Bond captured.',
+};
+
+/** "5.00 ADA": bond amounts are in base units of the bond asset (lovelace for ADA). */
+export const bondAmount = (b: Pick<BondRef, 'amount' | 'asset'>) => `${formatUnits(b.amount, 6)} ${b.asset}`;
+
+/** Status to show for a bond now: a priced bond nobody locked before its window closed is expired. */
+export function bondStatus(b: BondRef, nowMs: number): BondRef['status'] {
+  return b.status === 'required' && nowMs > b.locked_until_ms ? 'expired' : b.status;
+}
+
+/** "1 of 3 used today" for an interrupt budget. */
+export const budgetText = (used: number, perDay: number) => `${used} of ${perDay} used today`;
 
 export const INVARIANT_TEXT: Record<string, string> = {
   R0: 'Only the canonical vault output can release funds.',
@@ -96,6 +127,8 @@ export const INVARIANT_TEXT: Record<string, string> = {
 };
 
 export function plainReason(code: string): string {
-  if (Object.hasOwn(REASON_TEXT, code)) return (REASON_TEXT as Record<string, string>)[code] as string;
-  return Object.hasOwn(INVARIANT_TEXT, code) ? (INVARIANT_TEXT[code] as string) : code;
+  for (const table of [REASON_TEXT as Record<string, string>, INVARIANT_TEXT, LAB_TEXT]) {
+    if (Object.hasOwn(table, code)) return table[code] as string;
+  }
+  return code;
 }
