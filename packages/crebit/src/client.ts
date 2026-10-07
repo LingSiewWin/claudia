@@ -70,7 +70,7 @@ export interface CrebitConfig {
 }
 
 export const fetchTransport: Transport = async (req) => {
-  const res = await fetch(req.url, { method: req.method, headers: req.headers, ...(req.body === null ? {} : { body: req.body }) });
+  const res = await fetch(req.url, { method: req.method, headers: req.headers, signal: AbortSignal.timeout(30_000), ...(req.body === null ? {} : { body: req.body }) });
   return { status: res.status, body: await res.text(), headers: Object.fromEntries(res.headers.entries()) };
 };
 
