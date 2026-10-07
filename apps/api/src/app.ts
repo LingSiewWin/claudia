@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DAY_MS } from '@authority/core';
+import { prepareRevoke, prepareUpdate, submitMandateTx } from './admin';
 import { approve, decline, pendingApprovals, submitApproved } from './approvals';
 import { type Caller, type Engine, handleCheck } from './check';
 import { bearer, HttpError, idempotencyKey, parseJson, readBody, type Reply, send } from './http';
@@ -166,6 +167,10 @@ export function createApp(deps: AppDeps) {
     { method: 'POST', path: /^\/v1\/executions$/, handler: async ({ req }) => submitApproved(eng, await readBody(req)) },
     // Attack Lab
     { method: 'POST', path: /^\/v1\/lab\/attacks$/, handler: async ({ req }) => startAttack(eng, deps.lab, await readBody(req)) },
+    // Mandate changes (CFO console)
+    { method: 'POST', path: new RegExp(`^/v1/mandates/${ID}/revoke$`), handler: async ({ params }) => prepareRevoke(eng, params[0]!) },
+    { method: 'POST', path: new RegExp(`^/v1/mandates/${ID}/update$`), handler: async ({ req, params }) => prepareUpdate(eng, params[0]!, await readBody(req)) },
+    { method: 'POST', path: new RegExp(`^/v1/mandates/${ID}/submit$`), handler: async ({ req, params }) => submitMandateTx(eng, params[0]!, await readBody(req)) },
     // CRE relay
     {
       method: 'POST',
