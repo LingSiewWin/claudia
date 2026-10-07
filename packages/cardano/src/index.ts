@@ -7,3 +7,4 @@ export * from './port';
 export * from './state';
 export * from './txs';
 export * from './wallet';
+export * from './bond';

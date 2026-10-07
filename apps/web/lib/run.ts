@@ -155,6 +155,10 @@ export const EVENT_TYPES: readonly EventType[] = [
   'MandateUpdated',
   'MandateRevoked',
   'RunCompleted',
+  'BondRequired',
+  'BondLocked',
+  'BondRefunded',
+  'BondCaptured',
 ];
 
 /** Pure reducer: one event in, a new view out. Duplicate or out-of-order events (seq <= lastSeq) are ignored. */

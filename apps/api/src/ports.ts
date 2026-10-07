@@ -1,7 +1,9 @@
 import type { VerificationOutcome } from '@authority/chainlink';
-import type { ActionIR, AuthorizationFields, AuthorizationRecord, ChainBinding, Mandate } from '@authority/core';
+import type { BondOutcome, BondUtxo } from '@authority/cardano';
+import type { ActionIR, AuthorizationFields, AuthorizationRecord, ChainBinding, EscalationPrice, Mandate } from '@authority/core';
 
 export { CardanoError, type CardanoErrorCode } from '@authority/cardano';
+export type { BondOutcome, BondUtxo } from '@authority/cardano';
 
 // Everything the API needs from the outside world. Real implementations are wired in main.ts;
 // tests use in-memory fakes. Cardano is authoritative for vault and anchor state.
@@ -62,6 +64,12 @@ export interface CardanoPort {
    * datum is its digest, as R16 requires), whoever submitted it; null if there is none.
    */
   releaseOf(binding: ChainBinding, authorization: AuthorizationRecord): Promise<string | null>;
+  /** Escrow address and sink for the 402 price. */
+  bondAddresses(): { escrow: string; sink: string };
+  /** The live bond UTxO for this escalation, verified against the price, or null. */
+  readBond(price: Pick<EscalationPrice, 'approval_id' | 'action_hash' | 'amount' | 'approver_key_hash'>): Promise<BondUtxo | null>;
+  /** Unsigned Refund or Capture of a bond; the approver key hash is a required signer. */
+  buildBondSpend(bond: BondUtxo, outcome: BondOutcome): Promise<UnsignedTx>;
 }
 
 /** CRE verification (verifyInvoice behind it). The trigger id is chosen by the API, never by a caller. */

@@ -9,6 +9,7 @@ import {
   type Mandate,
   type ReasonCode,
   type VerificationReport,
+  buildBrief,
   bytesToHex,
   canonicalHash,
   canonicalJson,
@@ -85,6 +86,8 @@ interface Vault {
   spent: bigint;
   nonce: bigint;
 }
+
+const FIXTURE_ESCROW = 'addr_test1wq' + 'e5c4'.repeat(12) + 'ab';
 
 const M001: Setup = {
   id: 'M-001',
@@ -329,13 +332,26 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
   let approved = false;
   if (evaluation.outcome === 'ESCALATE') {
     const approval_id = `AP-${action.id}`;
-    run.emit('ApprovalRequested', action.id, { approval_id, approvals_required: evaluation.approvals_required });
+    // Fixture bond: 5 tADA locked by the agent; the fixture escrow address is a fixed placeholder.
+    const bond = { amount: '5000000', asset: 'ADA', escrow_address: FIXTURE_ESCROW, locked_until_ms: run.t + 3_600_000, tx_hash: `${'b0'.repeat(31)}${String(round).padStart(2, '0')}`, output_index: 0, status: 'locked' as const };
+    const brief = buildBrief({
+      action,
+      evaluation,
+      mandate: m,
+      verification: report && { report: report.report, report_hash: report.report_hash, sepolia_tx: report.sepolia_tx },
+      bond: { amount: bond.amount, asset: bond.asset },
+      expires_at_ms: run.t + 600_000,
+    });
+    run.emit('BondLocked', action.id, { approval_id, tx_hash: bond.tx_hash, output_index: 0, amount: bond.amount, asset: bond.asset });
+    run.emit('ApprovalRequested', action.id, { approval_id, approvals_required: evaluation.approvals_required, brief, bond });
     out.approvals.push({ approval_id, run_id: run.id, action, evaluation, requested_at: new Date(run.t).toISOString() });
     if (c.cfo === 'decline') {
-      run.emit('CFODeclined', action.id, { approval_id }, 8_000);
+      run.emit('CFODeclined', action.id, { approval_id, reason: 'legitimate' }, 8_000);
+      run.emit('BondRefunded', action.id, { approval_id, tx_hash: `${'b1'.repeat(31)}${String(round).padStart(2, '0')}`, reason: 'declined_legitimate' });
       return null;
     }
     run.emit('CFOApproved', action.id, { approval_id, cfo_key_hash: CFO_TEST }, 8_000);
+    run.emit('BondRefunded', action.id, { approval_id, tx_hash: `${'b1'.repeat(31)}${String(round).padStart(2, '0')}`, reason: 'approved' });
     report = cre(run, action, actionHash, ++round);
     evaluation = evaluateNow();
     if (evaluation.outcome === 'DENY') throw new Error(`fixture ${action.id}: denied after CFO approval (${evaluation.reason}); refusing to authorize`);

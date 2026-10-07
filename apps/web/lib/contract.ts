@@ -2,6 +2,8 @@ import {
   type ActionIR,
   type ApprovalRequirement,
   type AuthorizationRecord,
+  type DecisionBrief,
+  type EscalationPrice,
   type Evaluation,
   type Mandate,
   type ReasonCode,
@@ -53,9 +55,15 @@ export interface Payloads {
   CREVerificationStarted: { trigger_id: string };
   CREVerificationCompleted: { report: VerificationReport; report_hash: string; sepolia_tx: string };
   AuthorizationIssued: { authorization: AuthorizationRecord; compromised_engine: boolean };
-  ApprovalRequested: { approval_id: string; approvals_required: ApprovalRequirement[] };
+  /** brief: the Decision Brief the human reads; bond: what the agent locked to get here (null when no bond is priced). */
+  ApprovalRequested: { approval_id: string; approvals_required: ApprovalRequirement[]; brief: DecisionBrief; bond: BondRef | null };
   CFOApproved: { approval_id: string; cfo_key_hash: string };
-  CFODeclined: { approval_id: string };
+  CFODeclined: { approval_id: string; reason: DeclineReason };
+  /** The 402 was returned: nothing reaches the human until the bond is on chain. */
+  BondRequired: { approval_id: string; price: EscalationPrice };
+  BondLocked: { approval_id: string; tx_hash: string; output_index: number; amount: string; asset: string };
+  BondRefunded: { approval_id: string; tx_hash: string; reason: 'approved' | 'declined_legitimate' | 'expired' };
+  BondCaptured: { approval_id: string; tx_hash: string; sink_address: string };
   ActionDenied: { reason: ReasonCode; layer: Layer };
   /** log_head: the last event already in the log when the tx was built; the tx commits it in metadata 1694. */
   TransactionBuilt: { tx_hash: string; tx_body_cbor: string; log_head: LogHead };
@@ -70,6 +78,17 @@ export interface Payloads {
   RunCompleted: { status: 'finished' };
 }
 export type EventType = keyof Payloads;
+
+export type DeclineReason = 'legitimate' | 'frivolous';
+export interface BondRef {
+  amount: string;
+  asset: string;
+  escrow_address: string;
+  locked_until_ms: number;
+  tx_hash: string | null;
+  output_index: number | null;
+  status: 'required' | 'locked' | 'refunded' | 'captured' | 'expired';
+}
 
 /** Timestamps are RFC 3339 UTC with milliseconds and a Z suffix (Date.toISOString); the event hash covers the exact string. */
 export const CREATED_AT_FORMAT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
