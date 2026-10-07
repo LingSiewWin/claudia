@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { BudgetPeek } from '../components/budget-peek';
 import { HeroFloor } from '../components/floor/hero-floor';
 import { SiteFooter, SiteHeader } from '../components/site-nav';
-import { cardanoscanTxUrl } from '../lib/config';
+import { cardanoscanTxUrl, sepoliaTxUrl } from '../lib/config';
 
 const SOKOSUMI = 'https://preprod.sokosumi.com/';
 
@@ -14,6 +14,10 @@ const ONCHAIN: { what: string; hash: string; note: string }[] = [
   { what: 'Vault minted', hash: 'ab5b303c1c416efaed2d99683d93ba05ef4f494f6b21994767357bf554f1e200', note: 'Mandate M-LAB vault, 10 tUSDM, enforcing mandate hash 43b25a12… v1.' },
   { what: 'Mandate anchored', hash: 'fe05f66e17676d1973e3c89de350b5397f43c985a1717cd9698414d9529575ab', note: 'Anchor token under policy 145572c0…19fb. The vault reads it on every release.' },
 ];
+
+/* Chainlink CRE reports on Sepolia: the invoice verification and the FX basis attestation. */
+const CRE_INVOICE_TX = '0x68bdc690cf4338f3009f59487ceeaba4ff8a57f237b044be06a5a21abdcdfd98';
+const CRE_FX_TX = '0x2549899d0f1884b944320919279ce0ce98539aeaa761b9a210bde332071b78a8';
 
 const ATTACKS = ['Above hard cap', 'Wrong asset', 'Approver bypass', 'Withdraw by anyone', 'Update by anyone', 'Revoke by approver', 'Second mandate mint', 'Second vault mint'];
 
@@ -59,6 +63,22 @@ export default function Home() {
           Above: an agent escalates three frivolous invoices in a row. Each costs it a 5 ADA bond, captured on decline; the fourth is denied at
           the gate because the day&apos;s interrupt budget is spent, and nobody is paged.
         </p>
+      </section>
+
+      <section aria-label="Facts come from Chainlink CRE" className="mt-16 grid gap-6 border-y border-line py-6 lg:grid-cols-[minmax(0,18rem)_1fr]">
+        <h2 className="font-serif text-3xl leading-[1.05] tracking-tight">Facts come from Chainlink CRE</h2>
+        <ol className="space-y-3 text-[15px] leading-relaxed">
+          <Fact n={1} href={sepoliaTxUrl(CRE_INVOICE_TX)} link="Invoice report on Sepolia">
+            Invoice verification: a CRE workflow fetches the vendor invoice, nodes agree on six facts, and the signed report lands on Sepolia.
+          </Fact>
+          <Fact n={2} href={sepoliaTxUrl(CRE_FX_TX)} link="FX basis report on Sepolia">
+            FX basis: a second workflow reads the Chainlink BRL/USD feed on Ethereum mainnet and attests whether a quote is on market.
+          </Fact>
+          <Fact n={3}>
+            The report hash is inside the bytes the human signs, so the Cardano vault only releases funds for an action whose facts were
+            verified.
+          </Fact>
+        </ol>
       </section>
 
       <section aria-label="How it works" className="mt-28 grid gap-8 lg:grid-cols-[minmax(0,18rem)_1fr]">
@@ -230,6 +250,27 @@ function Pillar({ name, children }: { name: string; children: ReactNode }) {
       <dt className="font-mono text-[12px] font-bold uppercase tracking-[0.12em]">{name}</dt>
       <dd className="text-muted">{children}</dd>
     </div>
+  );
+}
+
+function Fact({ n, href, link, children }: { n: number; href?: string; link?: string; children: ReactNode }) {
+  return (
+    <li className="grid grid-cols-[2rem_1fr] gap-3">
+      <span aria-hidden className="font-serif text-2xl leading-none text-muted">
+        {n}
+      </span>
+      <p>
+        {children}
+        {href ? (
+          <>
+            {' '}
+            <a href={href} className="font-mono text-[13px] underline underline-offset-4" target="_blank" rel="noreferrer">
+              {link}
+            </a>
+          </>
+        ) : null}
+      </p>
+    </li>
   );
 }
 

@@ -210,6 +210,9 @@ What the human reads before signing. Built by pure functions from the Action IR,
 
 ## Verification and the vault
 
+- Invoice verification: a CRE workflow fetches the vendor invoice, nodes agree on six facts, and the signed report lands on Sepolia. https://sepolia.etherscan.io/tx/0x68bdc690cf4338f3009f59487ceeaba4ff8a57f237b044be06a5a21abdcdfd98
+- FX basis: a second workflow reads the Chainlink BRL/USD feed on Ethereum mainnet and attests whether a quote is on market. https://sepolia.etherscan.io/tx/0x2549899d0f1884b944320919279ce0ce98539aeaa761b9a210bde332071b78a8
+- The report hash is inside the bytes the human signs, so the Cardano vault only releases funds for an action whose facts were verified.
 - Facts: a Chainlink CRE workflow reads the invoice at the billing source with independent nodes and writes a `verification/v0.1` report (`exists`, `customer_match`, `status_open`, `amount_match`, `currency_match`, `recipient_match`) to a registry on Sepolia. The engine evaluates again with the report; a mismatch is a DENY with the fact's reason code.
 - Authorization: for ALLOW the engine signs the authorization bytes (amount, recipient, nonce, expiry, mandate version). For ESCALATE the approver co-signs the exact release transaction with a CIP-30 wallet on their own device.
 - Vault: an Aiken validator on Cardano releases only the exact signed amount to the exact recipient, once (nonce), before expiry, under the anchored mandate version, with the approver's signature when the authorization requires a principal.
