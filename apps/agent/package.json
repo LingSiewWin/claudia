@@ -1,0 +1,29 @@
+{
+  "name": "@authority/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env --import tsx src/main.ts",
+    "once": "node --env-file-if-exists=../../.env --import tsx src/main.ts --once",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "rationale-check": "node --env-file-if-exists=../../.env --import tsx scripts/rationale-check.ts"
+  },
+  "dependencies": {
+    "@authority/core": "workspace:*",
+    "@authority/llm": "workspace:*",
+    "@authority/stripe": "workspace:*",
+    "tsx": "4.23.15",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
