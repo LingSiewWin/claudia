@@ -100,7 +100,12 @@ export function Floor3D({ floor, selected, onSelect, cards = [], treasury = null
         <Jar pal={pal} slots={perDay} />
         <Grate pal={pal} />
         <Desk pal={pal} open={st.desk !== null} decided={decided} />
-        <Vault pal={pal} open={st.vault === 'releasing'} rejected={st.vault === 'rejected'} treasury={treasury} />
+        <Vault pal={pal} open={st.vault === 'releasing'} rejected={st.vault === 'rejected'} />
+        <Html position={[VAULT[0], 3.55, VAULT[2] + 1.5]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
+          <span className="floor-plaque" data-testid="floor-treasury">
+            {treasury ? `TREASURY ${treasury}` : 'TREASURY'}
+          </span>
+        </Html>
         <Ledger pal={pal} />
         {floor.crates.map((c, i) => (
           <RequestCard key={c.id} crate={c} card={byId.get(c.id) ?? null} slot={slotOf(floor.crates, i)} pal={pal} selected={selected === c.id} onSelect={onSelect ?? null} />
@@ -570,7 +575,7 @@ function Desk({ pal, open, decided }: { pal: Palette; open: boolean; decided: nu
 }
 
 /* ---------- the vault: a safe with a round door, a wheel, and the balance on a plaque ---------- */
-function Vault({ pal, open, rejected, treasury }: { pal: Palette; open: boolean; rejected: boolean; treasury: string | null }) {
+function Vault({ pal, open, rejected }: { pal: Palette; open: boolean; rejected: boolean }) {
   const [x, , z] = VAULT;
   const door = useRef<THREE.Group>(null);
   const light = useRef<THREE.PointLight>(null);
@@ -613,11 +618,6 @@ function Vault({ pal, open, rejected, treasury }: { pal: Palette; open: boolean;
           ))}
         </group>
         <pointLight ref={light} color={pal.glow} intensity={0} distance={9} decay={2} position={[0, h / 2, d / 2 + 1.4]} />
-        <Html position={[0, h - 0.35, d / 2 + 0.1]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
-          <span className="floor-plaque" data-testid="floor-treasury">
-            {treasury ? `TREASURY ${treasury}` : 'TREASURY'}
-          </span>
-        </Html>
       </group>
     </Hover>
   );
@@ -870,3 +870,4 @@ function Payment({ pal }: { pal: Palette }) {
     </group>
   );
 }
+
