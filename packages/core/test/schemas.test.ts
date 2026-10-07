@@ -19,6 +19,7 @@ describe('ActionIRSchema', () => {
     ['amount >= 2^64', { ...good, amount: { value: (1n << 64n).toString(), asset: 'USDM' } }],
     ['unknown action type', { ...good, type: 'withdraw_all' }],
     ['pointer or garbage address', { ...good, recipient: { chain: 'cardano', address: 'addr_test1xyz' } }],
+    ['uppercase address', { ...good, recipient: { chain: 'cardano', address: AWS_ADDR.toUpperCase() } }],
     ['non-cardano chain', { ...good, recipient: { chain: 'solana', address: AWS_ADDR } }],
     ['datetime with offset', { ...good, created_at: '2026-10-07T03:00:00+08:00' }],
     ['rationale too long', { ...good, rationale: 'x'.repeat(2001) }],
@@ -39,6 +40,16 @@ describe('MandateSchema', () => {
   it('rejects an unknown constraint kind', () => {
     const bad = { ...M001_INPUT, constraints: [{ id: 'x', kind: 'time_of_day', on_violation: 'DENY' }] };
     expect(MandateSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['27 bytes', '44'.repeat(27)],
+    ['29 bytes', '44'.repeat(29)],
+    ['uppercase hex', 'AB'.repeat(28)],
+  ])('rejects a principal admin key hash that is %s', (_label, hash) => {
+    const principal = { ...M001_INPUT.principal, cardano_key_hash: hash };
+    expect(MandateSchema.safeParse({ ...M001_INPUT, principal }).success).toBe(false);
   });
 });
 

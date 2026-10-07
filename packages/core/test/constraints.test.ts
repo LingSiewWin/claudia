@@ -6,7 +6,7 @@ import { ATTACKER_ADDR, AWS_ADDR, M001, NOW, action, state, usdm, verified } fro
 const c = (id: string) => M001.constraints.find((x) => x.id === id) as Constraint;
 const ctx = (amount: number, balance = 135, spent = 0, overrides: Partial<ConstraintContext> = {}): ConstraintContext => {
   const a = action({ id: 'A-1', amount });
-  return { action: a, amount: BigInt(usdm(amount)), state: state(balance, spent), dayIndex: Math.floor(NOW / 86_400_000), verification: null, ...overrides };
+  return { action: a, amount: BigInt(usdm(amount)), state: state(balance, spent), dayIndex: Math.floor(NOW / 86_400_000), verification: null, mandateAsset: 'USDM', ...overrides };
 };
 
 describe('checkConstraint', () => {
@@ -19,6 +19,13 @@ describe('checkConstraint', () => {
   it('action_in', () => {
     const bad = { ...ctx(1), action: action({ id: 'A-2', amount: 1, type: 'purchase' }) };
     expect(checkConstraint(c('action'), bad)).toMatchObject({ violated: true, reason: 'ACTION_NOT_AUTHORIZED' });
+  });
+
+  it('asset_eq maps to ASSET_NOT_AUTHORIZED', () => {
+    expect(checkConstraint(c('asset'), ctx(1)).violated).toBe(false);
+    const a = action({ id: 'A-2', amount: 1 });
+    const bad = { ...ctx(1), action: { ...a, amount: { ...a.amount, asset: 'ADA' } } };
+    expect(checkConstraint(c('asset'), bad)).toMatchObject({ violated: true, reason: 'ASSET_NOT_AUTHORIZED', detail: { asset: 'ADA' } });
   });
 
   it('counterparty_in maps to COUNTERPARTY_NOT_APPROVED', () => {
@@ -100,8 +107,30 @@ describe('checkConstraint', () => {
       expect(checkConstraint(c('invoice_facts'), withReport(a))).toEqual({
         violated: false,
         reason: null,
-        detail: expect.objectContaining({ verified_recipient: AWS_ADDR, verified_amount: a.amount.value }),
+        detail: expect.objectContaining({ verified_recipient: AWS_ADDR, verified_amount: a.amount.value, verified_currency: 'usd' }),
       });
+    });
+
+    it.each(['eur', null])('verified_currency %s for USDM -> CURRENCY_MISMATCH', (currency) => {
+      expect(checkConstraint(c('invoice_facts'), withReport(a, { verified_currency: currency }))).toMatchObject({ violated: true, reason: 'CURRENCY_MISMATCH' });
+    });
+
+    it('verified_currency usd for USDM passes', () => {
+      expect(checkConstraint(c('invoice_facts'), withReport(a, { verified_currency: 'usd' })).violated).toBe(false);
+    });
+
+    it('a mandate asset with no known fiat currency -> CURRENCY_MISMATCH', () => {
+      expect(checkConstraint(c('invoice_facts'), { ...withReport(a), mandateAsset: 'USDC' })).toMatchObject({ violated: true, reason: 'CURRENCY_MISMATCH' });
+    });
+
+    it('a false fact wins over a cross-check mismatch', () => {
+      const redirected = action({ id: 'A-1', amount: 1, recipient: ATTACKER_ADDR });
+      const facts = { ...verified(redirected).report.facts, amount_match: false };
+      expect(checkConstraint(c('invoice_facts'), withReport(redirected, { verified_recipient: AWS_ADDR, facts }))).toMatchObject({ violated: true, reason: 'AMOUNT_MISMATCH' });
+    });
+
+    it('recipient is cross-checked before amount', () => {
+      expect(checkConstraint(c('invoice_facts'), withReport(a, { verified_recipient: ATTACKER_ADDR, verified_amount: '2' }))).toMatchObject({ violated: true, reason: 'RECIPIENT_MISMATCH' });
     });
   });
 

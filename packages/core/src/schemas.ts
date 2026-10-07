@@ -31,7 +31,12 @@ export const MandateSchema = z.strictObject({
   id: IdSchema,
   version: z.number().int().min(1).max(0xffffffff),
   status: z.enum(['active', 'revoked']),
-  principal: z.strictObject({ type: z.literal('organization'), id: IdSchema, name: z.string().min(1).max(128) }),
+  principal: z.strictObject({
+    type: z.literal('organization'),
+    id: IdSchema,
+    name: z.string().min(1).max(128),
+    cardano_key_hash: hexBytes(28),
+  }),
   delegate: z.strictObject({ type: z.literal('agent'), id: IdSchema, public_key: Ed25519Key }),
   approvers: z.array(z.strictObject({ role: z.string().min(1).max(32), cardano_key_hash: hexBytes(28) })).min(1),
   authority_engine: z.strictObject({ public_key: Ed25519Key }),
@@ -57,6 +62,7 @@ export const ActionIRSchema = z.strictObject({
     address: z
       .string()
       .max(200)
+      .regex(/^[a-z0-9_]+$/, { abort: true })
       .refine((address) => {
         try {
           parseShelleyAddress(address);

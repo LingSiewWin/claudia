@@ -6,6 +6,7 @@ export interface ConstraintContext {
   state: State;
   dayIndex: number;
   verification: VerifiedReport | null;
+  mandateAsset: string;
 }
 
 export type Detail = Record<string, string | number | boolean | null>;
@@ -17,6 +18,9 @@ export interface ConstraintOutcome {
 }
 
 type Facts = VerificationReport['facts'];
+
+// Fiat currency a verified invoice must be in for each mandate asset. An asset missing here never verifies.
+const ASSET_FIAT = new Map([['USDM', 'usd']]);
 
 const FACT_REASONS = [
   ['exists', 'INVOICE_NOT_FOUND'],
@@ -81,6 +85,7 @@ export function checkConstraint(c: Constraint, ctx: ConstraintContext): Constrai
         result: v.report.result,
         verified_recipient: v.report.verified_recipient,
         verified_amount: v.report.verified_amount,
+        verified_currency: v.report.verified_currency,
       };
       if (v.report.result !== 'VERIFIED') return fail(v.report.reason ?? 'VERIFICATION_UNAVAILABLE', detail);
       const broken = FACT_REASONS.find(([fact]) => !v.report.facts[fact]);
@@ -88,8 +93,10 @@ export function checkConstraint(c: Constraint, ctx: ConstraintContext): Constrai
       // The facts are computed from the trigger request, so compare the verified values with the action itself.
       if (v.report.verified_recipient !== action.recipient.address) return fail('RECIPIENT_MISMATCH', detail);
       if (v.report.verified_amount !== action.amount.value) return fail('AMOUNT_MISMATCH', detail);
-      // An action without an invoice reference never matches, so it can never pass verification.
-      if (v.report.invoice_id !== action.reference?.invoice_id) return fail('INVOICE_NOT_FOUND', detail);
+      const fiat = ASSET_FIAT.get(ctx.mandateAsset);
+      if (fiat === undefined || v.report.verified_currency !== fiat) return fail('CURRENCY_MISMATCH', detail);
+      // An invoice payment without an invoice reference can never pass verification.
+      if (!action.reference || v.report.invoice_id !== action.reference.invoice_id) return fail('INVOICE_NOT_FOUND', detail);
       return pass(detail);
     }
   }
