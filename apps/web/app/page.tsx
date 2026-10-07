@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AgentSurface } from '../components/agent-surface';
 import { BudgetPeek } from '../components/budget-peek';
 import { HeroFloor } from '../components/floor/hero-floor';
 import { SiteFooter, SiteHeader } from '../components/site-nav';
 import { cardanoscanTxUrl, sepoliaTxUrl } from '../lib/config';
+import { modeFrom } from '../lib/mode';
 
 const SOKOSUMI = 'https://preprod.sokosumi.com/';
 
@@ -21,11 +23,21 @@ const CRE_FX_TX = '0x2549899d0f1884b944320919279ce0ce98539aeaa761b9a210bde332071
 
 const ATTACKS = ['Above hard cap', 'Wrong asset', 'Approver bypass', 'Withdraw by anyone', 'Update by anyone', 'Revoke by approver', 'Second mandate mint', 'Second vault mint'];
 
-export default function Home() {
+/** `/` has two readers. `?mode=agent` renders the machine-readable files verbatim; everything else is the human page. */
+export default async function Home({ searchParams }: { searchParams: Promise<{ mode?: string | string[] }> }) {
+  const mode = modeFrom((await searchParams).mode);
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
+    <main data-reader={mode} className="mx-auto max-w-6xl px-5 py-8">
       <SiteHeader />
+      {mode === 'agent' ? <AgentSurface /> : <HumanHome />}
+      <SiteFooter />
+    </main>
+  );
+}
 
+function HumanHome() {
+  return (
+    <>
       <section aria-label="Thesis" className="mt-14">
         <h1 className="font-serif text-[3.1rem] leading-[0.98] tracking-[-0.02em] sm:text-7xl lg:text-[5.6rem]">
           Give your agents an allowance, <em className="text-muted">not your keys.</em>
@@ -260,9 +272,7 @@ export default function Home() {
           </BuiltWith>
         </ul>
       </section>
-
-      <SiteFooter />
-    </main>
+    </>
   );
 }
 
