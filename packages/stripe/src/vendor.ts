@@ -39,10 +39,10 @@ export const DEMO_INVOICES: readonly DemoInvoice[] = [
   { number: 'INV-L-0005', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: revoked mandate' },
   { number: 'INV-L-0006', set: 'lab', vendor: 'aws', cents: 50, memo: 'Lab: prompt injection' },
   // Unlisted vendor, small amount: each escalates on counterparty alone and fits the lab daily cap after the honest releases.
-  { number: 'INV-L-0007', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 1' },
-  { number: 'INV-L-0008', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 2' },
-  { number: 'INV-L-0009', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 3' },
-  { number: 'INV-L-0010', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 4' },
+  { number: 'INV-L-0011', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 1' },
+  { number: 'INV-L-0012', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 2' },
+  { number: 'INV-L-0013', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 3' },
+  { number: 'INV-L-0014', set: 'lab', vendor: 'globex', cents: 20, memo: 'Lab: escalation 4' },
 ];
 
 export const ACME_CUSTOMER = { name: 'Acme Corp', email: 'acme-ap@example.com' } as const;

@@ -26,7 +26,7 @@ export const ATTACKER_ADDRESS = 'addr_test1vzq6234e83ye84passjwpexr0fwtnch7lm8kj
 export const NFT_ADDRESS = 'addr_test1vzctcka849xmza42cmz2qm2za8qcvfqdv6mxsz3xgsgy0qcg5qegt';
 export const LAB_INJECTION_INVOICE = 'INV-L-0006';
 /** Four open Globex invoices (unlisted vendor, above the lab autonomous limit): each one escalates. */
-export const LAB_ESCALATION_INVOICES = ['INV-L-0007', 'INV-L-0008', 'INV-L-0009', 'INV-L-0010'] as const;
+export const LAB_ESCALATION_INVOICES = ['INV-L-0011', 'INV-L-0012', 'INV-L-0013', 'INV-L-0014'] as const;
 
 const at = (nowMs: number, minutesAgo: number) => new Date(nowMs - minutesAgo * 60_000).toISOString();
 

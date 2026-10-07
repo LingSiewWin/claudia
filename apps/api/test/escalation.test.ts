@@ -306,7 +306,7 @@ describe('Attack Lab: escalation attacks', () => {
     const claimed = (await api.post('/v1/agent/runs/claim', {}, auth)).json;
     expect(claimed).toMatchObject({ run_id, kind: 'lab', attack: 'no_bond' });
     const work = (await api.get(`/v1/agent/runs/${run_id}/work`, auth)).json;
-    expect(work.queue).toEqual([{ kind: 'invoice', invoice_number: 'INV-L-0007' }, { kind: 'request', message_id: 'req-no_bond-1' }]);
+    expect(work.queue).toEqual([{ kind: 'invoice', invoice_number: 'INV-L-0011' }, { kind: 'request', message_id: 'req-no_bond-1' }]);
     const res = await api.check(labBody('LAB-NB-1', run_id));
     expect(res.status).toBe(402);
     expect(await inbox()).toEqual([]);
