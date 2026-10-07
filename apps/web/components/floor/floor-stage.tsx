@@ -63,7 +63,7 @@ export function FloorStage({
         </div>
 
         <dl data-testid="metrics" data-source={source} className="order-1 grid grid-cols-2 gap-2 lg:absolute lg:top-4 lg:left-4 lg:w-[38rem] lg:grid-cols-4">
-          <Tile label="Interruptions / 100 actions" id="metric-interruptions" value={metrics ? (metrics.actions_evaluated < 5 ? 'n too small' : String(metrics.interruptions_per_100_actions)) : '—'} />
+          <Tile label="Interruptions / 100 actions" id="metric-interruptions" value={metrics ? (metrics.actions_evaluated < 5 ? `${metrics.escalate} of ${metrics.actions_evaluated}` : String(metrics.interruptions_per_100_actions)) : '—'} />
           <Tile label="Actions evaluated" id="metric-evaluated" value={metrics ? String(metrics.actions_evaluated) : '—'}>
             {metrics ? (
               <>
