@@ -18,7 +18,7 @@ const ROWS: Row[] = [
   {
     name: 'Masumi and Sokosumi',
     href: 'https://preprod.sokosumi.com/',
-    text: 'Human Authority Endpoint registered on the Masumi preprod registry (MIP-003 worker, Masumi Payment Service) and listed as a Sokosumi coworker.',
+    text: 'Human Authority Endpoint registered on the Masumi preprod registry (MIP-003 worker, Masumi Payment Service) and running as a Sokosumi coworker (four paid Tasks completed).',
   },
   {
     name: 'x402',

@@ -133,7 +133,7 @@ function HumanHome() {
         <h2 className="font-serif text-3xl leading-[1.05] tracking-tight">Facts come from Chainlink CRE</h2>
         <ol className="space-y-3 text-[15px] leading-relaxed">
           <Fact n={1} href={sepoliaTxUrl(CRE_INVOICE_TX)} link="Invoice report on Sepolia">
-            Invoice verification: a CRE workflow fetches the vendor invoice, nodes agree on six facts, and the signed report lands on Sepolia.
+            Invoice verification: a CRE workflow fetches the vendor invoice, checks six facts, and the signed report lands on Sepolia.
           </Fact>
           <Fact n={2} href={sepoliaTxUrl(CRE_FX_TX)} link="FX basis report on Sepolia">
             FX basis: a second workflow reads the Chainlink BRL/USD feed on Ethereum mainnet and attests whether a quote is on market.
