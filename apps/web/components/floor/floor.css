@@ -283,6 +283,12 @@
   aspect-ratio: 1120 / 660;
   touch-action: none;
 }
+.floor-3d-portal {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
 .floor-3d canvas {
   display: block;
   outline: none;
@@ -322,6 +328,7 @@
   background: var(--floor-tint-4);
 }
 .floor-crate-hit {
+  pointer-events: auto;
   width: 28px;
   height: 28px;
   border-radius: 999px;

@@ -26,6 +26,7 @@ const VIEW_UNITS = 24;
 const DOLLY_MS = 2000;
 
 type V3 = [number, number, number];
+type Portal = React.RefObject<HTMLDivElement>;
 const DESK: V3 = [0, 0, 0.6];
 const VAULT: V3 = [0.4, 0, -4.4];
 const ROBOT: V3 = [-7.6, 0, 1.8];
@@ -70,6 +71,9 @@ function cardColor(c: CardView, p: Palette): string {
 
 export function Floor3D({ floor, selected, onSelect, cards = [], treasury = null }: SceneProps) {
   const wrap = useRef<HTMLDivElement>(null);
+  // drei Html rebuilds its React root when its default target flips from the canvas parent to the events element after
+  // the first commit, which blanks every Html mounted in that commit. A portal we own never changes.
+  const portal = useRef<HTMLDivElement>(null) as Portal;
   const [pal, setPal] = useState<Palette>(fallbackPalette);
   useLayoutEffect(() => {
     const el = wrap.current?.closest('.floor') ?? wrap.current;
@@ -82,6 +86,7 @@ export function Floor3D({ floor, selected, onSelect, cards = [], treasury = null
   const decided = cards.filter((c) => c.approval && c.approval.status !== 'pending').length;
   return (
     <div ref={wrap} data-testid="floor-3d" className="floor-3d">
+      <div ref={portal} className="floor-3d-portal" />
       <Canvas
         orthographic
         shadows="percentage"
@@ -94,21 +99,21 @@ export function Floor3D({ floor, selected, onSelect, cards = [], treasury = null
         <Camera />
         <Lights pal={pal} />
         <Ground pal={pal} />
-        <Robot pal={pal} />
-        <Gate pal={pal} decision={st.gate} evaluating={latest?.state === 'EVALUATING'} exhausted={latest ? budgetExhausted(latest) : false} />
-        <Ring pal={pal} scanning={st.tower === 'scanning'} />
-        <Jar pal={pal} slots={perDay} />
-        <Grate pal={pal} />
-        <Desk pal={pal} open={st.desk !== null} decided={decided} />
-        <Vault pal={pal} open={st.vault === 'releasing'} rejected={st.vault === 'rejected'} />
-        <Html position={[VAULT[0], 3.55, VAULT[2] + 1.5]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
+        <Robot pal={pal} portal={portal} />
+        <Gate pal={pal} portal={portal} decision={st.gate} evaluating={latest?.state === 'EVALUATING'} exhausted={latest ? budgetExhausted(latest) : false} />
+        <Ring pal={pal} portal={portal} scanning={st.tower === 'scanning'} />
+        <Jar pal={pal} portal={portal} slots={perDay} />
+        <Grate pal={pal} portal={portal} />
+        <Desk pal={pal} portal={portal} open={st.desk !== null} decided={decided} />
+        <Vault pal={pal} portal={portal} open={st.vault === 'releasing'} rejected={st.vault === 'rejected'} />
+        <Html portal={portal} position={[VAULT[0], 3.55, VAULT[2] + 1.5]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
           <span className="floor-plaque" data-testid="floor-treasury">
             {treasury ? `TREASURY ${treasury}` : 'TREASURY'}
           </span>
         </Html>
-        <Ledger pal={pal} />
+        <Ledger pal={pal} portal={portal} />
         {floor.crates.map((c, i) => (
-          <RequestCard key={c.id} crate={c} card={byId.get(c.id) ?? null} slot={slotOf(floor.crates, i)} pal={pal} selected={selected === c.id} onSelect={onSelect ?? null} />
+          <RequestCard key={c.id} crate={c} card={byId.get(c.id) ?? null} slot={slotOf(floor.crates, i)} pal={pal} portal={portal} selected={selected === c.id} onSelect={onSelect ?? null} />
         ))}
         {coinsOf(cards).map((b) => (
           <BondCoin key={b.id} status={b.status} slot={b.slot} pal={pal} />
@@ -234,7 +239,7 @@ function Block({ size, at, color, radius = 0.08, rot }: { size: V3; at: V3; colo
 }
 
 /** A label that appears while the pointer rests on the object. */
-function Hover({ label, at, children }: { label: string; at: V3; children: React.ReactNode }) {
+function Hover({ label, at, portal, children }: { label: string; at: V3; portal: Portal; children: React.ReactNode }) {
   const [on, setOn] = useState(false);
   const { invalidate } = useThree();
   return (
@@ -251,7 +256,7 @@ function Hover({ label, at, children }: { label: string; at: V3; children: React
     >
       {children}
       {on ? (
-        <Html position={at} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
+        <Html portal={portal} position={at} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
           <span className="floor-pin">{label}</span>
         </Html>
       ) : null}
@@ -279,10 +284,10 @@ function useEase(target: number, rate = 7): React.RefObject<number> {
 }
 
 /* ---------- the agent: a small rounded robot with a satchel of coins ---------- */
-function Robot({ pal }: { pal: Palette }) {
+function Robot({ pal, portal }: { pal: Palette; portal: Portal }) {
   const [x, , z] = ROBOT;
   return (
-    <Hover label="Agent" at={[x, 3.0, z]}>
+    <Hover portal={portal} label="Agent" at={[x, 3.0, z]}>
       <group position={[x, 0, z]} rotation={[0, Math.PI / 2 - 0.5, 0]}>
         <Block size={[0.5, 0.3, 0.4]} at={[-0.28, 0, 0]} color={pal.ink} radius={0.1} />
         <Block size={[0.5, 0.3, 0.4]} at={[0.28, 0, 0]} color={pal.ink} radius={0.1} />
@@ -334,7 +339,7 @@ function Robot({ pal }: { pal: Palette }) {
 }
 
 /* ---------- the gate: a turnstile with three lamps ---------- */
-function Gate({ pal, decision, evaluating, exhausted }: { pal: Palette; decision: Floor['stations']['gate']; evaluating: boolean; exhausted: boolean }) {
+function Gate({ pal, portal, decision, evaluating, exhausted }: { pal: Palette; portal: Portal; decision: Floor['stations']['gate']; evaluating: boolean; exhausted: boolean }) {
   const [x, , z] = GATE;
   const lamps = useRef<THREE.MeshStandardMaterial[]>([]);
   const arm = useRef<THREE.Group>(null);
@@ -355,7 +360,7 @@ function Gate({ pal, decision, evaluating, exhausted }: { pal: Palette; decision
     if (arm.current) arm.current.rotation.y = (spin.current * (Math.PI * 2)) / 3;
   });
   return (
-    <Hover label="Authority Engine" at={[x, 3.0, z]}>
+    <Hover portal={portal} label="Authority Engine" at={[x, 3.0, z]}>
       <group position={[x, 0, z]}>
         <Block size={[1.6, 0.25, 2.8]} at={[0, 0, 0]} color={pal.warm1} radius={0.1} />
         <Block size={[0.45, 2.3, 0.45]} at={[0, 0.25, -1.0]} color={pal.tint4} radius={0.12} />
@@ -390,7 +395,7 @@ function Gate({ pal, decision, evaluating, exhausted }: { pal: Palette; decision
 }
 
 /* ---------- Chainlink CRE: a ring of three hexagonal nodes over the gate ---------- */
-function Ring({ pal, scanning }: { pal: Palette; scanning: boolean }) {
+function Ring({ pal, portal, scanning }: { pal: Palette; portal: Portal; scanning: boolean }) {
   const nodes = useRef<THREE.MeshStandardMaterial[]>([]);
   const beam = useRef<THREE.MeshBasicMaterial>(null);
   const group = useRef<THREE.Group>(null);
@@ -408,7 +413,7 @@ function Ring({ pal, scanning }: { pal: Palette; scanning: boolean }) {
   });
   const r = 0.95;
   return (
-    <Hover label="Chainlink CRE" at={[RING[0], RING[1] + 1.3, RING[2]]}>
+    <Hover portal={portal} label="Chainlink CRE" at={[RING[0], RING[1] + 1.3, RING[2]]}>
       <group position={RING}>
         <group ref={group}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
@@ -448,10 +453,10 @@ function Ring({ pal, scanning }: { pal: Palette; scanning: boolean }) {
 
 /* ---------- escrow: a glass jar on a pedestal with one slot per interruption of the day's budget ---------- */
 const JAR_SLOT_Y = (slot: number) => 1.25 + slot * 0.36;
-function Jar({ pal, slots }: { pal: Palette; slots: number }) {
+function Jar({ pal, portal, slots }: { pal: Palette; portal: Portal; slots: number }) {
   const [x, , z] = JAR;
   return (
-    <Hover label={`Bond escrow, ${slots} slots`} at={[x, JAR_SLOT_Y(slots) + 0.9, z]}>
+    <Hover portal={portal} label={`Bond escrow, ${slots} slots`} at={[x, JAR_SLOT_Y(slots) + 0.9, z]}>
       <group position={[x, 0, z]}>
         <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[0.55, 0.65, 1.0, 24]} />
@@ -476,10 +481,10 @@ function Jar({ pal, slots }: { pal: Palette; slots: number }) {
   );
 }
 
-function Grate({ pal }: { pal: Palette }) {
+function Grate({ pal, portal }: { pal: Palette; portal: Portal }) {
   const [x, , z] = GRATE;
   return (
-    <Hover label="Sink" at={[x, 1.2, z]}>
+    <Hover portal={portal} label="Sink" at={[x, 1.2, z]}>
       <group position={[x, 0, z]}>
         <mesh position={[0, -0.18, 0]}>
           <boxGeometry args={[1.3, 0.4, 1.3]} />
@@ -501,7 +506,7 @@ function Grate({ pal }: { pal: Palette }) {
 }
 
 /* ---------- the human at the desk, a pen in hand, a hardware wallet by the elbow ---------- */
-function Desk({ pal, open, decided }: { pal: Palette; open: boolean; decided: number }) {
+function Desk({ pal, portal, open, decided }: { pal: Palette; portal: Portal; open: boolean; decided: number }) {
   const [x, , z] = DESK;
   const arm = useRef<THREE.Group>(null);
   const glow = useRef<THREE.PointLight>(null);
@@ -527,7 +532,7 @@ function Desk({ pal, open, decided }: { pal: Palette; open: boolean; decided: nu
     if (glow.current) glow.current.intensity = lit.current * 6;
   });
   return (
-    <Hover label="Human" at={[x, 3.4, z - 0.6]}>
+    <Hover portal={portal} label="Human" at={[x, 3.4, z - 0.6]}>
       <group position={[x, 0, z]}>
         <Block size={[2.6, 0.12, 1.3]} at={[0, 0.85, 0]} color={pal.warm1} radius={0.05} />
         <Block size={[0.12, 0.85, 1.1]} at={[-1.15, 0, 0]} color={pal.warm2} radius={0.03} />
@@ -575,7 +580,7 @@ function Desk({ pal, open, decided }: { pal: Palette; open: boolean; decided: nu
 }
 
 /* ---------- the vault: a safe with a round door, a wheel, and the balance on a plaque ---------- */
-function Vault({ pal, open, rejected }: { pal: Palette; open: boolean; rejected: boolean }) {
+function Vault({ pal, portal, open, rejected }: { pal: Palette; portal: Portal; open: boolean; rejected: boolean }) {
   const [x, , z] = VAULT;
   const door = useRef<THREE.Group>(null);
   const light = useRef<THREE.PointLight>(null);
@@ -588,7 +593,7 @@ function Vault({ pal, open, rejected }: { pal: Palette; open: boolean; rejected:
   const h = 3.9;
   const d = 2.8;
   return (
-    <Hover label="Treasury vault" at={[x, h + 1.0, z]}>
+    <Hover portal={portal} label="Treasury vault" at={[x, h + 1.0, z]}>
       <group position={[x, 0, z]}>
         <RoundedBox args={[w, h, d]} radius={0.2} smoothness={4} position={[0, h / 2, 0]} castShadow receiveShadow>
           <Mat color={rejected ? pal.denied : pal.vault} />
@@ -624,10 +629,10 @@ function Vault({ pal, open, rejected }: { pal: Palette; open: boolean; rejected:
 }
 
 /* ---------- receipts: a pinned board on the right ---------- */
-function Ledger({ pal }: { pal: Palette }) {
+function Ledger({ pal, portal }: { pal: Palette; portal: Portal }) {
   const [x, , z] = LEDGER;
   return (
-    <Hover label="Receipts" at={[x, 3.9, z]}>
+    <Hover portal={portal} label="Receipts" at={[x, 3.9, z]}>
       <group position={[x, 0, z]}>
         <Block size={[0.16, 3.4, 0.16]} at={[-1.0, 0, 0]} color={pal.ink} radius={0.04} />
         <Block size={[0.16, 3.4, 0.16]} at={[1.0, 0, 0]} color={pal.ink} radius={0.04} />
@@ -699,7 +704,7 @@ function useTravel(g: React.RefObject<THREE.Group | null>, at: V3, rot: V3, hop:
 }
 
 /* ---------- a request card: the paper the agent sends, the human reads, the vault settles, the board pins ---------- */
-function RequestCard({ crate, card, slot, pal, selected, onSelect }: { crate: Crate; card: CardView | null; slot: number; pal: Palette; selected: boolean; onSelect: ((id: string) => void) | null }) {
+function RequestCard({ crate, card, slot, pal, portal, selected, onSelect }: { crate: Crate; card: CardView | null; slot: number; pal: Palette; portal: Portal; selected: boolean; onSelect: ((id: string) => void) | null }) {
   const g = useRef<THREE.Group>(null);
   const mat = useRef<THREE.MeshStandardMaterial>(null);
   const [hover, setHover] = useState(false);
@@ -762,7 +767,7 @@ function RequestCard({ crate, card, slot, pal, selected, onSelect }: { crate: Cr
           <meshBasicMaterial color={pal.ink} transparent opacity={0.6} side={THREE.DoubleSide} />
         </mesh>
       ) : null}
-      <Html center zIndexRange={[4, 0]}>
+      <Html portal={portal} center zIndexRange={[4, 0]}>
         <button
           type="button"
           className="floor-crate-hit"
