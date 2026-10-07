@@ -1,29 +1,43 @@
 @import "tailwindcss";
 @import "../components/floor/floor.css";
 
-/* Authority Line tokens. Light "mist" surface for LIVE; dark "tape" surface for REPLAY.
-   permit / cosign / forbid / tape are status colors only (zones, outcomes), never decoration. */
+/* Brand tokens, shared with the deck. Paper and navy are the two poles; the accent scale comes from the deck card
+   gradient; permit / cosign / forbid are status colours only (zones, outcomes), never decoration.
+   Light "paper" surface for LIVE and the public pages; dark "navy" surface for REPLAY. Token names are stable. */
 :root {
-  --mist: #e9ecea;
-  --ink: #16201c;
-  --permit: #1f7a55;
-  --cosign: #b7791f;
-  --forbid: #b42318;
-  --tape: #22262c;
+  --mist: #fbf6f1;
+  --ink: #185079;
+  --tape: #0f2f49;
+  --accent-1: #bbd6e1;
+  --accent-2: #95bfd1;
+  --accent-3: #6ba1bc;
+  --accent-4: #3885ab;
+  --permit: #237a5e;
+  --cosign: #8c6420;
+  --forbid: #b3463a;
 
   --surface: var(--mist);
-  --raised: #f6f7f5;
-  --fg: var(--ink);
-  --muted: #5b6662;
-  --line: rgb(22 32 28 / 0.14);
+  --raised: #ffffff;
+  --heading: var(--ink);
+  --fg: #2a3f52;
+  --muted: #5e7387;
+  --line: #e3dcd3;
+  --btn-bg: var(--ink);
+  --btn-fg: var(--mist);
 }
 
 [data-mode="replay"] {
   --surface: var(--tape);
-  --raised: #2b3037;
-  --fg: #e9ecea;
-  --muted: #a3aaa6;
-  --line: rgb(233 236 234 / 0.16);
+  --raised: #173d5a;
+  --heading: #efe6dc;
+  --fg: #efe6dc;
+  --muted: #a9bac8;
+  --line: rgb(251 246 241 / 0.16);
+  --permit: #6fcaa6;
+  --cosign: #e3b65c;
+  --forbid: #f0927f;
+  --btn-bg: #efe6dc;
+  --btn-fg: var(--tape);
 }
 
 @theme inline {
@@ -38,6 +52,11 @@
   --color-cosign: var(--cosign);
   --color-forbid: var(--forbid);
   --color-tape: var(--tape);
+  --color-heading: var(--heading);
+  --color-accent-1: var(--accent-1);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
+  --color-accent-4: var(--accent-4);
   --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, monospace;
   --font-serif: var(--font-news), ui-serif, Georgia, serif;
@@ -48,16 +67,24 @@ body {
   background: var(--surface);
   color: var(--fg);
 }
+/* Headings in navy (paper-tinted in REPLAY); a utility class on the heading still wins. */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    color: var(--heading);
+  }
+}
 
 /* Outside the floor, the only motion in the product: the action's marker slides along the boundary rail. */
 .rail-marker {
   transition: left 400ms var(--ease-settle);
 }
 .replay-hatch {
-  background-image: repeating-linear-gradient(135deg, rgb(233 236 234 / 0.08) 0 10px, transparent 10px 20px);
+  background-image: repeating-linear-gradient(135deg, rgb(251 246 241 / 0.08) 0 10px, transparent 10px 20px);
 }
 .forbid-hatch {
-  background-image: repeating-linear-gradient(135deg, rgb(180 35 24 / 0.22) 0 6px, rgb(180 35 24 / 0.1) 6px 12px);
+  background-image: repeating-linear-gradient(135deg, rgb(179 70 58 / 0.22) 0 6px, rgb(179 70 58 / 0.1) 6px 12px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -76,12 +103,12 @@ body {
   letter-spacing: -0.01em;
 }
 .btn {
-  border: 1.5px solid var(--fg);
-  color: var(--fg);
+  border: 1.5px solid var(--btn-bg);
+  color: var(--btn-bg);
 }
 .btn-strong {
-  background: var(--fg);
-  color: var(--surface);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
 }
 /* Destructive confirm only. Unlayered so it wins over .btn-strong; utilities would not. */
 .btn-danger {
@@ -106,7 +133,7 @@ body {
   filter: brightness(0) invert(1);
 }
 :focus-visible {
-  outline: 2px solid var(--fg);
+  outline: 2px solid var(--btn-bg);
   outline-offset: 2px;
 }
 
