@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { CardanoError as PackageCardanoError } from '@authority/cardano';
 import { bytesToHex, fieldsFromRecord, publicKeyFromSecret, verifyAuthorizationRecord } from '@authority/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { forgeAuthorization, labKeys } from '../src/lab';
-import type { LabRunner } from '../src/ports';
+import { CardanoError, type LabRunner } from '../src/ports';
 import { ADDR, action, AGENT_KEY, type Api, inv, LAB_AGENT_SK, LAB_ENGINE_SK, signed, startApi } from './harness';
 
 let api: Api;
@@ -15,6 +16,16 @@ const wait = async (runId: string, type: string) => {
   }
   throw new Error(`no ${type}`);
 };
+
+describe('CardanoError', () => {
+  it('is the class thrown by @authority/cardano', () => {
+    expect(CardanoError).toBe(PackageCardanoError);
+    const err = new PackageCardanoError('CONTENTION', 'already spent', 'R8', 'abcd');
+    expect(err).toBeInstanceOf(CardanoError);
+    expect(err.code).toBe('CONTENTION');
+    expect(err.invariant).toBe('R8');
+  });
+});
 
 describe('Attack Lab isolation', () => {
   it('the lab module reads only M_LAB_* settings and never names the stage keys', () => {

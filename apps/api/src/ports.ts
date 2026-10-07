@@ -1,6 +1,8 @@
 import type { VerificationOutcome } from '@authority/chainlink';
 import type { ActionIR, AuthorizationFields, AuthorizationRecord, ChainBinding, Mandate } from '@authority/core';
 
+export { CardanoError, type CardanoErrorCode } from '@authority/cardano';
+
 // Everything the API needs from the outside world. Real implementations are wired in main.ts;
 // tests use in-memory fakes. Cardano is authoritative for vault and anchor state.
 
@@ -37,20 +39,6 @@ export interface SettlementMetadata {
 export interface UnsignedTx {
   txCbor: string;
   txHash: string;
-}
-
-export type CardanoErrorCode = 'SCRIPT_FAILED' | 'CONTENTION' | 'SUBMIT_FAILED';
-
-export class CardanoError extends Error {
-  constructor(
-    readonly code: CardanoErrorCode,
-    message: string,
-    /** Vault or anchor invariant from the script trace, e.g. "R8" */
-    readonly invariant: string | null = null,
-    readonly txCbor: string | null = null,
-  ) {
-    super(message);
-  }
 }
 
 export interface CardanoPort {
