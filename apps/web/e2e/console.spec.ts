@@ -184,7 +184,7 @@ test('mandate admin signs revoke and update and cannot approve payments', async 
   await controls.getByRole('button', { name: 'Revoke mandate' }).click();
   const confirm = controls.getByRole('button', { name: 'Confirm: revoke M-001 v3' });
   await expect(confirm).toHaveClass(/btn-danger/);
-  await expect(confirm).toHaveCSS('background-color', 'rgb(180, 35, 24)');
+  await expect(confirm).toHaveCSS('background-color', 'rgb(179, 70, 58)');
   const revokeReq = page.waitForRequest((r) => r.url().endsWith('/v1/mandates/M-001/revoke') && r.method() === 'POST');
   const submitReq = page.waitForRequest((r) => r.url().endsWith('/v1/mandates/M-001/submit') && r.method() === 'POST');
   await confirm.click();

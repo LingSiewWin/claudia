@@ -34,6 +34,49 @@ test('landing states the thesis, replays a real payment, and points agents and h
   await page.screenshot({ path: 'test-results/landing.png', fullPage: true });
 });
 
+test('the header switch opens the agent reader: the served files verbatim, raw links, a curl line; the footer keeps GitHub and Sokosumi', async ({ page, request }) => {
+  await page.goto('/');
+  const tabs = page.getByRole('tablist', { name: 'Reader' });
+  await expect(tabs.getByRole('tab', { name: 'Human' })).toHaveAttribute('aria-selected', 'true');
+  await tabs.getByRole('tab', { name: 'Agent' }).click();
+  await expect(page).toHaveURL(/\?mode=agent$/);
+  await expect(tabs.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true');
+  const surface = page.getByTestId('agent-surface');
+  for (const p of ['/llms.txt', '/llms-full.txt', '/.well-known/agent.json']) await expect(surface.getByRole('link', { name: p }).first()).toHaveAttribute('href', p);
+  await expect(surface).toContainText('curl -s https://claudiahq.vercel.app/llms.txt');
+  await expect(page.getByTestId('floor')).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Built with' })).toHaveCount(0);
+  for (const path of ['/llms.txt', '/llms-full.txt']) {
+    const served = await (await request.get(path)).text();
+    const shown = (await page.locator(`[data-testid=agent-file][data-path="${path}"] pre`).allTextContents()).join('');
+    expect(shown, path).toBe(served);
+  }
+  expect(await surface.getByRole('button', { name: /^Copy / }).count()).toBeGreaterThan(10);
+  await page.screenshot({ path: 'test-results/landing-agent.png', fullPage: true });
+  await expect(page.locator('footer').getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/LingSiewWin/claudia');
+  await expect(page.locator('footer').getByRole('link', { name: 'Sokosumi' })).toHaveAttribute('href', 'https://preprod.sokosumi.com/');
+  await expect(page.locator('footer')).not.toContainText('/llms.txt');
+  // Persisted: a plain visit to / reopens the agent reader until Human is chosen.
+  await page.goto('/');
+  await expect(page).toHaveURL(/\?mode=agent$/);
+  await tabs.getByRole('tab', { name: 'Human' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('floor')).toBeVisible();
+});
+
+test('/ answers agents with llms.txt as text/plain and browsers with HTML', async ({ request }) => {
+  const llms = await (await request.get('/llms.txt')).text();
+  for (const headers of [{ accept: 'text/plain' }, { accept: 'text/markdown, */*;q=0.1' }, { 'user-agent': 'GPTBot/1.0', accept: 'text/html,*/*' }, { 'user-agent': 'ClaudeBot/1.0' }]) {
+    const res = await request.get('/', { headers });
+    expect(res.headers()['content-type'], JSON.stringify(headers)).toContain('text/plain');
+    expect(await res.text(), JSON.stringify(headers)).toBe(llms);
+  }
+  const html = await request.get('/', { headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'user-agent': 'Mozilla/5.0 Chrome/130' } });
+  expect(html.headers()['content-type']).toContain('text/html');
+  expect(await html.text()).toContain('Give your agents an allowance');
+});
+
 test('protocol page renders the markdown source with a table of contents', async ({ page }) => {
   await page.goto('/protocol');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Claudia protocol');

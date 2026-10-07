@@ -6,7 +6,8 @@ const page = readFileSync(new URL('app/page.tsx', root), 'utf8');
 
 describe('built with', () => {
   it('names the four integrations in the last section and ships both logo files', () => {
-    const section = page.slice(page.indexOf('aria-label="Built with"'), page.indexOf('<SiteFooter />'));
+    const start = page.indexOf('aria-label="Built with"');
+    const section = page.slice(start, page.indexOf('</section>', start));
     expect(section.length).toBeGreaterThan(0);
     for (const name of ['Cardano', 'Chainlink', 'Masumi and Sokosumi', 'x402']) expect(section).toContain(`name="${name}"`);
     expect(section).not.toMatch(/Supported by|Powered by/);
