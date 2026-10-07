@@ -16,7 +16,7 @@ export default function ProtocolPage() {
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
       <SiteHeader current="protocol" />
-      <div className="mt-10 grid gap-10 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-8 lg:self-start">
           <p className="text-sm font-extrabold tracking-wide">CONTENTS</p>
           <ol className="mt-3 space-y-1.5 text-[15px]">

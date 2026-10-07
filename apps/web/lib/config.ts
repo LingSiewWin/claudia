@@ -18,6 +18,9 @@ export const config = {
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || null,
 };
 
+/** Canonical public origin for metadata and the sitemap, where no request is available. */
+export const PUBLIC_SITE_URL = config.siteUrl ?? 'https://claudiahq.vercel.app';
+
 export const cardanoTxUrl = (hash: string) => `https://preprod.cexplorer.io/tx/${hash}`;
 /** Bond escrow transactions link to Cardanoscan, which decodes the escrow datum and redeemer. */
 export const cardanoscanTxUrl = (hash: string) => `https://preprod.cardanoscan.io/transaction/${hash}`;
