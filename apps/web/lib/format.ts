@@ -74,6 +74,17 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   ABOVE_AUTONOMOUS_LIMIT: "The amount is above the agent's autonomous limit.",
   INTERRUPT_BUDGET_EXHAUSTED: "The agent has used today's interrupt budget.",
   PRINCIPAL_DECLINED: 'The CFO declined this payment.',
+  FX_NOT_AUTHORIZED: 'This mandate does not allow FX rate locks.',
+  FX_CORRIDOR_NOT_AUTHORIZED: 'This currency corridor is not in the mandate.',
+  FX_NOTIONAL_ABOVE_LIMIT: 'The FX notional is above the mandate limit.',
+  FX_TENOR_ABOVE_LIMIT: 'The lock tenor is longer than the mandate allows.',
+  FX_CONTRACT_TYPE_NOT_AUTHORIZED: 'This contract type is not allowed; only options are.',
+  FX_QUOTE_STALE: 'The quote expires too soon to act on.',
+  QUOTE_NOT_FOUND: 'The provider has no such quote.',
+  RATE_MISMATCH: 'The locked rate differs from the provider quote.',
+  PREMIUM_MISMATCH: 'The premium differs from the provider quote.',
+  EXPIRY_MISMATCH: 'The quote expiry differs from the provider quote.',
+  QUOTE_OFF_MARKET: 'The quote is too far from the market rate.',
 };
 
 /** Codes outside ReasonCode that an Attack Lab result can carry. */
