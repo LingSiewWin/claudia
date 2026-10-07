@@ -94,20 +94,19 @@ function namedHead(head: unknown): LogAnchor | null {
     : null;
 }
 
-/** Policies named by this run's authorizations. One run has one mandate; more than one is not a policy to bind. */
+/** Policies named by this run's authorizations. A closing anchor binds only when exactly one is named. */
 function mandatePolicies(events: RunEvent[]): string[] {
   return [...new Set(events.flatMap((e) => (e.type === 'AuthorizationIssued' ? [e.payload.authorization.fields.mandate_ref] : [])))];
 }
 
 /**
  * Engine verification key from the mandate datum.
- * When the run names a mandate policy, the reference input must carry the mandate token under that policy,
+ * The reference input must carry the mandate token under the policy the run's authorizations name,
  * the same match receipt verification uses. A mandate-named token on another policy does not supply the key.
- * A run that names no authorization has no policy to bind, so the first mandate-named token is used.
  */
-function engineVkey(tx: KoiosTx, policyId: string | null): string | null {
+function engineVkey(tx: KoiosTx, policyId: string): string | null {
   const utxo = tx.reference_inputs.find((u) =>
-    u.asset_list.some((x) => x.asset_name === MANDATE_TOKEN_HEX && (policyId === null || x.policy_id === policyId)),
+    u.asset_list.some((x) => x.asset_name === MANDATE_TOKEN_HEX && x.policy_id === policyId),
   );
   return bytesOf(field(utxo?.inline_datum?.value, 3));
 }
@@ -128,7 +127,7 @@ async function committedHead(read: ReadTx, txHash: string): Promise<LogAnchor | 
  * EVIDENCE_ANCHOR_V1 || run_id || seq || hash, checked against engine_vkey in the on-chain mandate datum
  * of the policy the run's authorizations name. Unsigned or invalid is no closing anchor.
  */
-async function signedClosingHead(read: ReadTx, txHash: string, runId: string, policyId: string | null): Promise<LogAnchor | null> {
+async function signedClosingHead(read: ReadTx, txHash: string, runId: string, policyId: string): Promise<LogAnchor | null> {
   let tx: KoiosTx | null;
   try {
     tx = await read(txHash);
@@ -152,8 +151,9 @@ async function signedClosingHead(read: ReadTx, txHash: string, runId: string, po
 export async function readAnchor(events: RunEvent[], read: ReadTx, closingTx: string | null = null): Promise<LogAnchor | null> {
   const runId = events[0]?.run_id;
   const policies = mandatePolicies(events);
-  if (closingTx && runId && policies.length <= 1) {
-    const closing = await signedClosingHead(read, closingTx, runId, policies[0] ?? null);
+  const policyId = policies.length === 1 ? policies[0] : undefined;
+  if (closingTx && runId && policyId) {
+    const closing = await signedClosingHead(read, closingTx, runId, policyId);
     if (closing) return closing;
   }
   const settled = events.findLast((e) => e.type === 'TransactionConfirmed');

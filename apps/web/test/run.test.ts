@@ -2,7 +2,7 @@ import { canonicalJson, concatBytes, hexToBytes, sha256Hex, utf8ToBytes } from '
 import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '../lib/contract';
 import { formatUnits } from '../lib/format';
-import type { KoiosTx } from '../lib/chain';
+import { MANDATE_TOKEN_HEX, type KoiosTx } from '../lib/chain';
 import {
   REPLAY_FAILED,
   REPLAY_UNANCHORED,
@@ -362,6 +362,29 @@ describe('REPLAY anchor read from Cardano', () => {
     };
     expect(await readAnchor(events, decoyFirst, closingTx())).toEqual(closingHead);
   });
+  it('does not treat a first-listed mandate token on another policy as the closing anchor when the log names no policy', async () => {
+    const runId = 'run-lab-prompt_injection';
+    const events = recorded.logs[runId]!;
+    expect(events.some((e) => e.type === 'AuthorizationIssued')).toBe(false);
+    const otherPolicy = 'cc'.repeat(28);
+    // Datum key stays the real engine key, so a name-only match would still verify this token.
+    const decoyFirst = async (h: string): Promise<KoiosTx | null> => {
+      const tx = structuredClone(recorded.koios[h] ?? null);
+      if (tx && h === closingTx(runId)) {
+        const real = tx.reference_inputs.find((u) => u.asset_list.some((a) => a.asset_name === MANDATE_TOKEN_HEX));
+        if (!real) return tx;
+        const decoy = structuredClone(real);
+        decoy.asset_list = decoy.asset_list.map((a) => ({ ...a, policy_id: otherPolicy }));
+        tx.reference_inputs = [decoy, ...tx.reference_inputs];
+      }
+      return tx;
+    };
+    expect(await readAnchor(events, decoyFirst, closingTx(runId))).toBeNull();
+    expect(replayPlan(events, await readAnchor(events, decoyFirst, closingTx(runId)), false, runId)).toMatchObject({
+      verdict: 'unanchored',
+      banner: REPLAY_UNANCHORED,
+    });
+  });
   it('treats a bare hash as no anchor', async () => {
     const events = stage();
     const { tx, built } = settlement(events, 'last');
@@ -422,10 +445,11 @@ describe('REPLAY anchor read from Cardano', () => {
     const { built } = settlement(lab, 'last');
     const plan = replayPlan(lab, await readAnchor(lab, koios), false, 'run-lab-replay');
     expect(plan).toMatchObject({ verdict: 'through', banner: replayVerifiedThrough(built.payload.log_head.seq) });
+    const noMandatePolicy = new Set(['run-lab-prompt_injection', 'run-lab-prompt_injection_direct']);
     for (const r of recorded.runs.filter((x) => x.run_id !== 'run-lab-replay')) {
       const log = recorded.logs[r.run_id]!;
       const closed = replayPlan(log, await readAnchor(log, koios, closingTx(r.run_id)), r.run_id === STAGE, r.run_id);
-      expect(closed.verdict, r.run_id).toBe('verified');
+      expect(closed.verdict, r.run_id).toBe(noMandatePolicy.has(r.run_id) ? 'unanchored' : 'verified');
     }
   });
   it('lists the actions whose evidence runs past the anchor', () => {
