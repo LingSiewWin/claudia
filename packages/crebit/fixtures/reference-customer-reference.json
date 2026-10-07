@@ -1,0 +1,5 @@
+{ "route": "POST /fx/customer-references", "status": 201, "body": {
+  "id": "66666666-6666-4666-8666-666666666666",
+  "customer_reference_id": "partner-cust-ref-2026-0042",
+  "created_at": "2026-05-24T16:00:00Z"
+} }

@@ -1,0 +1,48 @@
+{
+  "route": "GET /fx/supported-chains",
+  "status": 200,
+  "body": {
+    "chains": [
+      {
+        "chain": "solana",
+        "settlement_currencies": [
+          "USDC",
+          "USDT"
+        ],
+        "status": "live",
+        "address_format_hint": "base58 pubkey (~32–44 chars)",
+        "enabled": true
+      },
+      {
+        "chain": "tron",
+        "settlement_currencies": [
+          "USDT"
+        ],
+        "status": "live",
+        "address_format_hint": "Base58Check address starting with T (~34 chars)",
+        "enabled": true
+      },
+      {
+        "chain": "ethereum",
+        "settlement_currencies": [
+          "USDC",
+          "USDT"
+        ],
+        "status": "planned",
+        "address_format_hint": "0x-prefixed 20-byte hex address",
+        "enabled": false
+      },
+      {
+        "chain": "polygon",
+        "settlement_currencies": [
+          "USDC",
+          "USDT"
+        ],
+        "status": "planned",
+        "address_format_hint": "0x-prefixed 20-byte hex address (EVM)",
+        "enabled": false
+      }
+    ],
+    "funded_settlement_pairs": null
+  }
+}

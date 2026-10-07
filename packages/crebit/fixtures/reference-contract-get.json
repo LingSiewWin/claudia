@@ -1,0 +1,29 @@
+{
+  "route": "GET /fx/contracts/{contract_id}",
+  "status": 200,
+  "body": {
+    "id": "33333333-3333-4333-8333-333333333333",
+    "crebit_contract_reference": "CREBIT-20260524-7F3A9C2B1D",
+    "contract_type": "forward",
+    "direction": "USD_TO_BRL",
+    "notional_currency": "USD",
+    "locked_rate": "5.42",
+    "provider_rate_at_lock": "5.42",
+    "market_rate_at_lock": "5.4180",
+    "premium_amount": "1565.00",
+    "deposit_amount": "5000.00",
+    "total_amount": "6565.00",
+    "window_start": "2026-08-04T00:00:00Z",
+    "window_end": "2026-08-11T00:00:00Z",
+    "chain": "ethereum",
+    "settlement_currency": "USDC",
+    "funding_wallet_address": "0xCrebitFundingWalletForThisContract",
+    "payout_wallet_address": "0xEndUserWalletForSettlement",
+    "payout_currency": "USDC",
+    "payout_chain": "ethereum",
+    "oracle": "redstone",
+    "created_at": "2026-05-24T16:20:00Z",
+    "max_transaction_amount": "50000.00",
+    "partner_transaction_reference": "platform-tx-9901"
+  }
+}

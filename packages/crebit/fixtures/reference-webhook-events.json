@@ -1,0 +1,8 @@
+{
+  "route": "GET /fx/webhook-events",
+  "status": 200,
+  "body": {
+    "items": [],
+    "next_cursor": null
+  }
+}
