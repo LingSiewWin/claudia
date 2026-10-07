@@ -134,8 +134,68 @@ export function authorizationRecord(requiresPrincipal: boolean, o: Partial<Autho
   };
 }
 
+const RECIPIENT = 'addr_test1vzs6rgdp5xs6rgdp5xs6rgdp5xs6rgdp5xs6rgdp5xs6rggfw5wvl';
+
+// The 402 price the API quotes a Masumi caller on ESCALATE (no 402 for this key), bound to authorityResponse()'s action.
+export const PRICE = {
+  schema: 'escalation-price/v0.1' as const,
+  approval_id: 'AP-7',
+  network: 'cardano-preprod' as const,
+  asset: { policy_id: '', asset_name: '', symbol: 'ADA' },
+  amount: '5000000',
+  escrow_address: 'addr_test1wzescrowexample',
+  action_hash: 'dd'.repeat(32),
+  approver_key_hash: 'ab'.repeat(28),
+  locked_until_ms: 1_800_000_000_000,
+  interrupt_budget: { used: 1, per_day: 3 },
+};
+export const ESCALATION = { price: PRICE, approval_endpoint: 'https://api.authority.example/v1/authority/check' };
+
+// brief/v0.1 as @authority/core builds it for authorityResponse()'s evaluation.
+export function brief(outcome: 'ALLOW' | 'ESCALATE' | 'DENY') {
+  return {
+    schema: 'brief/v0.1' as const,
+    action_id: 'A-M-0001',
+    action_hash: 'dd'.repeat(32),
+    requested_by: 'cfo-agent-01',
+    mandate: { id: 'M-001', version: 3, hash: 'cc'.repeat(32) },
+    what: {
+      type: 'pay_invoice' as const,
+      amount: { value: '8420000', asset: 'USDM', display: '8.42 USDM' },
+      counterparty: { id: 'aws', display: 'AWS (demo vendor)' },
+      recipient: RECIPIENT,
+      reference: { invoice_id: 'in_demo_0001', invoice_number: 'INV-M-0001' },
+    },
+    why: 'Open AWS invoice for October cloud compute.',
+    engine: {
+      outcome,
+      reason: outcome === 'DENY' ? ('RECIPIENT_MISMATCH' as const) : null,
+      checks: [{ id: 'purpose', kind: 'purpose_in', result: 'pass', reason: null }],
+    },
+    escalation: outcome === 'ESCALATE' ? { approver: 'cfo', because: [{ constraint: 'autonomous_limit', reason: 'ABOVE_AUTONOMOUS_LIMIT' as const }] } : null,
+    verified: {
+      report_hash: 'ee'.repeat(32),
+      sepolia_tx: `0x${'ab'.repeat(32)}`,
+      result: outcome === 'DENY' ? ('MISMATCH' as const) : ('VERIFIED' as const),
+      facts: { exists: true, customer_match: true, status_open: true, amount_match: true, currency_match: true, recipient_match: outcome !== 'DENY' },
+    },
+    limits: { autonomous_limit: '10000000', hard_cap: '50000000', daily_cap: '100000000', treasury_minimum: '5000000' },
+    will_happen: `Release 8.42 USDM from vault acme-treasury to ${RECIPIENT} for AWS (demo vendor) for invoice INV-M-0001 (in_demo_0001). Nothing else is authorized by this signature.`,
+    expires_at_ms: 1_800_000_000_000,
+    cost: { bond: outcome === 'ESCALATE' ? { amount: '5000000', asset: 'ADA' } : null, interrupt_budget: { used: 1, per_day: 3 } },
+  };
+}
+
 export function authorityResponse(
-  o: { outcome?: 'ALLOW' | 'ESCALATE' | 'DENY'; signed?: boolean; authorization?: unknown; interpreted?: unknown; receiptId?: string } = {},
+  o: {
+    outcome?: 'ALLOW' | 'ESCALATE' | 'DENY';
+    signed?: boolean;
+    authorization?: unknown;
+    interpreted?: unknown;
+    receiptId?: string;
+    brief?: unknown;
+    escalation?: unknown;
+  } = {},
 ) {
   const signed = o.signed ?? true;
   const outcome = o.outcome ?? 'ALLOW';
@@ -156,6 +216,8 @@ export function authorityResponse(
     verification: { report_hash: 'ee'.repeat(32), sepolia_tx: `0x${'ab'.repeat(32)}`, facts: { recipient_match: outcome !== 'DENY' } },
     authorization:
       o.authorization !== undefined ? o.authorization : signed && outcome !== 'DENY' ? authorizationRecord(outcome === 'ESCALATE') : null,
+    brief: o.brief !== undefined ? o.brief : brief(outcome),
+    escalation: o.escalation !== undefined ? o.escalation : outcome === 'ESCALATE' ? ESCALATION : null,
     receipt_id: o.receiptId ?? 'R-0001',
     receipt_hash: '11'.repeat(32),
     events_url: 'https://api.authority.example/v1/runs/r1/events',
