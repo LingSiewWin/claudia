@@ -1,6 +1,7 @@
 // One escalation on M-001 paid the x402 exact-scheme way: the official @x402/core client reads our 402, the
 // Cardano scheme client (@x402/cardano) builds the PAYMENT-SIGNATURE from a signed, unbroadcast lock tx of the
-// agent wallet, and the API submits the lock and pages the approver. Spends one unit of the interrupt budget.
+// agent wallet, and the API submits the lock and pages the approver. Spends one unit of the interrupt budget; the
+// approval is left pending, so it lapses at locked_until and the bond is refunded.
 // Usage: pnpm --filter @authority/api x402-exact [--api http://127.0.0.1:8789] [--probe-facilitator: sign, POST /verify, print, stop]
 // Env: AUTHORITY_API_URL, AUTHORITY_AGENT_KEY, M001_AGENT_SECRET_KEY, STRIPE_READ_KEY, STRIPE_ACME_CUSTOMER_ID,
 //      AGENT_WALLET_MNEMONIC, BLOCKFROST_PROJECT_ID_PREPROD
@@ -60,9 +61,17 @@ const client = new x402Client().register('cardano:preprod', new ExactCardanoSche
 // One open invoice above the autonomous limit, signed with the M-001 agent key as the agent runtime does.
 const view = (await call('GET', '/v1/mandates/M-001')).json;
 const limit = BigInt(view.limits.autonomous_limit);
+const spendable = BigInt(view.vault.balance) - BigInt(view.limits.treasury_minimum);
+const cap = BigInt(view.limits.hard_cap) < spendable ? BigInt(view.limits.hard_cap) : spendable;
 const open = await listOpenInvoices(readOnlyStripe(need('STRIPE_READ_KEY')), need('STRIPE_ACME_CUSTOMER_ID'));
-const inv = open.find((i) => i.payout_address && i.vendor_id === 'aws' && i.number && BigInt(i.amount_usdm) > limit);
-if (!inv) throw new Error('no open AWS invoice above the autonomous limit; seed the stage invoices first');
+// The smallest invoice that escalates without tripping the hard cap or the treasury floor: a vendor the mandate
+// does not list (counterparty), else an amount above the autonomous limit.
+const approved = new Set<string>(view.mandate.constraints.flatMap((c: { kind: string; values?: string[] }) => (c.kind === 'counterparty_in' ? c.values! : [])));
+const inv = open
+  .filter((i) => i.payout_address && i.vendor_id && i.number && !i.number.startsWith('INV-L-') && BigInt(i.amount_usdm) <= cap && (!approved.has(i.vendor_id) || BigInt(i.amount_usdm) > limit))
+  .sort((x, y) => (BigInt(x.amount_usdm) < BigInt(y.amount_usdm) ? -1 : 1))[0];
+if (!inv) throw new Error(`no open invoice that escalates within ${cap} USDM units; seed the stage invoices first`);
+console.log(JSON.stringify({ invoice: inv.number, amount_usdm: inv.amount_usdm, vault_balance: view.vault.balance }));
 
 const { run_id: run } = (await call('POST', '/v1/runs', { mandate_id: 'M-001' })).json;
 const claimed = (await call('POST', '/v1/agent/runs/claim', {}, agent)).json;
@@ -80,10 +89,10 @@ const action = ActionIRSchema.parse({
   recipient: { chain: 'cardano', address: inv.payout_address },
   source: { vault: 'acme-treasury' },
   reference: { invoice_id: inv.id, invoice_number: inv.number },
-  rationale: `${inv.number} is above the autonomous limit; asking the approver, bond paid with the x402 exact scheme.`,
+  rationale: `${inv.number} needs the approver (unlisted vendor or above the autonomous limit); bond paid with the x402 exact scheme.`,
   created_at: new Date().toISOString(),
 });
-const body = { mandate_id: 'M-001', proposal: { action, agent_signature: signProposal(canonicalHash(action), agentSk) }, execute: false, run_id: run, bond_refund_address: wallet.address };
+const body = { mandate_id: 'M-001', proposal: { action, agent_signature: signProposal(canonicalHash(action), agentSk) }, execute: true, run_id: run, bond_refund_address: wallet.address };
 const headers = { ...agent, 'idempotency-key': `x402:${run}:${id}` };
 
 try {

@@ -619,7 +619,7 @@ async function submitLock(eng: Engine, exact: NonNullable<PaymentProof['exact']>
   }
   const r = await eng.cardano.submitSigned(exact.transaction_hex);
   // A node rejection after the lock landed (inputs already spent) is the re-presented payload of a settled lock.
-  if (!r.accepted) console.warn(`exact lock ${r.tx_hash} not accepted by the node: ${r.detail.slice(0, 300)}`);
+  if (!r.accepted) console.warn(`exact lock ${r.tx_hash} not accepted by the node: ${r.detail.replace(/\s+/g, ' ').slice(0, 160)}`);
   return r.tx_hash;
 }
 
