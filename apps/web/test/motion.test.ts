@@ -2,16 +2,17 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const root = new URL('../', import.meta.url);
-const css = readFileSync(new URL('app/globals.css', root), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+// The floor (components/floor) moves on reducer state changes and is covered by test/floor.test.ts; everything else is still.
+const css = readFileSync(new URL('app/globals.css', root), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import[^\n]*floor\.css[^\n]*\n/, '');
 const sources = ['app', 'components'].flatMap((dir) =>
   readdirSync(new URL(`${dir}/`, root), { recursive: true, encoding: 'utf8' })
-    .filter((f) => /\.tsx?$/.test(f))
+    .filter((f) => /\.tsx?$/.test(f) && !f.startsWith('floor/'))
     .map((f) => ({ file: `${dir}/${f}`, text: readFileSync(new URL(`${dir}/${f}`, root), 'utf8') })),
 );
 /** Innermost CSS rules: selector and declarations (nested @media bodies match their inner rule). */
 const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: (m[1] ?? '').trim(), body: m[2] ?? '' }));
 
-describe('one motion in the whole interface', () => {
+describe('one motion outside the floor', () => {
   it('animates only the rail marker', () => {
     const moving = rules.filter((r) => /\btransition\s*:/.test(r.body) && !/\btransition\s*:\s*none/.test(r.body));
     expect(moving.map((r) => r.selector)).toEqual(['.rail-marker']);

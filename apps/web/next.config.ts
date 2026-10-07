@@ -39,6 +39,8 @@ const nextConfig: NextConfig = {
   turbopack: { root: fileURLToPath(new URL('../..', import.meta.url)) },
   // /protocol.md is the Markdown route; the folder is named protocol-md because *.md paths are local-only in this repo.
   rewrites: async () => [{ source: '/protocol.md', destination: '/protocol-md' }],
+  // next dev would otherwise write AGENTS.md and CLAUDE.md into this folder.
+  agentRules: false,
 };
 
 export default nextConfig;

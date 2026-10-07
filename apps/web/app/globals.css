@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../components/floor/floor.css";
 
 /* Authority Line tokens. Light "mist" surface for LIVE; dark "tape" surface for REPLAY.
    permit / cosign / forbid / tape are status colors only (zones, outcomes), never decoration. */
@@ -39,6 +40,7 @@
   --color-tape: var(--tape);
   --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, monospace;
+  --font-serif: var(--font-news), ui-serif, Georgia, serif;
   --ease-settle: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -47,7 +49,7 @@ body {
   color: var(--fg);
 }
 
-/* The only motion in the product: the action's marker slides along the boundary rail. */
+/* Outside the floor, the only motion in the product: the action's marker slides along the boundary rail. */
 .rail-marker {
   transition: left 400ms var(--ease-settle);
 }

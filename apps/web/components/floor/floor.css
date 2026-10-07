@@ -1,0 +1,257 @@
+/* The authority floor: palette, faces, and the only motion on the public pages. Every move is driven by a reducer
+   state change (a crate's transform, a class on a station); nothing here runs on a timer of its own. */
+.floor {
+  --paper: #eef0ec;
+  --paper-2: #e2e6e0;
+  --slab: #d9ded7;
+  --slab-side: #c3c9c1;
+  --lane: rgb(22 32 28 / 0.22);
+  --beam: #1fa3a3;
+  --glass: rgb(255 255 255 / 0.72);
+  --glass-line: rgb(22 32 28 / 0.1);
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 80% at 10% 0%, #f7f8f5 0%, transparent 55%),
+    radial-gradient(90% 70% at 100% 100%, #dfe4de 0%, transparent 60%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+  color: var(--ink);
+}
+.floor::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(0deg, rgb(22 32 28 / 0.025) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgb(22 32 28 / 0.025) 0 1px, transparent 1px 28px);
+  mask-image: radial-gradient(80% 70% at 50% 50%, #000 30%, transparent 100%);
+}
+.floor-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.floor-slab {
+  fill: var(--slab);
+}
+.floor-slab-side {
+  fill: var(--slab-side);
+}
+.floor-slab-side.r {
+  fill: color-mix(in srgb, var(--slab-side) 80%, #000 20%);
+}
+.floor-lane {
+  fill: none;
+  stroke: var(--lane);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 6;
+}
+.floor-shadow {
+  fill: rgb(22 32 28 / 0.18);
+  filter: url(#floor-blur);
+}
+.floor-label {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  fill: #5b6662;
+}
+.floor-wire {
+  stroke: #46524d;
+  stroke-width: 2;
+}
+
+/* two tones per station: top face, and the sides derived from it */
+.floor-box .f-top {
+  fill: var(--top);
+}
+.floor-box .f-left {
+  fill: color-mix(in srgb, var(--top) 72%, #1a2420 28%);
+}
+.floor-box .f-right {
+  fill: color-mix(in srgb, var(--top) 86%, #1a2420 14%);
+}
+.st-agent {
+  --top: #9fb4cf;
+}
+.st-gate {
+  --top: #2b3a34;
+}
+.st-tower {
+  --top: #8fd1d1;
+}
+.st-escrow {
+  --top: #e7c77a;
+}
+.st-escrow.locked {
+  --top: #d9a93c;
+}
+.st-bond {
+  --top: #f1d58f;
+}
+.st-sink {
+  --top: #aeb3af;
+}
+.st-desk {
+  --top: #d7b28e;
+}
+.st-desk.chair {
+  --top: #8f6a4c;
+}
+.st-vault {
+  --top: #3f8f6a;
+}
+.st-vault.rejected {
+  --top: #9e5a52;
+}
+.st-ledger {
+  --top: #c9cfc8;
+}
+.st-receipt {
+  --top: #fbfbf8;
+}
+.floor-lock {
+  fill: #5a4410;
+}
+.floor-door {
+  fill: #27573f;
+  stroke: #1b3d2b;
+  stroke-width: 1;
+  transition: transform 700ms var(--ease-settle);
+}
+.floor-door.releasing {
+  transform: translate(-30px, 17px);
+}
+.floor-glow {
+  opacity: 0;
+  transition: opacity 600ms var(--ease-settle);
+}
+.floor-glow.releasing {
+  opacity: 1;
+}
+
+.floor-lamp {
+  fill: #9aa39f;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  transition: fill 300ms var(--ease-settle);
+}
+.floor-lamp.ALLOW {
+  fill: var(--permit);
+}
+.floor-lamp.ESCALATE {
+  fill: var(--cosign);
+}
+.floor-lamp.DENY {
+  fill: var(--forbid);
+}
+
+.floor-beam {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  transition: opacity 400ms var(--ease-settle);
+}
+.floor-beam.scanning {
+  opacity: 1;
+  animation: floor-sweep 1.6s ease-in-out infinite alternate;
+}
+@keyframes floor-sweep {
+  from {
+    transform: rotate(-4deg);
+    opacity: 0.55;
+  }
+  to {
+    transform: rotate(4deg);
+    opacity: 1;
+  }
+}
+
+.floor-card {
+  opacity: 0;
+  transition:
+    opacity 400ms var(--ease-settle),
+    transform 500ms var(--ease-settle);
+}
+.floor-card rect {
+  fill: #fffdf6;
+  stroke: rgb(22 32 28 / 0.25);
+}
+.floor-card line {
+  stroke: rgb(22 32 28 / 0.35);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.floor-card .seal {
+  fill: var(--cosign);
+  stroke: none;
+}
+.floor-card.open {
+  opacity: 1;
+  animation: floor-hover 2.4s ease-in-out infinite alternate;
+}
+@keyframes floor-hover {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 -5px;
+  }
+}
+
+.floor-crate {
+  --top: #f3f4f1;
+  cursor: default;
+  transition: transform 900ms var(--ease-settle);
+}
+.floor-crate[role='button'] {
+  cursor: pointer;
+}
+.floor-crate .crate-shadow {
+  fill: rgb(22 32 28 / 0.22);
+  filter: url(#floor-blur);
+}
+.floor-crate .crate-tape {
+  fill: rgb(22 32 28 / 0.35);
+}
+.floor-crate.tone-permit {
+  --top: #b9e2cb;
+}
+.floor-crate.tone-cosign {
+  --top: #f3dc9c;
+}
+.floor-crate.tone-forbid {
+  --top: #efb2ab;
+}
+.floor-crate.selected .f-top {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* overlays: floating glass panels */
+.floor-glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgb(22 32 28 / 0.08);
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floor-crate,
+  .floor-door,
+  .floor-glow,
+  .floor-lamp,
+  .floor-beam,
+  .floor-card {
+    transition: none;
+  }
+  .floor-beam.scanning,
+  .floor-card.open {
+    animation: none;
+  }
+}
