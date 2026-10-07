@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
 
-// Vercel builds must point at the real Authority API and registry; never at the local fixture server.
-if (process.env.VERCEL === '1') {
-  const api = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
+// A Vercel build with an Authority API configured must point at the public https API and the real registry,
+// never at the local fixture server. With no API configured the site runs in fixture mode (lib/config.ts).
+if (process.env.VERCEL === '1' && process.env.NEXT_PUBLIC_API_BASE_URL) {
+  const api = process.env.NEXT_PUBLIC_API_BASE_URL;
   const registry = process.env.NEXT_PUBLIC_VERIFICATION_REGISTRY_ADDRESS ?? '';
   const https = (v: string) => {
     try {
@@ -36,6 +37,8 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@authority/core'],
   // Pin the workspace root so Turbopack never walks above the repository looking for lockfiles.
   turbopack: { root: fileURLToPath(new URL('../..', import.meta.url)) },
+  // /protocol.md is the Markdown route; the folder is named protocol-md because *.md paths are local-only in this repo.
+  rewrites: async () => [{ source: '/protocol.md', destination: '/protocol-md' }],
 };
 
 export default nextConfig;

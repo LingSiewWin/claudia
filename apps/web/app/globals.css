@@ -99,3 +99,87 @@ body {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
 }
+
+/* Rendered protocol document (lib/markdown.ts). Dense, mono for every shape, one measure. */
+.doc {
+  max-width: 46rem;
+  font-size: 17px;
+  line-height: 1.6;
+}
+.doc > h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.doc > h1 + p {
+  margin-top: 1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.doc > h2 {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  scroll-margin-top: 1.5rem;
+}
+.doc > h3 {
+  margin-top: 1.75rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  scroll-margin-top: 1.5rem;
+}
+.doc > p,
+.doc > ul,
+.doc > ol,
+.doc > blockquote {
+  margin-top: 0.85rem;
+}
+.doc ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+.doc ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+}
+.doc li + li {
+  margin-top: 0.3rem;
+}
+.doc a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.doc code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+.doc pre {
+  margin-top: 0.85rem;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: var(--tape);
+  color: var(--mist);
+  padding: 0.9rem 1rem;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.doc pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+.doc blockquote {
+  border-left: 3px solid var(--fg);
+  padding-left: 1rem;
+  font-weight: 600;
+}

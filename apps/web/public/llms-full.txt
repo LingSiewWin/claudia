@@ -1,0 +1,315 @@
+# Authority Layer protocol
+
+Agents are infinite. Human attention is not. Interrupting a person costs a bond; only that person's signature moves funds.
+
+Authority Layer sits between an AI agent and consequential execution. The agent proposes an action; a deterministic engine checks it against a mandate; external facts are verified; funds move only for the exact action a human signed. This document is the protocol as implemented today on Cardano preprod. Shapes are copied from the code that validates them (`packages/core/src/schemas.ts`, `packages/core/src/brief.ts`, `apps/api/src/escalation.ts`).
+
+## Invariant
+
+Only the authorized human or quorum can authorize consequential execution. Agents, language models, the engine, the verifier, the relay, the bond and the company backend may propose, verify, evaluate, route, price and compose. None of them may authorize an action that requires a human. The approver's key lives in a wallet on the approver's own device and is never held by the service.
+
+## Outcomes
+
+Every proposal gets exactly one of three outcomes from the engine. Same inputs, same answer, no model in the loop.
+
+- `ALLOW`: inside the mandate's autonomous zone. The engine signs an authorization and the vault releases the exact amount to the exact recipient, once.
+- `ESCALATE`: allowed by the mandate but above the agent's own limit, or a constraint says `on_violation: ESCALATE`. A named human must sign. The request is priced (HTTP 402) before the human sees it.
+- `DENY`: outside the mandate, facts do not match, or the interrupt budget is spent. Nothing moves and the reason is logged. When the reason is `INTERRUPT_BUDGET_EXHAUSTED` nobody is paged.
+
+Reason codes (`ReasonCode`): `INVALID_PROPOSAL`, `INVALID_AGENT_SIGNATURE`, `AGENT_NOT_DELEGATE`, `WRONG_MANDATE`, `MANDATE_REVOKED`, `MANDATE_VERSION_MISMATCH`, `MANDATE_NOT_STARTED`, `MANDATE_EXPIRED`, `PURPOSE_NOT_AUTHORIZED`, `ACTION_NOT_AUTHORIZED`, `ASSET_NOT_AUTHORIZED`, `AMOUNT_ABOVE_HARD_CAP`, `DAILY_CAP_EXCEEDED`, `TREASURY_FLOOR_VIOLATION`, `INVOICE_NOT_FOUND`, `CUSTOMER_MISMATCH`, `INVOICE_NOT_OPEN`, `AMOUNT_MISMATCH`, `CURRENCY_MISMATCH`, `RECIPIENT_MISMATCH`, `VERIFICATION_UNAVAILABLE`, `COUNTERPARTY_NOT_APPROVED`, `ABOVE_AUTONOMOUS_LIMIT`, `PRINCIPAL_DECLINED`, `INTERRUPT_BUDGET_EXHAUSTED`.
+
+## Action IR (`action-ir/v0.1`)
+
+The canonical statement of what the agent wants to do. The agent signs the RFC 8785 canonical JSON with its delegate key; `action_hash` is the SHA-256 of that JSON and binds everything downstream (brief, bond, authorization, receipt).
+
+```json
+{
+  "schema": "action-ir/v0.1",
+  "id": "A-INV-0001",
+  "mandate_id": "M-001",
+  "actor": "cfo-agent-01",
+  "type": "pay_invoice",
+  "purpose": "vendor_invoice",
+  "counterparty": { "id": "aws", "display": "Amazon Web Services" },
+  "amount": { "value": "8420000", "asset": "USDM" },
+  "recipient": { "chain": "cardano", "address": "addr_test1..." },
+  "source": { "vault": "treasury-main" },
+  "reference": { "invoice_id": "in_...", "invoice_number": "AWS-2026-10" },
+  "rationale": "October compute bill, due in 3 days.",
+  "created_at": "2026-10-07T08:00:00Z"
+}
+```
+
+- `type`: `pay_invoice` | `purchase` | `transfer`.
+- `amount.value`: base units as a decimal string (< 2^64). `asset`: 2 to 10 upper-case letters.
+- `recipient.address`: a Shelley address; the engine parses it before anything else runs.
+- `rationale` is the agent's claim. It is shown to the human, never trusted by the engine.
+
+## Mandate (`mandate/v0.1`)
+
+Who delegated what to whom, under which limits, and how much attention the delegate may consume. The mandate hash is anchored on Cardano; the vault checks the version on every release.
+
+```json
+{
+  "schema": "mandate/v0.1",
+  "id": "M-001",
+  "version": 3,
+  "status": "active",
+  "principal": { "type": "organization", "id": "acme", "name": "Acme Corp", "cardano_key_hash": "<28 bytes hex>" },
+  "delegate": { "type": "agent", "id": "cfo-agent-01", "public_key": "ed25519:<32 bytes hex>" },
+  "approvers": [{ "role": "CFO", "cardano_key_hash": "<28 bytes hex>" }],
+  "authority_engine": { "public_key": "ed25519:<32 bytes hex>" },
+  "asset": { "symbol": "USDM", "decimals": 6 },
+  "validity": { "starts_at": "2026-10-01T00:00:00Z", "expires_at": "2027-10-01T00:00:00Z" },
+  "delegation": { "allowed": false },
+  "interrupt_budget": { "per_day": 3 },
+  "constraints": [
+    { "id": "purpose", "kind": "purpose_in", "values": ["vendor_invoice"], "on_violation": "DENY" },
+    { "id": "vendors", "kind": "counterparty_in", "values": ["aws", "openai"], "on_violation": "DENY" },
+    { "id": "autonomous", "kind": "amount_lte", "value": "10000000", "on_violation": "ESCALATE", "approver": "CFO" },
+    { "id": "hard_cap", "kind": "amount_lte", "value": "25000000", "on_violation": "DENY" },
+    { "id": "daily", "kind": "daily_spend_lte", "value": "50000000", "on_violation": "DENY" },
+    { "id": "floor", "kind": "balance_after_gte", "value": "100000000", "on_violation": "DENY" },
+    { "id": "facts", "kind": "verified_facts", "source": "stripe", "on_violation": "DENY" }
+  ]
+}
+```
+
+Constraint kinds: `purpose_in`, `action_in`, `counterparty_in`, `asset_eq`, `amount_lte`, `daily_spend_lte`, `balance_after_gte`, `verified_facts`. Each carries `on_violation: DENY | ESCALATE` and, for ESCALATE, the `approver` role.
+
+### Interrupt budget
+
+`interrupt_budget.per_day` is the number of escalations the mandate may send to its approver per UTC day. It is part of the mandate hash, so it is anchored with the rest. The count comes from escalations whose bond was locked (an unpaid 402 does not count). The next ESCALATE past the budget becomes `DENY INTERRUPT_BUDGET_EXHAUSTED`, the human is not notified, and the agent is told so. The check appears in the evaluation as the row `interrupt_budget` with `detail.used`.
+
+## Escalation over HTTP 402
+
+An ESCALATE that wants execution is priced before any human sees it. The transport follows the x402 HTTP transport (version 2): three base64-encoded JSON headers.
+
+1. The agent calls `POST /v1/authority/check` with the signed proposal.
+2. If the outcome is ESCALATE and the request carries no valid bond proof, the API creates an approval in state `awaiting_bond` and replies `402` with header `PAYMENT-REQUIRED` (base64 of the document below; the body is the same JSON).
+3. The agent locks the bond in the escrow validator on Cardano and retries the same request with header `PAYMENT-SIGNATURE`.
+4. The API reads the escrow UTxO from chain, checks that the datum names this approval, this action hash, this approver and at least this amount, builds the Decision Brief, and only then places the approval in the human's inbox. The `200` reply carries `approval_id`, `brief`, `bond` and the header `PAYMENT-RESPONSE`.
+
+`PAYMENT-REQUIRED` (402):
+
+```json
+{
+  "x402Version": 2,
+  "error": "escalation requires a bond",
+  "resource": { "url": "<api>/v1/authority/check", "description": "Human authority for action A-INV-0002" },
+  "accepts": [
+    {
+      "scheme": "cardano-escrow",
+      "network": "cardano-preprod",
+      "amount": "5000000",
+      "asset": "lovelace",
+      "payTo": "addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f",
+      "maxTimeoutSeconds": 3600,
+      "extra": { "...": "EscalationPrice, below" }
+    }
+  ]
+}
+```
+
+`PAYMENT-SIGNATURE` (retry):
+
+```json
+{
+  "x402Version": 2,
+  "accepted": { "...": "the accepts[0] object as received" },
+  "payload": { "approval_id": "AP-...", "tx_hash": "<64 hex>", "output_index": 0 }
+}
+```
+
+`PAYMENT-RESPONSE` (on the settled 200):
+
+```json
+{ "success": true, "network": "cardano-preprod", "transaction": "<tx_hash>" }
+```
+
+A malformed `PAYMENT-SIGNATURE` is treated as no bond. The same action while `awaiting_bond` returns the same price (idempotent by action hash).
+
+### EscalationPrice (`escalation-price/v0.1`)
+
+The `extra` field of the 402, and the exact terms of the bond.
+
+```json
+{
+  "schema": "escalation-price/v0.1",
+  "approval_id": "AP-...",
+  "network": "cardano-preprod",
+  "asset": { "policy_id": "", "asset_name": "", "symbol": "ADA" },
+  "amount": "5000000",
+  "escrow_address": "addr_test1wqplkq2g25g5ctsdaapk69dmxmp0lt005kw6dtat4k9yzdclx093f",
+  "action_hash": "<32 bytes hex>",
+  "approver_key_hash": "<28 bytes hex>",
+  "locked_until_ms": 1760000000000,
+  "interrupt_budget": { "used": 1, "per_day": 3 }
+}
+```
+
+Default bond: 5 ADA (`5000000` lovelace), held for one hour (`locked_until_ms = now + 3600000`).
+
+## Bond rules
+
+The bond is the price of an interruption. It protects attention; it is not a security boundary. The mandate restricts authority, the vault protects funds, the signature proves authorization. Each mechanism answers a different question.
+
+- Escrow: one UTxO per escalation at the `escalation_bond` validator. Datum `{ approval_ref, mandate_ref, agent_pkh, approver_pkh, amount, locked_until }` where `approval_ref = sha256(utf8(approval_id))`.
+- `Refund`: the approver signs, or the lock time has passed. An output returns at least `amount` to the agent's address. Happens on approval and on a decline with reason `legitimate`.
+- `Capture`: the approver signs and an output pays at least `amount` to the sink. Happens on a decline with reason `frivolous`.
+- Sink: an always-fail script address (`addr_test1wq3vnggra5ljl2tunqkhd4hz4agvt422cvrfswcedj8um2cwsu3l3` on preprod). Nothing locked there can ever be spent. The approver never receives bond money, so rejecting has no payout.
+- Expiry: a bond never spent by the approver is refundable by anyone after `locked_until`.
+
+Bond record (`bond/v0.1`):
+
+```json
+{
+  "schema": "bond/v0.1",
+  "approval_id": "AP-...",
+  "action_hash": "<32 bytes hex>",
+  "mandate_id": "M-001",
+  "amount": "5000000",
+  "asset": "ADA",
+  "escrow_address": "addr_test1...",
+  "tx_hash": "<64 hex> | null",
+  "output_index": 0,
+  "locked_until_ms": 1760000000000,
+  "status": "required | locked | refunded | captured | expired",
+  "outcome_tx_hash": "<64 hex> | null"
+}
+```
+
+## Decision Brief (`brief/v0.1`)
+
+What the human reads before signing. Built by pure functions from the Action IR, the evaluation, the mandate and the verified facts; no model writes any of it. Deterministic, so `brief_hash` sits in the receipt and anyone can recompute it.
+
+```json
+{
+  "schema": "brief/v0.1",
+  "action_id": "A-INV-0002",
+  "action_hash": "<32 bytes hex>",
+  "requested_by": "cfo-agent-01",
+  "mandate": { "id": "M-001", "version": 3, "hash": "<32 bytes hex>" },
+  "what": {
+    "type": "pay_invoice",
+    "amount": { "value": "18000000", "asset": "USDM", "display": "18 USDM" },
+    "counterparty": { "id": "aws", "display": "Amazon Web Services" },
+    "recipient": "addr_test1...",
+    "reference": { "invoice_id": "in_...", "invoice_number": "AWS-2026-11" }
+  },
+  "why": "<the agent's rationale, verbatim, labelled as its claim>",
+  "engine": { "outcome": "ESCALATE", "reason": "ABOVE_AUTONOMOUS_LIMIT", "checks": [{ "id": "autonomous", "kind": "amount_lte", "result": "ESCALATE", "reason": "ABOVE_AUTONOMOUS_LIMIT" }] },
+  "escalation": { "approver": "CFO", "because": [{ "constraint": "autonomous", "reason": "ABOVE_AUTONOMOUS_LIMIT" }] },
+  "verified": { "report_hash": "<32 bytes hex>", "sepolia_tx": "0x...", "result": "VERIFIED", "facts": { "exists": true, "customer_match": true, "status_open": true, "amount_match": true, "currency_match": true, "recipient_match": true } },
+  "limits": { "autonomous_limit": "10000000", "hard_cap": "25000000", "daily_cap": "50000000", "treasury_minimum": "100000000" },
+  "will_happen": "Release 18 USDM from vault treasury-main to addr_test1... for Amazon Web Services for invoice AWS-2026-11 (in_...). Nothing else is authorized by this signature.",
+  "expires_at_ms": 1760003600000,
+  "cost": { "bond": { "amount": "5000000", "asset": "ADA" }, "interrupt_budget": { "used": 1, "per_day": 3 } }
+}
+```
+
+## Verification and the vault
+
+- Facts: a Chainlink CRE workflow reads the invoice at the billing source with independent nodes and writes a `verification/v0.1` report (`exists`, `customer_match`, `status_open`, `amount_match`, `currency_match`, `recipient_match`) to a registry on Sepolia. The engine evaluates again with the report; a mismatch is a DENY with the fact's reason code.
+- Authorization: for ALLOW the engine signs the authorization bytes (amount, recipient, nonce, expiry, mandate version). For ESCALATE the approver co-signs the exact release transaction with a CIP-30 wallet on their own device.
+- Vault: an Aiken validator on Cardano releases only the exact signed amount to the exact recipient, once (nonce), before expiry, under the anchored mandate version, with the approver's signature when the authorization requires a principal.
+- Receipt: every decision lands in a hash-chained event log (`hash = sha256(prev_hash || canonical body)`). The receipt binds action, mandate, verification, brief, decision and settlement, and the log head is committed in the release transaction's metadata (label 1694). Anyone can recompute it in a browser.
+
+## Endpoints
+
+Base URL: the Authority API. In fixture mode this site serves recorded answers under `/api/fixture`.
+
+### `GET /v1/authority/{role}?mandate_id=`
+
+Public. The price of interrupting this person and how much attention is left today.
+
+```json
+{
+  "approver": "CFO",
+  "mandate_id": "M-001",
+  "price": { "amount": "5000000", "asset": "ADA" },
+  "interrupt_budget": { "used": 2, "per_day": 3 },
+  "escalations_today": 2,
+  "availability": "open | budget_exhausted"
+}
+```
+
+### `GET /v1/metrics?mandate_id=`
+
+Public. Computed from the event log.
+
+```json
+{
+  "actions_evaluated": 7,
+  "allow": 1,
+  "escalate": 2,
+  "deny": 4,
+  "interruptions_per_100_actions": 28.6,
+  "bonds": { "required": 2, "locked": 2, "refunded": 2, "captured": 0 },
+  "budget_exhausted": 0,
+  "median_decision_ms": 8000
+}
+```
+
+### `POST /v1/authority/check`
+
+The authority endpoint. Send exactly one of `proposal` or `request_text`.
+
+```json
+{
+  "mandate_id": "M-001",
+  "proposal": { "action": { "...": "Action IR" }, "agent_signature": "<hex> | null" },
+  "execute": false
+}
+```
+
+- `proposal.agent_signature`: the delegate's signature over the canonical Action IR. Unsigned proposals are evaluated but never authorized (`notice: "unsigned: evaluation only"`).
+- `request_text`: plain English, converted by a model into an untrusted interpreted action that is returned verbatim as `interpreted_action` and evaluated unsigned.
+- `execute: true`: on ALLOW, submit the release; on ESCALATE, price the interruption (402 flow above).
+
+Reply (`200`):
+
+```json
+{
+  "run_id": "<uuid>",
+  "evaluation": { "outcome": "ALLOW | ESCALATE | DENY", "reason": null, "approvals_required": [], "checks": [], "signed": true, "action_hash": "<hex>", "mandate_hash": "<hex>", "mandate_version": 3, "verification_hash": "<hex> | null", "evaluated_at_ms": 0 },
+  "verification": { "report_hash": "<hex>", "sepolia_tx": "0x...", "facts": { "...": "" } },
+  "authorization": { "...": "AuthorizationRecord | null" },
+  "approval_id": "AP-... | null",
+  "brief": { "...": "DecisionBrief, when a human is involved" },
+  "bond": { "...": "bond/v0.1, when priced or locked" },
+  "escalation": { "price": { "...": "EscalationPrice" }, "approval_endpoint": "<api>/v1/authority/check" },
+  "receipt_id": "R-...",
+  "receipt_hash": "<hex>",
+  "events_url": "<api>/v1/runs/<run_id>/events",
+  "decision_hash": "<hex>"
+}
+```
+
+`escalation` is present only when the outcome is ESCALATE and no bond is locked yet. `events_url` is a server-sent event stream of the run's hash-chained log.
+
+### Approver endpoints (used by the console, listed for completeness)
+
+- `GET /v1/approvals?status=pending`: the inbox, each item with its brief and bond.
+- `POST /v1/approvals/{id}/approve`: returns the unsigned release transaction for the approver's wallet; `POST /v1/executions` submits it with the approver's witness.
+- `POST /v1/approvals/{id}/decline` with `{ signature, key, reason: "legitimate" | "frivolous" }` (CIP-8 signature over `{"approval_id","decision":"decline","reason"}`): returns the bond spend (refund or capture) for the approver's wallet; `POST /v1/approvals/{id}/bond-submit` submits it.
+- `GET /v1/receipts/{id}`, `GET /v1/runs/{id}/log`, `GET /v1/mandates/{id}`.
+
+## Masumi listing (MIP-003)
+
+The same endpoint is sold to other agents as a Masumi agentic service, listed as "Human Authority Endpoint" on Sokosumi preprod (https://preprod.sokosumi.com/). Price: 1 tUSDM per job. Masumi's escrow refunds the buyer if nothing is delivered; it is the fee for the evaluation, not the interruption bond.
+
+- `GET /availability` -> `{ "status": "available", "type": "masumi-agent", "message": "Human Authority Endpoint is ready" }`
+- `GET /input_schema` -> `{ "input_data": [ { "id": "mandate_id", "type": "text" }, { "id": "proposal", "type": "textarea" }, { "id": "request_text", "type": "textarea" } ] }`
+- `POST /start_job` with `{ "identifier_from_purchaser": "<14-26 hex>", "input_data": { "mandate_id": "M-001", "proposal": { "action": { "...": "Action IR" }, "agent_signature": "<hex>" } } }` -> the payment terms (`id`, `blockchainIdentifier`, `payByTime`, `submitResultTime`, `unlockTime`, `agentIdentifier`, `sellerVKey`, `input_hash`).
+- `GET /status?job_id=` -> `{ "status": "awaiting_payment | running | completed | failed", "result": "<canonical JSON>" }`.
+
+The job result is canonical JSON with `evaluation`, `brief`, `escalation` (price and `approval_endpoint` on ESCALATE) and a plain-text `summary`. Its hash is recorded with the Masumi payment (MIP-004), so the buyer can prove what was sold.
+
+## Where to look
+
+- Live replay of a recorded run: /live?mode=replay
+- A mandate boundary with its interrupt budget: /mandate/M-001
+- A human authority endpoint: /authority/CFO
+- Agent-readable summary: /llms.txt
+- Agent card: /.well-known/agent.json

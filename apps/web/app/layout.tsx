@@ -7,8 +7,8 @@ const grotesk = Schibsted_Grotesk({ subsets: ['latin'], variable: '--font-grotes
 const code = JetBrains_Mono({ subsets: ['latin'], variable: '--font-code' });
 
 export const metadata: Metadata = {
-  title: 'Authority, not credentials',
-  description: 'Give AI agents authority, not credentials.',
+  title: { default: 'Authority Layer', template: '%s · Authority Layer' },
+  description: 'Agents are infinite. Human attention is not. Interrupting a person costs a bond; only that person\'s signature moves funds.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
