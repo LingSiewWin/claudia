@@ -152,10 +152,41 @@ const routes: Array<[string, RegExp, Handler]> = [
     'POST',
     /^\/v1\/approvals\/([^/]+)\/decline$/,
     async (c) => {
-      // Same rule as the API: a decline carries the CFO's CIP-30 signData result (the API also verifies it).
+      // Same rule as the API: a decline carries the CFO's CIP-30 signData result and a reason (the API also verifies it),
+      // and answers with the bond spend for the approver wallet to sign.
       const body = await readBody(c.req);
-      if (typeof body.signature === 'string' && body.signature && typeof body.key === 'string' && body.key) ok(c, { ok: true });
-      else json(c.res, 401, { error: 'CFO signature required' });
+      if (!(typeof body.signature === 'string' && body.signature && typeof body.key === 'string' && body.key)) {
+        return json(c.res, 401, { error: 'CFO signature required' });
+      }
+      if (body.reason !== 'legitimate' && body.reason !== 'frivolous') throw new HttpError(400, 'reason must be legitimate or frivolous');
+      ok(c, { unsigned_tx_cbor: '84a400bondfixture', tx_hash: 'd'.repeat(64) });
+    },
+  ],
+  [
+    'POST',
+    /^\/v1\/approvals\/([^/]+)\/bond-submit$/,
+    async (c) => {
+      const body = await readBody(c.req);
+      str(body.cfo_witness_cbor, 'cfo_witness_cbor');
+      ok(c, { tx_hash: str(body.tx_hash, 'tx_hash') });
+    },
+  ],
+  [
+    'GET',
+    /^\/v1\/authority\/([^/]+)$/,
+    (c) => {
+      const info = own(data.authority, `${c.url.searchParams.get('mandate_id') ?? ''}/${arg(c)}`);
+      if (!info) throw new HttpError(404, 'authority not found');
+      ok(c, info);
+    },
+  ],
+  [
+    'GET',
+    /^\/v1\/metrics$/,
+    (c) => {
+      const metrics = own(data.metrics, c.url.searchParams.get('mandate_id') ?? '');
+      if (!metrics) throw new HttpError(404, 'mandate not found');
+      ok(c, metrics);
     },
   ],
   [

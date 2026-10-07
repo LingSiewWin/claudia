@@ -79,7 +79,7 @@ test('REPLAY without the closing anchor is verified only through the head its se
   });
   await page.goto('/live?mode=replay&run=run-stage-0001');
   const banner = page.getByTestId('mode-banner');
-  await expect(banner).toContainText(BANNER.through(27));
+  await expect(banner).toContainText(BANNER.through(30));
   await expect(banner).not.toContainText(BANNER.verified);
   await page.getByRole('button', { name: 'Skip to the end' }).click();
   const cards = page.getByTestId('action-card');

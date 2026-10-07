@@ -46,8 +46,8 @@ describe('run reducer on the recorded stage run', () => {
     };
     const cre = 'Invoice confirmed by Chainlink CRE';
     expect(rows('A-0001')).toEqual(['ALLOW', cre, 'SETTLED']);
-    expect(rows('A-0002')).toEqual(['REQUIRES APPROVAL', cre, 'SETTLED']);
-    expect(rows('A-0003')).toEqual(['REQUIRES APPROVAL', cre, 'Not reached']);
+    expect(rows('A-0002')).toEqual(['ESCALATE', cre, 'SETTLED']);
+    expect(rows('A-0003')).toEqual(['ESCALATE', cre, 'Not reached']);
     expect(rows('A-0004')).toEqual(['DENY', 'Not reached', 'Not reached']);
     expect(rows('A-0005')).toEqual(['DENY', 'Not reached', 'Not reached']);
     expect(rows('A-0006')).toEqual(['ALLOW', 'MISMATCH', 'Not reached']);
@@ -445,7 +445,8 @@ describe('REPLAY anchor read from Cardano', () => {
     const { built } = settlement(lab, 'last');
     const plan = replayPlan(lab, await readAnchor(lab, koios), false, 'run-lab-replay');
     expect(plan).toMatchObject({ verdict: 'through', banner: replayVerifiedThrough(built.payload.log_head.seq) });
-    const noMandatePolicy = new Set(['run-lab-prompt_injection', 'run-lab-prompt_injection_direct']);
+    // Runs that never issued an authorization name no mandate policy, so their closing anchor cannot be bound.
+    const noMandatePolicy = new Set(['run-lab-prompt_injection', 'run-lab-prompt_injection_direct', 'run-lab-escalation_spam', 'run-lab-no_bond']);
     for (const r of recorded.runs.filter((x) => x.run_id !== 'run-lab-replay')) {
       const log = recorded.logs[r.run_id]!;
       const closed = replayPlan(log, await readAnchor(log, koios, closingTx(r.run_id)), r.run_id === STAGE, r.run_id);

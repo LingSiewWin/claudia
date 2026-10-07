@@ -62,7 +62,7 @@ describe('fixture server matches the contract', () => {
     const all = ((await (await get('/v1/runs?kind=all')).json()) as { runs: { started_at: string; mandate_id: string }[] }).runs;
     expect(all.map((r) => r.started_at)).toEqual([...all.map((r) => r.started_at)].sort().reverse());
     const lab = ((await (await get('/v1/runs?mandate_id=M-LAB')).json()) as { runs: { mandate_id: string }[] }).runs;
-    expect(lab.length).toBe(9);
+    expect(lab.length).toBe(11);
     expect(lab.every((r) => r.mandate_id === 'M-LAB')).toBe(true);
   });
   it('filters approvals by status and receipts by mandate', async () => {
@@ -70,6 +70,25 @@ describe('fixture server matches the contract', () => {
     expect(((await (await get('/v1/approvals?status=approved')).json()) as { approvals: unknown[] }).approvals).toHaveLength(0);
     expect(((await (await get('/v1/receipts?mandate_id=M-001')).json()) as { receipts: unknown[] }).receipts).toHaveLength(2);
     expect(((await (await get('/v1/receipts?mandate_id=M-LAB')).json()) as { receipts: unknown[] }).receipts).toHaveLength(0);
+  });
+  it('serves the authority endpoint and metrics per mandate', async () => {
+    const info = (await (await get('/v1/authority/CFO?mandate_id=M-001')).json()) as { approver: string; price: { amount: string }; interrupt_budget: { used: number; per_day: number }; availability: string };
+    expect(info).toMatchObject({ approver: 'CFO', price: { amount: '5000000', asset: 'ADA' }, interrupt_budget: { used: 2, per_day: 3 }, availability: 'open' });
+    expect((await get('/v1/authority/CFO?mandate_id=M-NOPE')).status).toBe(404);
+    expect((await get('/v1/authority/CFO')).status).toBe(404);
+    const m = (await (await get('/v1/metrics?mandate_id=M-001')).json()) as { actions_evaluated: number; escalate: number; interruptions_per_100_actions: number };
+    expect(m).toMatchObject({ actions_evaluated: 7, escalate: 2 });
+    expect((await get('/v1/metrics?mandate_id=M-NOPE')).status).toBe(404);
+  });
+  it('decline needs a reason and answers with the bond spend; bond-submit echoes the tx', async () => {
+    const sig = JSON.stringify({ signature: 'aa', key: 'bb' });
+    expect((await post('/v1/approvals/AP-A-0002/decline', sig)).status).toBe(400);
+    const res = await post('/v1/approvals/AP-A-0002/decline', JSON.stringify({ signature: 'aa', key: 'bb', reason: 'frivolous' }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { unsigned_tx_cbor: string }).unsigned_tx_cbor).toMatch(/^84a4/);
+    expect((await post('/v1/approvals/AP-A-0002/decline', '{"reason":"frivolous"}')).status).toBe(401);
+    expect((await post('/v1/approvals/AP-A-0002/bond-submit', '{"tx_hash":"cc"}')).status).toBe(400);
+    expect(await (await post('/v1/approvals/AP-A-0002/bond-submit', '{"tx_hash":"cc","cfo_witness_cbor":"dd"}')).json()).toEqual({ tx_hash: 'cc' });
   });
   it('answers 405 for the wrong method', async () => {
     expect((await get('/v1/approvals/AP-A-0002/approve')).status).toBe(405);

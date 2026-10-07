@@ -8,7 +8,7 @@ const ADMIN_HEX = `00${ADMIN_PKH}${'ab'.repeat(28)}`;
 const OTHER_HEX = `60${'42'.repeat(28)}`;
 const WITNESS = 'a10081825820' + '11'.repeat(32) + '5840' + '22'.repeat(64);
 const DATA_SIG = { signature: '845846a201276761646472657373' + '33'.repeat(16), key: 'a40101032720062158' + '44'.repeat(32) };
-const DECLINE_PAYLOAD = Buffer.from('{"approval_id":"AP-A-0002","decision":"decline"}', 'utf8').toString('hex');
+const DECLINE_PAYLOAD = Buffer.from('{"approval_id":"AP-A-0002","decision":"decline","reason":"legitimate"}', 'utf8').toString('hex');
 
 /**
  * A CIP-30 wallet stub injected before page scripts run. `decline` makes signTx throw TxSignError UserDeclined (2).
@@ -97,7 +97,7 @@ test('a wallet that is not the approver can neither approve nor decline', async 
   await expect(page.getByTestId('wallet-status')).toHaveAttribute('data-admin', 'false');
   const approval = page.getByTestId('approval').first();
   await expect(approval.getByRole('button', { name: 'Approve once' })).toBeDisabled();
-  await expect(approval.getByRole('button', { name: 'Decline' })).toBeDisabled();
+  await expect(approval.getByRole('button', { name: 'Decline (reasonable ask, refund bond)' })).toBeDisabled();
 });
 
 test('declining in the wallet submits nothing', async ({ page }) => {
@@ -118,11 +118,42 @@ test('CFO declines with a CIP-8 signature from the approver key (signData)', asy
   await page.goto('/console');
   await page.getByRole('button', { name: 'Connect Lace' }).click();
   const req = page.waitForRequest((r) => r.url().endsWith('/v1/approvals/AP-A-0002/decline') && r.method() === 'POST');
-  await page.getByTestId('approval').first().getByRole('button', { name: 'Decline' }).click();
-  expect((await req).postDataJSON()).toEqual(DATA_SIG);
+  await page.getByTestId('approval').first().getByRole('button', { name: 'Decline (reasonable ask, refund bond)' }).click();
+  expect((await req).postDataJSON()).toEqual({ ...DATA_SIG, reason: 'legitimate' });
   await expect(page.getByTestId('approval').first().getByTestId('approval-step')).toHaveAttribute('data-step', 'declined');
   const dataCalls = await page.evaluate(() => (window as unknown as { __dataCalls: Array<{ addr: string; payload: string }> }).__dataCalls);
   expect(dataCalls).toEqual([{ addr: APPROVER_HEX, payload: DECLINE_PAYLOAD }]);
+});
+
+test('the inbox renders the Decision Brief; a frivolous decline captures the bond through the approver wallet', async ({ page }) => {
+  await fakeWallet(page, APPROVER_HEX);
+  await page.goto('/console');
+  const approval = page.getByTestId('approval').first();
+  // The brief, in reading order, before any wallet is connected.
+  const brief = approval.getByTestId('brief');
+  await expect(brief).toContainText('$18.00');
+  await expect(brief).toContainText('18 USDM');
+  await expect(brief).toContainText("the agent's claim");
+  await expect(approval.getByTestId('will-happen')).toHaveText(/^Release 18 USDM from vault acme-treasury to addr_test1.* Nothing else is authorized by this signature\.$/);
+  await expect(approval.getByTestId('budget')).toHaveText('Interrupt budget 0 of 3 used today');
+  await expect(approval.getByTestId('bond-chip').first()).toHaveAttribute('data-status', 'locked');
+  await expect(approval.getByTestId('bond-chip').first()).toContainText('5.00 ADA');
+  await expect(approval.getByTestId('bond-chip').first().getByRole('link')).toHaveAttribute('href', /^https:\/\/preprod\.cardanoscan\.io\/transaction\/(b0){31}01$/);
+  await expect(approval).not.toContainText(/requires approval/i);
+
+  await page.getByRole('button', { name: 'Connect Lace' }).click();
+  const declined = page.waitForRequest((r) => r.url().endsWith('/v1/approvals/AP-A-0002/decline') && r.method() === 'POST');
+  const submitted = page.waitForRequest((r) => r.url().endsWith('/v1/approvals/AP-A-0002/bond-submit') && r.method() === 'POST');
+  await approval.getByRole('button', { name: 'Decline (frivolous, capture bond)' }).click();
+  expect((await declined).postDataJSON()).toEqual({ ...DATA_SIG, reason: 'frivolous' });
+  expect((await submitted).postDataJSON()).toEqual({ tx_hash: 'd'.repeat(64), cfo_witness_cbor: WITNESS });
+  await expect(approval.getByTestId('approval-step')).toHaveAttribute('data-step', 'declined');
+  await expect(approval.getByTestId('approval-step')).toContainText('Declined as frivolous. Bond captured.');
+  const dataCalls = await page.evaluate(() => (window as unknown as { __dataCalls: Array<{ payload: string }> }).__dataCalls);
+  expect(dataCalls.map((c) => Buffer.from(c.payload, 'hex').toString('utf8'))).toEqual(['{"approval_id":"AP-A-0002","decision":"decline","reason":"frivolous"}']);
+  const signCalls = await page.evaluate(() => (window as unknown as { __signCalls: Array<{ tx: string; partial: boolean | undefined }> }).__signCalls);
+  expect(signCalls).toEqual([{ tx: '84a400bondfixture', partial: true }]);
+  await page.screenshot({ path: 'test-results/console-brief.png', fullPage: true });
 });
 
 test('payment approver cannot revoke or update the mandate', async ({ page }) => {
@@ -147,7 +178,7 @@ test('mandate admin signs revoke and update and cannot approve payments', async 
   await expect(page.getByTestId('wallet-status')).toHaveAttribute('data-admin', 'true');
   const approval = page.getByTestId('approval').first();
   await expect(approval.getByRole('button', { name: 'Approve once' })).toBeDisabled();
-  await expect(approval.getByRole('button', { name: 'Decline' })).toBeDisabled();
+  await expect(approval.getByRole('button', { name: 'Decline (reasonable ask, refund bond)' })).toBeDisabled();
 
   const controls = page.getByRole('region', { name: 'Change the mandate' });
   await controls.getByRole('button', { name: 'Revoke mandate' }).click();

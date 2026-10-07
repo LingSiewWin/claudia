@@ -31,6 +31,8 @@ import { type EthReceipt, type KoiosTx, MANDATE_TOKEN_HEX } from '../lib/chain';
 import type {
   ApprovalView,
   AttackId,
+  AuthorityInfo,
+  BondRef,
   EventType,
   Layer,
   Limits,
@@ -46,6 +48,7 @@ import type {
 } from '../lib/contract';
 import { parseUnits } from '../lib/format';
 import { keyHash } from '../lib/keyhash';
+import { metricsOf, reduceRun } from '../lib/run';
 
 const DAY_MS = 86_400_000;
 const T0 = Date.parse('2026-10-07T03:00:00.000Z');
@@ -85,9 +88,13 @@ interface Vault {
   balance: bigint;
   spent: bigint;
   nonce: bigint;
+  /** Escalations raised today: every ApprovalRequested spends one unit of the interrupt budget. */
+  escalations: number;
 }
 
 const FIXTURE_ESCROW = 'addr_test1wq' + 'e5c4'.repeat(12) + 'ab';
+const FIXTURE_SINK = 'addr_test1wq' + 'd3ad'.repeat(12) + 'cd';
+const BOND_LOVELACE = '5000000';
 
 const M001: Setup = {
   id: 'M-001',
@@ -189,6 +196,8 @@ const out = {
   logs: {} as Record<string, RunEvent[]>,
   mandates: {} as Record<string, MandateView>,
   approvals: [] as ApprovalView[],
+  authority: {} as Record<string, AuthorityInfo>,
+  metrics: {} as Record<string, ReturnType<typeof metricsOf>>,
   approve: {} as Record<string, { authorization: AuthorizationRecord; unsigned_tx_cbor: string; tx_hash: string }>,
   receipts: [] as ReceiptSummary[],
   bundles: {} as Record<string, ReceiptBundle>,
@@ -221,7 +230,9 @@ interface Case {
   recipient?: string;
   purpose?: string;
   type?: 'pay_invoice' | 'purchase';
-  cfo?: 'approve' | 'decline';
+  cfo?: 'approve' | 'decline' | 'decline_frivolous';
+  /** false: the agent never locks the bond, so the escalation stops at the 402 and no human is paged. */
+  bond?: boolean;
   rationale: string;
 }
 interface Checked {
@@ -232,6 +243,8 @@ interface Checked {
   report: { report: VerificationReport; report_hash: string; sepolia_tx: string } | null;
   approved: boolean;
   firstEventHash: string;
+  brief: ReturnType<typeof buildBrief> | null;
+  bond: BondRef | null;
 }
 
 function makeAction(s: Setup, c: Case, at: number): ActionIR {
@@ -308,6 +321,8 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
         spent_today: v.spent.toString(),
         day_index: Math.floor(run.t / DAY_MS),
         last_nonce: v.nonce.toString(),
+        escalations_today: v.escalations,
+        escalation_day_index: Math.floor(run.t / DAY_MS),
         anchor_version: m.version,
         anchor_status: 'active',
         observed_at_slot: 1,
@@ -330,11 +345,31 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
     return null;
   }
   let approved = false;
+  let brief: Checked['brief'] = null;
+  let bond: BondRef | null = null;
   if (evaluation.outcome === 'ESCALATE') {
     const approval_id = `AP-${action.id}`;
+    const locked_until_ms = run.t + 3_600_000;
+    // The 402: price of interrupting the approver. Nothing reaches the human until the bond is on chain.
+    run.emit('BondRequired', action.id, {
+      approval_id,
+      price: {
+        schema: 'escalation-price/v0.1',
+        approval_id,
+        network: 'cardano-preprod',
+        asset: { policy_id: '', asset_name: '', symbol: 'ADA' },
+        amount: BOND_LOVELACE,
+        escrow_address: FIXTURE_ESCROW,
+        action_hash: actionHash,
+        approver_key_hash: CFO_TEST,
+        locked_until_ms,
+        interrupt_budget: { used: v.escalations, per_day: m.interrupt_budget.per_day },
+      },
+    });
+    if (c.bond === false) return null;
     // Fixture bond: 5 tADA locked by the agent; the fixture escrow address is a fixed placeholder.
-    const bond = { amount: '5000000', asset: 'ADA', escrow_address: FIXTURE_ESCROW, locked_until_ms: run.t + 3_600_000, tx_hash: `${'b0'.repeat(31)}${String(round).padStart(2, '0')}`, output_index: 0, status: 'locked' as const };
-    const brief = buildBrief({
+    bond = { amount: BOND_LOVELACE, asset: 'ADA', escrow_address: FIXTURE_ESCROW, locked_until_ms, tx_hash: `${'b0'.repeat(31)}${String(round).padStart(2, '0')}`, output_index: 0, status: 'locked' };
+    brief = buildBrief({
       action,
       evaluation,
       mandate: m,
@@ -342,22 +377,30 @@ function check(run: Run, s: Setup, m: Mandate, c: Case, v: Vault): Checked | nul
       bond: { amount: bond.amount, asset: bond.asset },
       expires_at_ms: run.t + 600_000,
     });
-    run.emit('BondLocked', action.id, { approval_id, tx_hash: bond.tx_hash, output_index: 0, amount: bond.amount, asset: bond.asset });
+    run.emit('BondLocked', action.id, { approval_id, tx_hash: bond.tx_hash as string, output_index: 0, amount: bond.amount, asset: bond.asset }, 4_000);
     run.emit('ApprovalRequested', action.id, { approval_id, approvals_required: evaluation.approvals_required, brief, bond });
-    out.approvals.push({ approval_id, run_id: run.id, action, evaluation, requested_at: new Date(run.t).toISOString() });
+    v.escalations += 1;
+    out.approvals.push({ approval_id, run_id: run.id, action, evaluation, requested_at: new Date(run.t).toISOString(), brief, bond });
+    const outcomeTx = `${'b1'.repeat(31)}${String(round).padStart(2, '0')}`;
+    if (c.cfo === 'decline_frivolous') {
+      run.emit('CFODeclined', action.id, { approval_id, reason: 'frivolous' }, 8_000);
+      run.emit('BondCaptured', action.id, { approval_id, tx_hash: outcomeTx, sink_address: FIXTURE_SINK });
+      return null;
+    }
     if (c.cfo === 'decline') {
       run.emit('CFODeclined', action.id, { approval_id, reason: 'legitimate' }, 8_000);
-      run.emit('BondRefunded', action.id, { approval_id, tx_hash: `${'b1'.repeat(31)}${String(round).padStart(2, '0')}`, reason: 'declined_legitimate' });
+      run.emit('BondRefunded', action.id, { approval_id, tx_hash: outcomeTx, reason: 'declined_legitimate' });
       return null;
     }
     run.emit('CFOApproved', action.id, { approval_id, cfo_key_hash: CFO_TEST }, 8_000);
-    run.emit('BondRefunded', action.id, { approval_id, tx_hash: `${'b1'.repeat(31)}${String(round).padStart(2, '0')}`, reason: 'approved' });
+    run.emit('BondRefunded', action.id, { approval_id, tx_hash: outcomeTx, reason: 'approved' });
+    bond = { ...bond, status: 'refunded', outcome_tx_hash: outcomeTx };
     report = cre(run, action, actionHash, ++round);
     evaluation = evaluateNow();
     if (evaluation.outcome === 'DENY') throw new Error(`fixture ${action.id}: denied after CFO approval (${evaluation.reason}); refusing to authorize`);
     approved = true;
   }
-  return { action, actionHash, signature, evaluation, report, approved, firstEventHash: first.hash };
+  return { action, actionHash, signature, evaluation, report, approved, firstEventHash: first.hash, brief, bond };
 }
 
 function authorize(
@@ -497,14 +540,23 @@ function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRec
       nonce: rec.fields.nonce,
       valid_until: rec.fields.valid_until,
     },
-    approval: { required: k.approved, cfo_key_hash: k.approved ? CFO_TEST : null },
+    approval: {
+      required: k.approved,
+      cfo_key_hash: k.approved ? CFO_TEST : null,
+      ...(k.brief && k.bond
+        ? {
+            brief_hash: canonicalHash(k.brief),
+            bond: { amount: k.bond.amount, asset: k.bond.asset, status: k.bond.status, tx_hash: k.bond.tx_hash, outcome_tx_hash: k.bond.outcome_tx_hash ?? null },
+          }
+        : {}),
+    },
     settlement: { chain: 'cardano-preprod', tx_hash: settled.tx, block: settled.block },
     masumi: null,
     evidence: { first_event_hash: k.firstEventHash, last_event_hash: last.hash },
   };
   const receipt_id = `R-${String(n).padStart(4, '0')}`;
   const receipt_hash = canonicalHash(receipt);
-  out.bundles[receipt_id] = { receipt, receipt_hash, authorization: rec, mandate: m };
+  out.bundles[receipt_id] = { receipt, receipt_hash, authorization: rec, mandate: m, brief: k.brief };
   out.receipts.push({
     receipt_id,
     action_id: k.action.id,
@@ -541,6 +593,19 @@ function prove(run: Run, s: Setup, m: Mandate, k: Checked, rec: AuthorizationRec
   run.emit('ReceiptProven', k.action.id, { receipt_id, receipt_hash }, 500);
 }
 
+/** GET /v1/authority/{role}?mandate_id= as the API would answer after this run. */
+function authorityInfo(m: Mandate, v: Vault): AuthorityInfo {
+  const per_day = m.interrupt_budget.per_day;
+  return {
+    approver: 'CFO',
+    mandate_id: m.id,
+    price: { amount: BOND_LOVELACE, asset: 'ADA' },
+    interrupt_budget: { used: v.escalations, per_day },
+    escalations_today: v.escalations,
+    availability: v.escalations >= per_day ? 'budget_exhausted' : 'open',
+  };
+}
+
 function mandateView(s: Setup, m: Mandate, v: Vault, status: 'active' | 'revoked' = 'active'): MandateView {
   return {
     mandate: m,
@@ -561,7 +626,7 @@ function mandateView(s: Setup, m: Mandate, v: Vault, status: 'active' | 'revoked
 // ---- stage run (scaled amounts) -----------------------------------------------
 {
   const m = buildMandate(M001);
-  const v: Vault = { balance: BigInt(u(M001.start)), spent: 0n, nonce: 0n };
+  const v: Vault = { balance: BigInt(u(M001.start)), spent: 0n, nonce: 0n, escalations: 0 };
   const run = new Run('run-stage-0001', T0);
   started(run, M001, m, v, 'stage', "Process today's open vendor invoices", null);
   const cases: Case[] = [
@@ -614,8 +679,7 @@ function mandateView(s: Setup, m: Mandate, v: Vault, status: 'active' | 'revoked
   close(run, M001, m);
   out.logs[run.id] = run.events;
   out.mandates['M-001'] = mandateView(M001, m, v);
-  // keep only the approval that is still pending in a fresh inbox (case 2, before the CFO acted)
-  out.approvals = out.approvals.filter((a) => a.approval_id === 'AP-A-0002');
+  out.authority['M-001/CFO'] = authorityInfo(m, v);
 }
 
 // ---- Attack Lab runs against M-LAB ---------------------------------------------------------------
@@ -629,11 +693,13 @@ const LAB_ATTACKS: AttackId[] = [
   'revoked',
   'daily_cap',
   'cfo_bypass',
+  'escalation_spam',
+  'no_bond',
 ];
-let labVault: Vault = { balance: 0n, spent: 0n, nonce: 0n };
+let labVault: Vault = { balance: 0n, spent: 0n, nonce: 0n, escalations: 0 };
 for (const attack of LAB_ATTACKS) {
   const m = buildMandate(MLAB);
-  const v: Vault = { balance: BigInt(u(MLAB.start)), spent: 0n, nonce: 0n };
+  const v: Vault = { balance: BigInt(u(MLAB.start)), spent: 0n, nonce: 0n, escalations: 0 };
   const run = new Run(`run-lab-${attack}`, T0 + 3_600_000 + LAB_ATTACKS.indexOf(attack) * 600_000);
   started(run, MLAB, m, v, 'lab', `Attack Lab: ${attack.replaceAll('_', ' ')}`, attack);
   run.emit('AttackStarted', null, { attack, mandate_id: m.id });
@@ -715,6 +781,22 @@ for (const attack of LAB_ATTACKS) {
       result('vault', 'R11', reject(run, 'LAB-cfo-bypass', 'R11'));
       break;
     }
+    case 'escalation_spam': {
+      // Four escalations in one day against a budget of three. The CFO captures the first three bonds as frivolous;
+      // the fourth is denied by the engine before any human is paged.
+      for (let i = 1; i <= 4; i++) {
+        check(run, MLAB, m, { id: `LAB-spam-${i}`, amount: '2.00', invoice: `INV-L-010${i}`, cfo: 'decline_frivolous', rationale: `Invoice INV-L-010${i} needs paying today.` }, v);
+      }
+      result('engine', 'INTERRUPT_BUDGET_EXHAUSTED', null);
+      // The lab authority page shows the door closed: today's budget was spent by this run.
+      out.authority['M-LAB/CFO'] = authorityInfo(m, v);
+      break;
+    }
+    case 'no_bond': {
+      check(run, MLAB, m, { id: 'LAB-no-bond', amount: '2.00', invoice: 'INV-L-0200', bond: false, rationale: 'Invoice INV-L-0200 is above my limit; asking the CFO.' }, v);
+      result('engine', 'BOND_REQUIRED', null);
+      break;
+    }
   }
   // run-lab-replay keeps no closing anchor: it is verified only through its own settlement's head.
   if (attack !== 'replay') close(run, MLAB, m);
@@ -722,8 +804,14 @@ for (const attack of LAB_ATTACKS) {
   labVault = v;
 }
 out.mandates['M-LAB'] = mandateView(MLAB, buildMandate(MLAB), labVault);
-out.mandates['M-REVOKED'] = mandateView(MREV, buildMandate(MREV), { balance: BigInt(u(MREV.start)), spent: 0n, nonce: 0n }, 'revoked');
+for (const id of ['M-001', 'M-LAB']) {
+  const events = out.runs.filter((r) => r.mandate_id === id).flatMap((r) => out.logs[r.run_id] ?? []).sort((a, b) => a.seq - b.seq);
+  out.metrics[id] = metricsOf(reduceRun(events));
+}
+out.mandates['M-REVOKED'] = mandateView(MREV, buildMandate(MREV), { balance: BigInt(u(MREV.start)), spent: 0n, nonce: 0n, escalations: 0 }, 'revoked');
 for (const r of out.runs) r.event_count = out.logs[r.run_id]?.length ?? 0;
+// The inbox keeps only the approval that is still pending (stage case 2, before the CFO acted).
+out.approvals = out.approvals.filter((a) => a.approval_id === 'AP-A-0002');
 
 writeFileSync(new URL('../fixtures/recorded.json', import.meta.url), `${JSON.stringify(out, null, 1)}\n`);
 console.log(
