@@ -239,6 +239,28 @@ export default function Home() {
         </div>
       </section>
 
+      <section aria-label="Built with" className="mt-28">
+        <Eyebrow>Built with</Eyebrow>
+        <h2 className="mt-2 font-serif text-4xl leading-[1.05] tracking-tight">Built with</h2>
+        <ul className="mt-8 divide-y divide-line border-y border-line">
+          <BuiltWith name="Cardano" logo="cardano" href="https://developers.cardano.org/x402/">
+            Aiken validators on preprod: mandate anchor, treasury vault, escalation bond escrow. Every release and bond is a real
+            transaction.
+          </BuiltWith>
+          <BuiltWith name="Chainlink" logo="chainlink" href="https://docs.chain.link/cre">
+            Two CRE workflows: invoice verification and FX basis against the BRL/USD Data Feed, reports written to Sepolia through the
+            Keystone forwarder.
+          </BuiltWith>
+          <BuiltWith name="Masumi and Sokosumi" href="https://preprod.sokosumi.com/">
+            Human Authority Endpoint registered on the Masumi preprod registry (MIP-003 worker, Masumi Payment Service) and listed as a
+            Sokosumi coworker.
+          </BuiltWith>
+          <BuiltWith name="x402" href="https://github.com/coinbase/x402">
+            HTTP 402 transport headers PAYMENT-REQUIRED, PAYMENT-SIGNATURE, PAYMENT-RESPONSE with our cardano-escrow scheme.
+          </BuiltWith>
+        </ul>
+      </section>
+
       <SiteFooter />
     </main>
   );
@@ -269,6 +291,30 @@ function Fact({ n, href, link, children }: { n: number; href?: string; link?: st
             </a>
           </>
         ) : null}
+      </p>
+    </li>
+  );
+}
+
+/** A logo from public/logos (SVG, PNG fallback) or a text wordmark, baseline-aligned with one factual line. */
+function BuiltWith({ name, logo, href, children }: { name: string; logo?: 'cardano' | 'chainlink'; href: string; children: ReactNode }) {
+  return (
+    <li className="grid items-baseline gap-2 py-5 sm:grid-cols-[13rem_1fr] sm:gap-6">
+      <a href={href} target="_blank" rel="noreferrer" className="flex items-baseline" aria-label={name}>
+        {logo ? (
+          <picture>
+            <source srcSet={`/logos/${logo}.svg`} type="image/svg+xml" />
+            <img src={`/logos/${logo}.png`} alt={name} className="logo-mark h-7 w-auto max-w-[11rem] self-center" />
+          </picture>
+        ) : (
+          <span className="text-xl font-extrabold tracking-tight">{name}</span>
+        )}
+      </a>
+      <p className="text-[15px] leading-relaxed">
+        {children}{' '}
+        <a href={href} target="_blank" rel="noreferrer" className="font-mono text-[13px] text-muted underline underline-offset-4">
+          {href.replace(/^https:\/\//, '')}
+        </a>
       </p>
     </li>
   );

@@ -97,6 +97,14 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Partner logos: any colour renders as ink on the light surface and as mist in replay. */
+.logo-mark {
+  filter: brightness(0);
+  opacity: 0.85;
+}
+[data-mode="replay"] .logo-mark {
+  filter: brightness(0) invert(1);
+}
 :focus-visible {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
