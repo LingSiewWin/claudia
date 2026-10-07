@@ -38,6 +38,8 @@ export function SiteFooter() {
         <a href="https://preprod.sokosumi.com/" rel="noreferrer">
           Sokosumi
         </a>
+        <Link href="/terms">Terms</Link>
+        <Link href="/privacy">Privacy</Link>
       </p>
     </footer>
   );
