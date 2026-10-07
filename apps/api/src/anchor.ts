@@ -1,9 +1,16 @@
+import { signEvidenceAnchor } from '@authority/core';
 import type { Db } from '@authority/db';
 
 export interface RunAnchor {
   tx_hash: string;
   seq: number;
   hash: string;
+}
+
+export interface ClosingHead {
+  seq: number;
+  hash: string;
+  signature: string;
 }
 
 /**
@@ -26,4 +33,19 @@ export async function anchorFor(db: Db, runId: string): Promise<RunAnchor | null
     }
   }
   return null;
+}
+
+/** Last event of a finished run, signed EVIDENCE_ANCHOR_V1||run_id||seq||hash with the mandate engine key. */
+export async function closingFor(db: Db, runId: string, engineKeys: Map<string, Uint8Array>): Promise<ClosingHead | null> {
+  const [run] = await db.query<{ mandate_id: string; status: string }>(`select mandate_id, status from runs where run_id = $1`, [runId]);
+  if (!run || run.status !== 'finished') return null;
+  const key = engineKeys.get(run.mandate_id);
+  if (!key) return null;
+  const [last] = await db.query<{ seq: string; hash: string }>(
+    `select seq::text as seq, encode(hash, 'hex') as hash from events where run_id = $1 order by events.seq desc limit 1`,
+    [runId],
+  );
+  if (!last) return null;
+  const seq = Number(last.seq);
+  return { seq, hash: last.hash, signature: signEvidenceAnchor(runId, seq, last.hash, key) };
 }
