@@ -5,3 +5,4 @@ export * from './guard';
 export * from './proposal';
 export * from './invoice';
 export * from './loop';
+export * from './interpret';
