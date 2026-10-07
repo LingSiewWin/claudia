@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { DAY_MS } from '@authority/core';
+import { DAY_MS, IdSchema } from '@authority/core';
+import * as z from 'zod';
 import { prepareRevoke, prepareUpdate, submitMandateTx } from './admin';
 import { anchorFor, closingFor } from './anchor';
 import { approvalView, approve, authorityView, bondSubmit, decline, pendingApprovals, submitApproved } from './approvals';
@@ -32,6 +33,7 @@ interface Route {
 }
 
 const ID = '([A-Za-z0-9._-]{1,64})';
+const StartRunBody = z.strictObject({ mandate_id: IdSchema });
 
 function mandateParam(url: URL): string {
   const id = url.searchParams.get('mandate_id') ?? '';
@@ -101,9 +103,9 @@ export function createApp(deps: AppDeps) {
       method: 'POST',
       path: /^\/v1\/runs$/,
       handler: async ({ req }) => {
-        const body = parseJson(await readBody(req)) as { mandate_id?: unknown };
+        const body = StartRunBody.safeParse(parseJson(await readBody(req)));
         const row = await mandateOfKind(eng.db, 'stage');
-        if (!row || body?.mandate_id !== row.mandate.id) throw new HttpError(400, 'runs start under the stage mandate');
+        if (!body.success || !row || body.data.mandate_id !== row.mandate.id) throw new HttpError(400, 'runs start under the stage mandate');
         await assertNoLiveRun(eng.db, 'stage');
         const { vault } = await readChain(eng.cardano, row, eng.now());
         const runId = await createRun(eng.db, eng.log, {
