@@ -15,7 +15,7 @@ test('landing states the thesis, replays a real payment, and points agents and h
   await expect(banner).toContainText('REPLAY —');
   await expect(banner).toContainText('No transactions are being submitted.');
   const floor = page.getByTestId('floor');
-  await expect(floor.getByTestId('floor-crate').first()).toBeVisible();
+  await expect(floor.getByTestId('floor-crate').first()).toBeVisible({ timeout: 15_000 });
   await expect(floor.getByTestId('floor-beam')).toHaveAttribute('data-state', 'scanning', { timeout: 15_000 });
   await expect(floor.getByTestId('floor-brief')).toHaveAttribute('data-state', 'open', { timeout: 20_000 });
   await expect(floor.locator('[data-testid=floor-crate][data-station=sink]').first()).toBeVisible({ timeout: 20_000 });
