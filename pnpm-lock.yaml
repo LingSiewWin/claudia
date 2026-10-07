@@ -91,12 +91,6 @@ importers:
       '@authority/agent':
         specifier: workspace:*
         version: link:../agent
-      '@bufbuild/protobuf':
-        specifier: 1.10.1
-        version: 1.10.1
-      '@electric-sql/pglite':
-        specifier: 0.5.8
-        version: 0.5.8
       '@meshsdk/core':
         specifier: 1.9.1
         version: 1.9.1(@bufbuild/protobuf@1.10.1)(@harmoniclabs/bytestring@1.0.0)(@harmoniclabs/crypto@0.2.5)(rxjs@7.8.2)

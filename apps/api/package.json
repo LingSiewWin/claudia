@@ -32,8 +32,6 @@
   },
   "devDependencies": {
     "@authority/agent": "workspace:*",
-    "@bufbuild/protobuf": "1.10.1",
-    "@electric-sql/pglite": "0.5.8",
     "@meshsdk/core": "1.9.1",
     "@types/node": "26.6.4",
     "typescript": "7.0.2",
