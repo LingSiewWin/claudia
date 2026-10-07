@@ -42,7 +42,6 @@ export function SiteFooter() {
       <div className="col-span-2 lg:col-span-1">
         <p className="font-serif text-3xl leading-none text-heading">Claudia</p>
         <p className="mt-3 max-w-sm text-base leading-snug text-fg">The human authority layer for AI agents.</p>
-        <p className="mt-2 max-w-sm">Cardano preprod, Sepolia. No funds are held by the service.</p>
       </div>
       <FooterGroup title="Build">
         <a href="https://github.com/LingSiewWin/claudia" rel="noreferrer">
