@@ -1,14 +1,12 @@
-/*
-!apps
-!packages
-!package.json
-!pnpm-lock.yaml
-!pnpm-workspace.yaml
-!tsconfig.base.json
-!.npmrc
-apps/*
-!apps/web
-packages/*
-!packages/core
+# Uploaded by the Vercel CLI: the whole workspace minus local state. The project root is apps/web (vercel.json).
+**/node_modules
+**/.next
+**/test-results
+**/playwright-report
 **/.env
 **/.env.*
+**/.state
+docs
+contracts/sepolia/out
+contracts/sepolia/cache
+contracts/sepolia/broadcast
