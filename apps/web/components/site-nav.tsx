@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Suspense } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { ModeSwitch } from './mode-switch';
 
 /** One line, top and bottom of the public pages. Product links left, agent-readable links right. */
@@ -27,17 +27,32 @@ export function SiteHeader({ current }: { current?: 'protocol' }) {
   );
 }
 
+function FooterGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em]">{title}</p>
+      <div className="mt-3 flex flex-col text-base font-semibold text-fg [&>a]:py-1.5">{children}</div>
+    </div>
+  );
+}
+
 export function SiteFooter() {
   return (
-    <footer className="mt-24 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-line pt-4 text-sm text-muted">
-      <p>Claudia, the human authority layer for AI agents. Cardano preprod, Sepolia. No funds are held by the service.</p>
-      <p className="flex flex-wrap gap-x-4 font-semibold [&>a]:py-2">
+    <footer className="mt-24 grid grid-cols-2 gap-x-6 gap-y-10 border-t border-line pb-8 pt-10 text-sm text-muted lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+      <div className="col-span-2 lg:col-span-1">
+        <p className="font-serif text-3xl leading-none text-heading">Claudia</p>
+        <p className="mt-3 max-w-sm text-base leading-snug text-fg">The human authority layer for AI agents.</p>
+        <p className="mt-2 max-w-sm">Cardano preprod, Sepolia. No funds are held by the service.</p>
+      </div>
+      <FooterGroup title="Build">
         <a href="https://github.com/LingSiewWin/claudia" rel="noreferrer">
           GitHub
         </a>
         <a href="https://preprod.sokosumi.com/" rel="noreferrer">
           Sokosumi
         </a>
+      </FooterGroup>
+      <FooterGroup title="Reach us">
         <a href="https://x.com/siewwwin" rel="noreferrer">
           X
         </a>
@@ -45,9 +60,11 @@ export function SiteFooter() {
           LinkedIn
         </a>
         <a href="mailto:siewwwin@gmail.com">Email</a>
+      </FooterGroup>
+      <FooterGroup title="Legal">
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
-      </p>
+      </FooterGroup>
     </footer>
   );
 }
